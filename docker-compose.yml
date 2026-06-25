@@ -1,0 +1,31 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: tradepass-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: tradepass_root
+      MYSQL_DATABASE: tradepass
+      MYSQL_USER: tradepass
+      MYSQL_PASSWORD: tradepass_pwd
+    ports:
+      - "1118:3306"
+    volumes:
+      - tradepass-mysql-data:/var/lib/mysql
+      - ./schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-ptradepass_root"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: tradepass-redis
+    ports:
+      - "1119:6379"
+    volumes:
+      - tradepass-redis-data:/data
+
+volumes:
+  tradepass-mysql-data:
+  tradepass-redis-data:

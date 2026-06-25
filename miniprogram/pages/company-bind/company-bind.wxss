@@ -1,0 +1,57 @@
+.title {
+  font-size: 36rpx;
+  font-weight: 700;
+  margin-bottom: 12rpx;
+}
+
+.desc {
+  color: #6b7280;
+  font-size: 26rpx;
+  line-height: 1.6;
+  margin-bottom: 32rpx;
+}
+
+.form-item {
+  margin-bottom: 28rpx;
+}
+
+.label {
+  color: #374151;
+  font-size: 28rpx;
+  font-weight: 600;
+  margin-bottom: 12rpx;
+}
+
+.input {
+  background: #f9fafb;
+  border: 1rpx solid #e5e7eb;
+  border-radius: 18rpx;
+  box-sizing: border-box;
+  height: 88rpx;
+  padding: 0 24rpx;
+  width: 100%;
+}
+
+.submit-btn {
+  background: #0f766e;
+  border-radius: 999rpx;
+  color: #ffffff;
+  font-weight: 700;
+  margin-top: 36rpx;
+}
+
+.tip {
+  color: #4b5563;
+}
+
+.tip-title {
+  color: #111827;
+  font-size: 30rpx;
+  font-weight: 700;
+  margin-bottom: 16rpx;
+}
+
+.tip-line {
+  font-size: 26rpx;
+  line-height: 1.8;
+}

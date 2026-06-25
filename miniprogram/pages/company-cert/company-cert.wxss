@@ -1,0 +1,5 @@
+.action-row { align-items: center; border-bottom: 1rpx solid #eef2f7; display: flex; justify-content: space-between; padding: 28rpx 0; }
+.action-row:last-child { border-bottom: none; }
+.action-title { font-size: 30rpx; font-weight: 600; margin-bottom: 8rpx; }
+.action-desc { color: #6b7280; font-size: 24rpx; }
+.arrow { color: #9ca3af; font-size: 48rpx; }

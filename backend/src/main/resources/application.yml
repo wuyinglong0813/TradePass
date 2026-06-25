@@ -1,0 +1,15 @@
+server:
+  port: 8080
+
+wechat:
+  app-id: wxd6d1e93a3868253e
+  app-secret: ${WECHAT_APP_SECRET:}
+
+spring:
+  application:
+    name: tradepass
+  datasource:
+    url: jdbc:mysql://localhost:1118/tradepass?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
+    username: tradepass
+    password: tradepass_pwd
+    driver-class-name: com.mysql.cj.jdbc.Driver

@@ -1,0 +1,13 @@
+<view class="page">
+  <view class="card">
+    <block wx:for="{{actions}}" wx:key="key">
+      <view class="action-row" data-key="{{item.key}}" bindtap="handleAction">
+        <view>
+          <view class="action-title">{{item.title}}</view>
+          <view class="action-desc">状态：{{item.status}}</view>
+        </view>
+        <view class="arrow">›</view>
+      </view>
+    </block>
+  </view>
+</view>

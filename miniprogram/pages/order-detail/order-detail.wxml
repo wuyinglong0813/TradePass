@@ -1,0 +1,45 @@
+<view class="page">
+  <!-- 头部：贸易通 + 公司名 -->
+  <view class="hero card">
+    <view class="company">{{counterpartyName}}</view>
+  </view>
+
+  <!-- 月销售额 -->
+  <view class="card">
+    <view class="section-title">月销售额</view>
+    <view class="chart-bar">
+      <block wx:for="{{monthlySales}}" wx:key="month">
+        <view class="bar-col">
+          <view class="bar" style="height: {{item.percent}}%;"></view>
+          <view class="bar-label">{{item.month}}</view>
+        </view>
+      </block>
+    </view>
+  </view>
+
+  <!-- 操作入口网格 -->
+  <view class="action-grid card">
+    <block wx:for="{{actions}}" wx:key="label">
+      <view class="action-item" bindtap="onAction" data-action="{{item.label}}">
+        <view class="action-icon">{{item.icon}}</view>
+        <view class="action-label">{{item.label}}</view>
+      </view>
+    </block>
+  </view>
+
+  <!-- 最近订单 -->
+  <view class="card" wx:if="{{orders.length > 0}}">
+    <view class="section-title">最近订单</view>
+    <block wx:for="{{orders}}" wx:key="id">
+      <view class="order-row">
+        <view class="order-info">
+          <view class="order-dir {{item.direction === 'SALE' ? 'sale' : 'purchase'}}">
+            {{item.direction === 'SALE' ? '销售' : '采购'}}
+          </view>
+          <view class="order-date">{{item.orderDate}}</view>
+        </view>
+        <view class="order-amount">¥{{item.amount}}</view>
+      </view>
+    </block>
+  </view>
+</view>

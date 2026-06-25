@@ -1,0 +1,13 @@
+backend/target/
+backend/**/target/
+.m2/
+
+.DS_Store
+.idea/
+*.iml
+
+miniprogram/miniprogram_npm/
+miniprogram/node_modules/
+
+.runtime/
+*.log

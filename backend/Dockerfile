@@ -1,0 +1,9 @@
+FROM eclipse-temurin:17-jre
+WORKDIR /app
+
+ENV JAVA_OPTS=""
+ARG SERVICE_MODULE
+COPY ${SERVICE_MODULE}/target/${SERVICE_MODULE}-0.1.0-SNAPSHOT.jar app.jar
+
+EXPOSE 1110 1111 1112 1113 1114 1115
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar /app/app.jar"]

@@ -1,0 +1,19 @@
+.profile { background: #fff; }
+.hello { font-size: 34rpx; font-weight: 700; margin-bottom: 12rpx; }
+.role-badge { background: #ccfbf1; border-radius: 8rpx; color: #0f766e; display: inline-block; font-size: 24rpx; font-weight: 600; padding: 4rpx 16rpx; }
+.section-title { font-size: 32rpx; font-weight: 700; margin-bottom: 16rpx; }
+.empty { color: #6b7280; padding: 30rpx 0; text-align: center; }
+
+.company-role-row { align-items: center; border-bottom: 1rpx solid #eef2f7; display: flex; padding: 20rpx 0; }
+.company-role-row:last-child { border-bottom: none; }
+.company-role-name { flex: 1; font-size: 28rpx; font-weight: 600; }
+.company-role-tag { background: #ccfbf1; border-radius: 6rpx; color: #0f766e; font-size: 22rpx; margin-right: 12rpx; padding: 4rpx 12rpx; }
+.company-role-check { background: #eef2ff; border-radius: 6rpx; color: #4f46e5; font-size: 20rpx; padding: 4rpx 12rpx; }
+
+.menu-row { align-items: center; border-bottom: 1rpx solid #eef2f7; display: flex; padding: 24rpx 0; }
+.menu-row:last-child { border-bottom: none; }
+.menu-label { font-size: 30rpx; font-weight: 600; margin-right: 16rpx; }
+.menu-desc { color: #9ca3af; flex: 1; font-size: 24rpx; }
+.arrow { color: #9ca3af; font-size: 48rpx; }
+
+.user-picker { background: #f3f4f6; border-radius: 12rpx; color: #374151; font-size: 28rpx; margin-top: 8rpx; padding: 16rpx 24rpx; }

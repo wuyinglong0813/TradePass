@@ -1,0 +1,32 @@
+{
+  "pages": [
+    "pages/index/index",
+    "pages/me/me",
+    "pages/company-bind/company-bind",
+    "pages/order-detail/order-detail",
+    "pages/auth-manage/auth-manage",
+    "pages/company-cert/company-cert",
+    "pages/role-manage/role-manage"
+  ],
+  "window": {
+    "navigationBarTitleText": "贸易通",
+    "navigationBarBackgroundColor": "#0f766e",
+    "navigationBarTextStyle": "white",
+    "backgroundColor": "#f6f7f9"
+  },
+  "tabBar": {
+    "color": "#6b7280",
+    "selectedColor": "#0f766e",
+    "backgroundColor": "#ffffff",
+    "list": [
+      {
+        "pagePath": "pages/index/index",
+        "text": "首页"
+      },
+      {
+        "pagePath": "pages/me/me",
+        "text": "我的"
+      }
+    ]
+  }
+}

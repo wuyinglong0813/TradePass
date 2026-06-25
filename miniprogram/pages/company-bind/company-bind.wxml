@@ -1,0 +1,32 @@
+<view class="page">
+  <view class="card">
+    <view class="title">绑定公司</view>
+    <view class="desc">请填写企业主体信息，提交后会绑定到当前微信用户。</view>
+
+    <view class="form-item">
+      <view class="label">企业名称</view>
+      <input class="input" placeholder="例如：河北光屿行贸易有限公司" value="{{form.name}}" data-field="name" bindinput="onInput" />
+    </view>
+
+    <view class="form-item">
+      <view class="label">统一社会信用代码</view>
+      <input class="input" placeholder="请输入统一社会信用代码" value="{{form.creditCode}}" data-field="creditCode" bindinput="onInput" />
+    </view>
+
+    <view class="form-item">
+      <view class="label">法人姓名</view>
+      <input class="input" placeholder="请输入法人姓名" value="{{form.legalPersonName}}" data-field="legalPersonName" bindinput="onInput" />
+    </view>
+
+    <button class="submit-btn" loading="{{submitting}}" bindtap="submitBind">提交并绑定</button>
+  </view>
+
+  <view class="tip card">
+    <view class="tip-title">后续认证流程</view>
+    <view class="tip-line">1. 上传公司信息</view>
+    <view class="tip-line">2. 实名认证</view>
+    <view class="tip-line">3. 人脸录入</view>
+    <view class="tip-line">4. 上传电子章</view>
+    <view class="tip-line">5. 给员工开授权</view>
+  </view>
+</view>

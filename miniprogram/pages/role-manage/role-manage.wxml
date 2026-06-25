@@ -1,0 +1,36 @@
+<view class="page">
+  <view class="section-head card">
+    <view class="title">角色列表</view>
+    <view class="add-btn" bindtap="showAddRole">＋ 新建</view>
+  </view>
+
+  <block wx:for="{{roles}}" wx:key="id">
+    <view class="role-card card" bindtap="editRole" data-id="{{item.id}}" data-name="{{item.name}}" data-perms="{{item.permissions}}">
+      <view class="role-name">{{item.name}}</view>
+      <view class="role-perms">{{item.permsDisplay || item.permissions}}</view>
+      <view class="arrow">›</view>
+    </view>
+  </block>
+
+  <view wx:if="{{roles.length === 0}}" class="empty">暂无角色</view>
+</view>
+
+<!-- 新建/编辑角色弹窗 -->
+<view class="modal-mask" wx:if="{{showModal}}" bindtap="hideModal">
+  <view class="modal-card" catchtap="noop">
+    <view class="modal-title">{{editRoleId ? '编辑角色' : '新建角色'}}</view>
+    <input class="form-input" placeholder="角色名称" value="{{roleName}}" bindinput="onNameInput"/>
+    <view class="perm-title">权限点</view>
+    <view class="perm-list">
+      <view class="perm-item" wx:for="{{allPerms}}" wx:key="value" data-value="{{item.value}}" bindtap="togglePerm">
+        <view class="perm-check {{item.checked ? 'checked' : ''}}">{{item.checked ? '✓' : ''}}</view>
+        <view class="perm-label">{{item.label}}</view>
+      </view>
+    </view>
+    <view class="modal-btns">
+      <view class="btn-cancel" bindtap="hideModal">取消</view>
+      <view class="btn-confirm" bindtap="saveRole">保存</view>
+      <view class="btn-delete" wx:if="{{editRoleId}}" bindtap="deleteRole">删除</view>
+    </view>
+  </view>
+</view>

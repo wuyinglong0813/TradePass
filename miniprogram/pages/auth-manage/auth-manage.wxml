@@ -1,0 +1,41 @@
+<view class="page">
+  <view class="section-head card">
+    <view class="title">成员管理</view>
+    <button class="invite-btn" open-type="share" bindtap="shareInvite">邀请成员</button>
+  </view>
+
+  <view class="card" wx:if="{{authorizations.length === 0}}">
+    <view class="empty">暂无成员</view>
+  </view>
+
+  <block wx:for="{{authorizations}}" wx:key="id">
+    <view class="auth-card card {{item.status === 'PENDING' ? 'pending' : ''}}">
+      <view class="auth-head">
+        <view>
+          <view class="auth-member">{{item.memberName}}</view>
+          <view class="auth-phone" wx:if="{{item.phone}}">{{item.phone}}</view>
+        </view>
+        <view wx:if="{{item.status === 'PENDING'}}" class="pending-badge">待审批</view>
+        <view wx:else class="auth-role-tag">{{item.roleText}}</view>
+      </view>
+      <view wx:if="{{item.status === 'PENDING'}}" class="approve-btns">
+        <view class="btn-approve" data-id="{{item.id}}" bindtap="showApproveModal">同意</view>
+        <view class="btn-reject" data-id="{{item.id}}" bindtap="rejectMember">拒绝</view>
+      </view>
+      <view wx:else class="auth-actions">
+        <view class="revoke-btn" data-id="{{item.id}}" bindtap="revokeAuth">移除</view>
+      </view>
+    </view>
+  </block>
+</view>
+
+<view class="modal-mask" wx:if="{{showApproveModal}}" bindtap="hideApproveModal">
+  <view class="modal-card" catchtap="noop">
+    <view class="modal-title">分配角色</view>
+    <view wx:for="{{approveRoles}}" wx:key="value" class="role-option" data-role="{{item.value}}" bindtap="confirmApprove">
+      <view>{{item.label}}</view>
+      <view class="arrow">›</view>
+    </view>
+    <view class="btn-cancel modal-cancel" bindtap="hideApproveModal">取消</view>
+  </view>
+</view>

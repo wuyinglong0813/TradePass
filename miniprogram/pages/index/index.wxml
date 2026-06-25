@@ -1,0 +1,66 @@
+<view class="page">
+  <!-- 未加入企业 -->
+  <view class="join-hero card" wx:if="{{showJoinForm}}">
+    <view class="join-title">你还未加入任何企业</view>
+    <view class="join-desc">输入邀请码申请加入，或联系管理员获取邀请</view>
+    <view class="join-form">
+      <input class="join-input" placeholder="输入邀请码" value="{{joinCompanyId}}" bindinput="onJoinIdInput"/>
+      <button class="join-btn" bindtap="joinCompany">申请加入</button>
+    </view>
+  </view>
+
+  <!-- 已加入企业（正常首页） -->
+  <block wx:else>
+  <view class="hero card">
+    <view class="company-row" bindtap="switchCompany">
+      <view class="company">{{companyDisplayName}}</view>
+      <view class="company-arrow" wx:if="{{companies.length > 1}}">▼</view>
+    </view>
+    <picker class="role-picker" mode="selector" range="{{roleOptions}}" range-key="text" value="{{roleIndex}}" bindchange="onRoleChange">
+      <view class="role-picker-text">{{roleOptions[roleIndex].text}} ▾</view>
+    </picker>
+  </view>
+
+  <!-- 客户销售业绩排名 / 采购业绩排名 -->
+  <view class="card">
+    <view class="section-head">
+      <view class="title">{{rankingTitle}}</view>
+      <view class="periods">
+        <block wx:for="{{periods}}" wx:key="key">
+          <view class="period {{item.activeClass}}" data-period="{{item.key}}" bindtap="switchPeriod">{{item.text}}</view>
+        </block>
+      </view>
+    </view>
+
+    <view wx:if="{{loading}}" class="empty">加载中...</view>
+    <view wx:if="{{showEmpty}}" class="empty">暂无排行数据</view>
+    <block wx:if="{{showRanking}}" wx:for="{{ranking}}" wx:key="counterpartyName">
+      <view class="rank-row" data-name="{{item.counterpartyName}}" bindtap="openCounterparty">
+        <view class="rank-no">{{item.rank}}</view>
+        <view class="rank-main">
+          <view class="counterparty-name">{{item.counterpartyName}}</view>
+          <view class="muted">{{item.orderCount}} 笔订单</view>
+        </view>
+        <view class="amount">¥{{item.amount}}</view>
+        <view class="arrow">›</view>
+      </view>
+    </block>
+  </view>
+
+  <!-- 供应商专属：供应的公司（在排行下方） -->
+  <view class="counterparty-section card" wx:if="{{role === 'supplier'}}">
+    <view class="section-head">
+      <view class="title">供应的公司</view>
+      <button class="add-btn" open-type="share" wx:if="{{isLegalPerson}}" bindtap="addCounterparty">＋</button>
+      <view class="add-btn" wx:else bindtap="addCounterparty">＋</view>
+    </view>
+    <view wx:if="{{counterparties.length === 0}}" class="empty">还没有添加供应的公司</view>
+    <block wx:for="{{counterparties}}" wx:key="id">
+      <view class="counterparty-item" data-name="{{item.counterpartyName}}" bindtap="openCounterparty">
+        <view class="counterparty-name">{{item.counterpartyName}}</view>
+        <view class="arrow">›</view>
+      </view>
+    </block>
+  </view>
+  </block>
+</view>

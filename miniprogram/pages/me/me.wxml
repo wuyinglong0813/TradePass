@@ -1,0 +1,47 @@
+<view class="page">
+  <view class="profile card">
+    <view class="hello">您好，{{userDisplayName}}</view>
+    <view class="role-badge">{{memberRoleText}}</view>
+  </view>
+
+  <!-- 我的企业 -->
+  <view class="card">
+    <view class="section-title">我的企业</view>
+    <view wx:if="{{companies.length === 0}}" class="empty">暂未加入任何企业</view>
+    <block wx:for="{{companies}}" wx:key="companyId">
+      <view class="company-role-row">
+        <view class="company-role-name">{{item.companyName}}</view>
+        <view class="company-role-tag">{{item.roleText}}</view>
+        <view class="company-role-check" wx:if="{{item.companyId === currentCompanyId}}">当前</view>
+      </view>
+    </block>
+  </view>
+
+  <!-- 管理菜单（法人/管理员可见） -->
+  <view class="card" wx:if="{{canManageAuth}}">
+    <view class="section-title">企业管理</view>
+    <view class="menu-row" bindtap="goAuthManage">
+      <view class="menu-label">授权管理</view>
+      <view class="menu-desc">成员审批 · 角色分配 · 邀请</view>
+      <view class="arrow">›</view>
+    </view>
+    <view class="menu-row" bindtap="goRoleManage">
+      <view class="menu-label">角色管理</view>
+      <view class="menu-desc">自定义角色 · 权限配置</view>
+      <view class="arrow">›</view>
+    </view>
+    <view class="menu-row" bindtap="goCompanyCert">
+      <view class="menu-label">企业认证</view>
+      <view class="menu-desc">公司信息 · 实名 · 电子章</view>
+      <view class="arrow">›</view>
+    </view>
+  </view>
+
+  <!-- Dev 用户切换 -->
+  <view class="card">
+    <view class="section-title">切换用户（开发）</view>
+    <picker mode="selector" range="{{devUsers}}" range-key="label" value="{{devUserIndex}}" bindchange="onSwitchUser">
+      <view class="user-picker">{{devUsers[devUserIndex].label}} ▾</view>
+    </picker>
+  </view>
+</view>
