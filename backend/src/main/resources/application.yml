@@ -9,7 +9,7 @@ spring:
   application:
     name: tradepass
   datasource:
-    url: ${DB_URL:jdbc:mysql://localhost:1118/tradepass?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai}
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:1118}/tradepass?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
     username: ${DB_USERNAME:tradepass}
     password: ${DB_PASSWORD:tradepass_pwd}
     driver-class-name: com.mysql.cj.jdbc.Driver
