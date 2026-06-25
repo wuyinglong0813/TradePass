@@ -314,7 +314,7 @@ public class AuthController {
         List<DevUser> users = db.query("""
             SELECT u.id, u.nickname, u.phone, m.role_code
             FROM sys_user u
-            JOIN company_member m ON u.id = m.user_id
+            LEFT JOIN company_member m ON u.id = m.user_id
             ORDER BY u.id
         """, (rs, rowNum) -> {
             String roleCode = rs.getString("role_code");

@@ -37,17 +37,21 @@ App({
   },
 
   loadMe() {
-    wx.request({
-      url: `${this.globalData.baseUrl}/me`,
-      method: 'GET',
-      header: { Authorization: this.globalData.token },
-      success: ({ data }) => {
-        if (data && data.code === 0 && data.data) {
-          this.globalData.userInfo = data.data.user;
-          this.globalData.memberInfo = data.data.member;
-          this.globalData.companies = data.data.companies || [];
-        }
-      }
+    return new Promise((resolve) => {
+      wx.request({
+        url: `${this.globalData.baseUrl}/me`,
+        method: 'GET',
+        header: { Authorization: this.globalData.token },
+        success: ({ data }) => {
+          if (data && data.code === 0 && data.data) {
+            this.globalData.userInfo = data.data.user;
+            this.globalData.memberInfo = data.data.member;
+            this.globalData.companies = data.data.companies || [];
+          }
+          resolve();
+        },
+        fail: () => resolve()
+      });
     });
   },
 
@@ -83,9 +87,7 @@ App({
         data: { userId },
         success: ({ data }) => {
           if (data && data.code === 0) {
-            this.loadMe();
-            // 等 me 返回后再 resolve
-            setTimeout(() => resolve(data.data), 300);
+            this.loadMe().then(() => resolve(data.data));
           } else {
             reject(new Error('切换失败'));
           }
