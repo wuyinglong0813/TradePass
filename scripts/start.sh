@@ -46,8 +46,8 @@ start_app() {
 
   local i=0
   while (( i < 30 )); do
-    if curl -s http://localhost:8080/api/me >/dev/null 2>&1; then
-      log_info "tradepass (:8080) 就绪"
+    if curl -s http://localhost:9999/api/me >/dev/null 2>&1; then
+      log_info "tradepass (:9999) 就绪"
       return 0
     fi
     sleep 2
@@ -62,7 +62,7 @@ main() {
   start_infra || exit 1
   start_app || exit 1
   echo "=============================="
-  echo "  API: http://localhost:8080/api"
+  echo "  API: http://localhost:9999/api"
   echo "=============================="
 }
 main

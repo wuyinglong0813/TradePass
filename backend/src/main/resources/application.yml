@@ -2,14 +2,14 @@ server:
   port: 9999
 
 wechat:
-  app-id: wxd6d1e93a3868253e
+  app-id: ${WECHAT_APP_ID:wxd6d1e93a3868253e}
   app-secret: ${WECHAT_APP_SECRET:}
 
 spring:
   application:
     name: tradepass
   datasource:
-    url: jdbc:mysql://localhost:1118/tradepass?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
-    username: tradepass
-    password: tradepass_pwd
+    url: ${DB_URL:jdbc:mysql://localhost:1118/tradepass?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai}
+    username: ${DB_USERNAME:tradepass}
+    password: ${DB_PASSWORD:tradepass_pwd}
     driver-class-name: com.mysql.cj.jdbc.Driver
