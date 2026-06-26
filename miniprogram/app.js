@@ -18,20 +18,37 @@ App({
   },
 
   doLogin() {
+    wx.showLoading({ title: '登录中...' });
     wx.login({
       success: ({ code }) => {
+        console.log('wx.login 成功, code:', code);
         wx.request({
           url: `${this.globalData.baseUrl}/auth/wechat-login`,
           method: 'POST',
           data: { code: code },
           success: ({ data }) => {
+            wx.hideLoading();
+            console.log('登录接口返回:', JSON.stringify(data));
             if (data && data.code === 0 && data.data && data.data.token) {
               this.globalData.token = data.data.token;
               wx.setStorageSync('tradepass_token', data.data.token);
+              wx.showToast({ title: '登录成功', icon: 'success' });
               this.loadMe();
+            } else {
+              wx.showToast({ title: '登录失败: ' + (data && data.message || '未知'), icon: 'none' });
             }
+          },
+          fail: (err) => {
+            wx.hideLoading();
+            console.error('登录请求失败:', JSON.stringify(err));
+            wx.showToast({ title: '网络错误，请重试', icon: 'none' });
           }
         });
+      },
+      fail: (err) => {
+        wx.hideLoading();
+        console.error('wx.login 失败:', JSON.stringify(err));
+        wx.showToast({ title: '微信登录失败', icon: 'none' });
       }
     });
   },
