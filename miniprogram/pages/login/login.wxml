@@ -1,88 +1,90 @@
 <view class="page">
-  <view class="logo-area">
-    <view class="logo-icon">财</view>
-    <view class="brand-name">财源通天</view>
-    <view class="slogan">企业贸易好帮手</view>
+  <!-- 品牌头部 -->
+  <view class="hero-area">
+    <view class="hero-bg"/>
+    <view class="hero-content">
+      <view class="brand-logo">财源通天</view>
+      <view class="hero-title">Hi 欢迎登录</view>
+      <view class="hero-subtitle">企业贸易管理，从这里开始</view>
+      <view class="hero-img-placeholder"/>
+    </view>
   </view>
 
-  <view class="login-area">
+  <!-- 登录区域 -->
+  <view class="bottom-area">
     <!-- 微信一键登录 -->
-    <button class="wechat-login-btn" bindtap="handleLogin">
-      <view class="wechat-icon">微</view>
-      <view>微信一键登录</view>
+    <button class="wechat-btn" bindtap="handleLogin">
+      微信用户一键登录
     </button>
 
     <!-- 协议 -->
-    <view class="agreement-row">
-      <view class="checkbox {{agreed ? 'checked' : ''}}" bindtap="toggleAgree">
+    <view class="agreement-row" bindtap="toggleAgree">
+      <view class="checkbox {{agreed ? 'checked' : ''}}">
         <view wx:if="{{agreed}}">✓</view>
       </view>
       <view class="agreement-text">
-        已阅读并同意
-        <text class="link" bindtap="openUserAgreement">《用户许可使用协议》</text>
+        登录即代表你已同意
+        <text class="link" catchtap="openUserAgreement">《用户许可使用协议》</text>
         和
-        <text class="link" bindtap="openPrivacyAgreement">《隐私协议》</text>
+        <text class="link" catchtap="openPrivacyAgreement">《隐私协议》</text>
       </view>
     </view>
 
-    <view class="register-hint">未注册的用户将直接创建账号</view>
-
-    <!-- 手机号快捷登录 -->
-    <button class="phone-login-btn" open-type="getPhoneNumber" bindgetphonenumber="quickPhoneLogin" disabled="{{!agreed}}">
+    <!-- 手机号登录 -->
+    <button class="phone-btn" open-type="getPhoneNumber" bindgetphonenumber="quickPhoneLogin" disabled="{{!agreed}}">
       手机号快捷登录
     </button>
 
-    <!-- 输入手机号登录 -->
-    <view class="phone-input-row">
-      <input class="phone-input" type="number" placeholder="输入手机号登录/注册" value="{{phoneNumber}}" bindinput="onPhoneInput" maxlength="11"/>
-      <button class="phone-submit-btn" bindtap="phoneLogin" disabled="{{!agreed || phoneNumber.length < 11}}">登录</button>
+    <!-- 其他方式 -->
+    <view class="other-login" bindtap="showPhoneInput">
+      其他手机号登录 / 注册
     </view>
   </view>
 
-  <view class="skip-btn" bindtap="skipLogin">暂不登录</view>
-</view>
+  <!-- 输入手机号弹窗 -->
+  <view class="modal-mask" wx:if="{{showPhoneModal}}" bindtap="hidePhoneModal">
+    <view class="phone-modal" catchtap="noop">
+      <view class="phone-modal-title">手机号登录</view>
+      <input class="phone-modal-input" type="number" placeholder="请输入手机号" value="{{phoneNumber}}" bindinput="onPhoneInput" maxlength="11"/>
+      <button class="phone-modal-btn" bindtap="phoneLogin" disabled="{{phoneNumber.length < 11}}">登录</button>
+    </view>
+  </view>
 
-<!-- 协议弹窗 -->
-<view class="modal-mask" wx:if="{{showAgreement}}" bindtap="closeAgreement">
-  <view class="modal-card" catchtap="noop">
-    <view class="modal-title">{{agreementTitle}}</view>
-    <scroll-view class="agreement-content" scroll-y>
-      <view wx:if="{{agreementType === 'user'}}">
-        <view class="agreement-h2">用户许可使用协议</view>
-        <view class="agreement-p">欢迎使用财源通天！</view>
-        <view class="agreement-p">一、总则</view>
-        <view class="agreement-p">1.1 本协议是您与财源通天之间关于使用财源通天微信小程序服务的法律协议。</view>
-        <view class="agreement-p">1.2 您在注册或使用财源通天服务前，应仔细阅读本协议。</view>
-        <view class="agreement-p">二、用户账号</view>
-        <view class="agreement-p">2.1 您通过微信授权登录后，即成为财源通天的注册用户。</view>
-        <view class="agreement-p">2.2 您应当对以您的账号进行的所有活动和事件承担法律责任。</view>
-        <view class="agreement-p">三、服务内容</view>
-        <view class="agreement-p">3.1 财源通天提供企业贸易管理服务，包括但不限于：企业认证、授权管理、销售采购排行、电子章管理等。</view>
-        <view class="agreement-p">四、用户行为规范</view>
-        <view class="agreement-p">4.1 您在使用财源通天服务时，必须遵守中华人民共和国相关法律法规。</view>
-        <view class="agreement-p">4.2 您不得利用本服务从事任何违法或不当行为。</view>
-        <view class="agreement-p">五、免责声明</view>
-        <view class="agreement-p">5.1 财源通天不对因不可抗力导致的服务中断承担责任。</view>
-        <view class="agreement-p">六、其他</view>
-        <view class="agreement-p">6.1 本协议的解释、效力及纠纷的解决，适用中华人民共和国法律。</view>
-      </view>
-      <view wx:else>
-        <view class="agreement-h2">隐私协议</view>
-        <view class="agreement-p">财源通天重视您的隐私。</view>
-        <view class="agreement-p">一、信息收集</view>
-        <view class="agreement-p">1.1 我们收集您的微信头像、昵称和手机号，仅用于完善您的账户信息和提供更好的服务。</view>
-        <view class="agreement-p">1.2 我们收集您所在企业的信息，用于完成企业认证和提供企业贸易管理服务。</view>
-        <view class="agreement-p">二、信息使用</view>
-        <view class="agreement-p">2.1 您的个人信息仅用于财源通天服务，不会出售或分享给第三方。</view>
-        <view class="agreement-p">2.2 我们使用行业标准的安全措施保护您的信息。</view>
-        <view class="agreement-p">三、信息存储</view>
-        <view class="agreement-p">3.1 您的信息存储在中华人民共和国境内的服务器上。</view>
-        <view class="agreement-p">四、您的权利</view>
-        <view class="agreement-p">4.1 您可以随时查看、修改或删除您的个人信息。</view>
-        <view class="agreement-p">4.2 您可以随时注销您的账号。</view>
-      </view>
-      <view class="agreement-p" style="margin-top: 32rpx;">—— 以上为协议内容 ——</view>
-    </scroll-view>
-    <button class="agree-confirm-btn" bindtap="closeAgreement">我知道了</button>
+  <!-- 协议弹窗 -->
+  <view class="modal-mask" wx:if="{{showAgreement}}" bindtap="closeAgreement">
+    <view class="modal-card" catchtap="noop">
+      <view class="modal-title">{{agreementTitle}}</view>
+      <scroll-view class="agreement-content" scroll-y>
+        <view wx:if="{{agreementType === 'user'}}">
+          <view class="agreement-h2">用户许可使用协议</view>
+          <view class="agreement-p">欢迎使用财源通天！</view>
+          <view class="agreement-p">一、总则</view>
+          <view class="agreement-p">1.1 本协议是您与财源通天之间关于使用财源通天微信小程序服务的法律协议。</view>
+          <view class="agreement-p">1.2 您在注册或使用财源通天服务前，应仔细阅读本协议。</view>
+          <view class="agreement-p">二、用户账号</view>
+          <view class="agreement-p">2.1 您通过微信授权登录后，即成为财源通天的注册用户。</view>
+          <view class="agreement-p">2.2 您应当对以您的账号进行的所有活动和事件承担法律责任。</view>
+          <view class="agreement-p">三、服务内容</view>
+          <view class="agreement-p">3.1 财源通天提供企业贸易管理服务，包括但不限于：企业认证、授权管理、销售采购排行、电子章管理等。</view>
+          <view class="agreement-p">四、用户行为规范</view>
+          <view class="agreement-p">4.1 不得利用本服务从事任何违法或不当行为。</view>
+          <view class="agreement-p">五、免责声明</view>
+          <view class="agreement-p">5.1 财源通天不对因不可抗力导致的服务中断承担责任。</view>
+          <view class="agreement-p">六、其他</view>
+          <view class="agreement-p">6.1 本协议适用中华人民共和国法律。</view>
+        </view>
+        <view wx:else>
+          <view class="agreement-h2">隐私协议</view>
+          <view class="agreement-p">财源通天重视您的隐私。</view>
+          <view class="agreement-p">一、信息收集</view>
+          <view class="agreement-p">1.1 我们收集您的微信头像、昵称和手机号，仅用于完善您的账户信息。</view>
+          <view class="agreement-p">二、信息使用</view>
+          <view class="agreement-p">2.1 您的个人信息仅用于财源通天服务，不会出售或分享给第三方。</view>
+          <view class="agreement-p">三、您的权利</view>
+          <view class="agreement-p">3.1 您可以随时查看、修改或删除您的个人信息。</view>
+        </view>
+      </scroll-view>
+      <button class="agree-confirm-btn" bindtap="closeAgreement">我知道了</button>
+    </view>
   </view>
 </view>

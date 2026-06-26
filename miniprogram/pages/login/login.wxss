@@ -1,231 +1,55 @@
-.page {
-  align-items: center;
-  background: #ffffff;
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
-  padding: 80rpx 50rpx 60rpx;
-}
+.page { background: #fff; min-height: 100vh; display: flex; flex-direction: column; }
 
-.logo-area {
-  align-items: center;
-  display: flex;
-  flex-direction: column;
-  margin-bottom: 80rpx;
+.hero-area { position: relative; flex: 1; overflow: hidden; }
+.hero-bg {
+  position: absolute; inset: 0;
+  background: linear-gradient(160deg, #0f766e 0%, #14b8a6 40%, #99f6e4 70%, #ccfbf1 100%);
 }
+.hero-content { position: relative; z-index: 1; padding: 120rpx 50rpx 60rpx; display: flex; flex-direction: column; align-items: center; }
+.brand-logo { color: rgba(255,255,255,0.95); font-size: 52rpx; font-weight: 700; letter-spacing: 8rpx; margin-bottom: 48rpx; }
+.hero-title { color: #fff; font-size: 48rpx; font-weight: 700; margin-bottom: 16rpx; }
+.hero-subtitle { color: rgba(255,255,255,0.85); font-size: 28rpx; }
+.hero-img-placeholder { width: 400rpx; height: 320rpx; margin-top: 60rpx; background: rgba(255,255,255,0.15); border-radius: 32rpx; }
 
-.logo-icon {
-  background: linear-gradient(135deg, #0f766e, #14b8a6);
-  border-radius: 32rpx;
-  color: #fff;
-  font-size: 64rpx;
-  font-weight: 700;
-  height: 120rpx;
-  line-height: 120rpx;
-  margin-bottom: 28rpx;
-  text-align: center;
-  width: 120rpx;
-}
+/* 底部登录区 */
+.bottom-area { padding: 40rpx 50rpx 60rpx; background: #fff; }
 
-.brand-name {
-  font-size: 44rpx;
-  font-weight: 700;
-  color: #1f2937;
-  margin-bottom: 10rpx;
-}
-
-.slogan {
-  color: #9ca3af;
-  font-size: 26rpx;
-}
-
-/* 微信登录按钮 */
-.login-area {
-  align-items: center;
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-}
-
-.wechat-login-btn {
-  align-items: center;
-  background: #07c160;
+.wechat-btn {
+  width: 100%; height: 100rpx; line-height: 100rpx;
+  background: #07c160; color: #fff; font-size: 32rpx; font-weight: 600;
   border-radius: 16rpx;
-  color: #fff;
-  display: flex;
-  font-size: 32rpx;
-  font-weight: 600;
-  height: 100rpx;
-  justify-content: center;
-  width: 100%;
-  gap: 14rpx;
 }
+.wechat-btn::after { border: none; }
 
-.wechat-login-btn::after { border: none; }
+.agreement-row { display: flex; align-items: flex-start; gap: 12rpx; margin-top: 24rpx; padding: 0 4rpx; }
+.checkbox { flex-shrink: 0; width: 34rpx; height: 34rpx; border: 2rpx solid #d1d5db; border-radius: 50%; text-align: center; line-height: 34rpx; font-size: 20rpx; color: #fff; margin-top: 2rpx; }
+.checkbox.checked { background: #07c160; border-color: #07c160; }
+.agreement-text { font-size: 24rpx; color: #9ca3af; line-height: 1.5; }
+.link { color: #0f766e; }
 
-.wechat-icon {
-  background: rgba(255,255,255,0.2);
-  border-radius: 50%;
-  font-size: 22rpx;
-  height: 44rpx;
-  line-height: 44rpx;
-  text-align: center;
-  width: 44rpx;
+.phone-btn {
+  width: 100%; height: 88rpx; line-height: 88rpx; margin-top: 24rpx;
+  background: #f5f5f5; color: #374151; font-size: 28rpx; border-radius: 16rpx; border: none;
 }
+.phone-btn::after { border: none; }
+.phone-btn[disabled] { opacity: 0.4; }
 
-/* 协议 */
-.agreement-row {
-  align-items: flex-start;
-  display: flex;
-  gap: 12rpx;
-  margin-top: 32rpx;
-  width: 100%;
-}
+.other-login { text-align: center; margin-top: 24rpx; font-size: 26rpx; color: #6b7280; }
 
-.checkbox {
-  border: 2rpx solid #d1d5db;
-  border-radius: 50%;
-  color: #fff;
-  flex-shrink: 0;
-  font-size: 20rpx;
-  height: 36rpx;
-  line-height: 36rpx;
-  margin-top: 2rpx;
-  text-align: center;
-  width: 36rpx;
-}
-
-.checkbox.checked {
-  background: #0f766e;
-  border-color: #0f766e;
-}
-
-.agreement-text {
-  color: #6b7280;
-  font-size: 24rpx;
-  line-height: 1.6;
-}
-
-.link {
-  color: #ef4444;
-}
-
-.register-hint {
-  color: #9ca3af;
-  font-size: 22rpx;
-  margin-top: 20rpx;
-}
-
-/* 手机号登录 */
-.phone-login-btn {
-  background: #f3f4f6;
-  border: 2rpx solid #e5e7eb;
-  border-radius: 16rpx;
-  color: #374151;
-  font-size: 28rpx;
-  height: 88rpx;
-  line-height: 88rpx;
-  margin-top: 32rpx;
-  width: 100%;
-}
-
-.phone-login-btn::after { border: none; }
-.phone-login-btn[disabled] { opacity: 0.4; }
-
-.phone-input-row {
-  display: flex;
-  gap: 16rpx;
-  margin-top: 20rpx;
-  width: 100%;
-}
-
-.phone-input {
-  background: #f9fafb;
-  border: 2rpx solid #e5e7eb;
-  border-radius: 16rpx;
-  flex: 1;
-  font-size: 28rpx;
-  padding: 0 24rpx;
-  height: 88rpx;
-}
-
-.phone-submit-btn {
-  background: #0f766e;
-  border-radius: 16rpx;
-  color: #fff;
-  font-size: 26rpx;
-  height: 88rpx;
-  line-height: 88rpx;
-  padding: 0 32rpx;
-}
-
-.phone-submit-btn::after { border: none; }
-.phone-submit-btn[disabled] { opacity: 0.4; }
-
-.skip-btn {
-  color: #9ca3af;
-  font-size: 26rpx;
-  margin-top: auto;
-  padding: 20rpx 0 40rpx;
-}
+/* 手机号弹窗 */
+.modal-mask { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 200; display: flex; align-items: flex-end; justify-content: center; }
+.phone-modal { background: #fff; width: 100%; border-radius: 32rpx 32rpx 0 0; padding: 48rpx 40rpx 80rpx; }
+.phone-modal-title { font-size: 34rpx; font-weight: 700; margin-bottom: 32rpx; }
+.phone-modal-input { background: #f5f5f5; border-radius: 16rpx; height: 96rpx; padding: 0 28rpx; font-size: 30rpx; width: 100%; box-sizing: border-box; }
+.phone-modal-btn { width: 100%; height: 96rpx; line-height: 96rpx; margin-top: 28rpx; background: #0f766e; color: #fff; font-size: 30rpx; font-weight: 600; border-radius: 16rpx; }
+.phone-modal-btn::after { border: none; }
+.phone-modal-btn[disabled] { opacity: 0.4; }
 
 /* 协议弹窗 */
-.modal-mask {
-  align-items: center;
-  background: rgba(0,0,0,0.45);
-  bottom: 0;
-  display: flex;
-  justify-content: center;
-  left: 0;
-  position: fixed;
-  right: 0;
-  top: 0;
-  z-index: 200;
-}
-
-.modal-card {
-  background: #fff;
-  border-radius: 20rpx;
-  display: flex;
-  flex-direction: column;
-  margin: 60rpx 40rpx;
-  max-height: 75vh;
-  padding: 36rpx;
-  width: 100%;
-}
-
-.modal-title {
-  font-size: 32rpx;
-  font-weight: 700;
-  margin-bottom: 20rpx;
-}
-
-.agreement-content {
-  flex: 1;
-  max-height: 50vh;
-}
-
-.agreement-h2 {
-  font-size: 28rpx;
-  font-weight: 700;
-  margin-bottom: 16rpx;
-}
-
-.agreement-p {
-  color: #374151;
-  font-size: 26rpx;
-  line-height: 1.8;
-}
-
-.agree-confirm-btn {
-  background: #0f766e;
-  border-radius: 12rpx;
-  color: #fff;
-  font-size: 28rpx;
-  height: 80rpx;
-  line-height: 80rpx;
-  margin-top: 24rpx;
-  width: 100%;
-}
-
+.modal-card { background: #fff; border-radius: 20rpx; margin: 60rpx 40rpx; padding: 36rpx; max-height: 75vh; display: flex; flex-direction: column; }
+.modal-title { font-size: 32rpx; font-weight: 700; margin-bottom: 20rpx; }
+.agreement-content { flex: 1; max-height: 45vh; }
+.agreement-h2 { font-size: 28rpx; font-weight: 700; margin-bottom: 16rpx; }
+.agreement-p { color: #374151; font-size: 26rpx; line-height: 1.8; }
+.agree-confirm-btn { width: 100%; height: 80rpx; line-height: 80rpx; margin-top: 24rpx; background: #0f766e; color: #fff; font-size: 28rpx; border-radius: 12rpx; }
 .agree-confirm-btn::after { border: none; }
