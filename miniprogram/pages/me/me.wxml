@@ -1,4 +1,12 @@
 <view class="page">
+  <!-- 未登录 -->
+  <view class="card" wx:if="{{!isLoggedIn}}">
+    <view class="welcome-title">欢迎来到财源通天</view>
+    <view class="welcome-desc">登录后管理您的企业</view>
+    <button class="welcome-btn" bindtap="goLogin">登录 / 注册</button>
+  </view>
+
+  <block wx:else>
   <view class="profile card">
     <view class="hello">您好，{{userDisplayName}}</view>
     <view class="role-badge">{{memberRoleText}}</view>
@@ -44,4 +52,5 @@
       <view class="user-picker">{{devUsers[devUserIndex].label}} ▾</view>
     </picker>
   </view>
+  </block>
 </view>

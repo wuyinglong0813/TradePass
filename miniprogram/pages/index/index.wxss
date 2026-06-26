@@ -190,6 +190,36 @@ button.add-btn::after { border: none; }
   padding: 18rpx 24rpx;
 }
 
+.welcome-hero {
+  background: linear-gradient(135deg, #0f766e, #14b8a6);
+  color: #ffffff;
+  padding: 80rpx 40rpx;
+}
+
+.welcome-title {
+  font-size: 40rpx;
+  font-weight: 700;
+  margin-bottom: 12rpx;
+}
+
+.welcome-desc {
+  font-size: 26rpx;
+  margin-bottom: 40rpx;
+  opacity: 0.85;
+}
+
+.welcome-btn {
+  background: #ffffff;
+  border-radius: 16rpx;
+  color: #0f766e;
+  font-size: 30rpx;
+  font-weight: 600;
+  padding: 20rpx 0;
+  width: 100%;
+}
+
+.welcome-btn::after { border: none; }
+
 .join-input::placeholder {
   color: rgba(255,255,255,0.6);
 }

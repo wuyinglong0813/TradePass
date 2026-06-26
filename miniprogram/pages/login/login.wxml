@@ -1,30 +1,21 @@
 <view class="page">
   <view class="logo-area">
-    <view class="logo-icon">T</view>
+    <view class="logo-icon">财</view>
     <view class="brand-name">财源通天</view>
     <view class="slogan">企业贸易好帮手</view>
   </view>
 
   <view class="login-area">
-    <!-- 已有用户信息则显示 -->
-    <block wx:if="{{avatarUrl}}">
-      <image class="avatar" src="{{avatarUrl}}" mode="aspectFill"/>
-      <view class="nickname">{{nickName}}</view>
-    </block>
-
-    <!-- 微信一键登录 -->
-    <button wx:if="{{!hasLogin}}" class="wechat-login-btn" bindtap="getUserProfile">
+    <button wx:if="{{!token}}" class="wechat-login-btn" bindtap="handleLogin">
       <view class="wechat-icon">微</view>
       <view>微信一键登录</view>
     </button>
 
-    <button wx:if="{{hasLogin && !phone}}" class="phone-btn" open-type="getPhoneNumber" bindgetphonenumber="getPhoneNumber">
-      获取手机号
-    </button>
-
-    <button wx:if="{{hasLogin}}" class="enter-btn" bindtap="enterApp">
-      进入财源通天
-    </button>
+    <block wx:else>
+      <image wx:if="{{avatarUrl}}" class="avatar" src="{{avatarUrl}}" mode="aspectFill"/>
+      <view class="nickname" wx:if="{{nickName}}">{{nickName}}</view>
+      <button class="enter-btn" bindtap="enterApp">进入财源通天</button>
+    </block>
 
     <view class="agreement">登录即同意《用户服务协议》和《隐私政策》</view>
   </view>

@@ -15,8 +15,15 @@ Page({
   },
 
   onShow() {
+    const loggedIn = !!(app.globalData.token || wx.getStorageSync('tradepass_token'));
+    this.setData({ isLoggedIn: loggedIn });
+    if (!loggedIn) return;
     this.loadMe();
     this.loadDevUsers();
+  },
+
+  goLogin() {
+    wx.reLaunch({ url: '/pages/login/login' });
   },
 
   async loadMe() {

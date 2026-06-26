@@ -40,7 +40,9 @@ Page({
   },
 
   onShow() {
-    this.setData({ companies: app.globalData.companies || [] });
+    const loggedIn = !!(app.globalData.token || wx.getStorageSync('tradepass_token'));
+    this.setData({ isLoggedIn: loggedIn, companies: app.globalData.companies || [] });
+    if (!loggedIn) return;
     this.checkMemberStatus();
     this.initRoleFromMember();
 
@@ -227,6 +229,10 @@ Page({
     } catch (error) {
       // 静默
     }
+  },
+
+  goLogin() {
+    wx.reLaunch({ url: '/pages/login/login' });
   },
 
   openCounterparty(event) {

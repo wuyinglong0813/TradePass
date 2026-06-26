@@ -17,3 +17,8 @@
 .arrow { color: #9ca3af; font-size: 48rpx; }
 
 .user-picker { background: #f3f4f6; border-radius: 12rpx; color: #374151; font-size: 28rpx; margin-top: 8rpx; padding: 16rpx 24rpx; }
+
+.welcome-title { font-size: 36rpx; font-weight: 700; margin-bottom: 12rpx; }
+.welcome-desc { color: #6b7280; font-size: 26rpx; margin-bottom: 32rpx; }
+.welcome-btn { background: #0f766e; border-radius: 16rpx; color: #fff; font-size: 30rpx; font-weight: 600; padding: 20rpx 0; width: 100%; }
+.welcome-btn::after { border: none; }

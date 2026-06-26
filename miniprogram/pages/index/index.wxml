@@ -1,6 +1,13 @@
 <view class="page">
-  <!-- 未加入企业 -->
-  <view class="join-hero card" wx:if="{{showJoinForm}}">
+  <!-- 未登录 -->
+  <view class="welcome-hero card" wx:if="{{!isLoggedIn}}">
+    <view class="welcome-title">欢迎来到财源通天</view>
+    <view class="welcome-desc">登录后享受企业贸易管理服务</view>
+    <button class="welcome-btn" bindtap="goLogin">登录 / 注册</button>
+  </view>
+
+  <!-- 已登录但未加入企业 -->
+  <view class="join-hero card" wx:elif="{{showJoinForm}}">
     <view class="join-title">你还未加入任何企业</view>
     <view class="join-desc">输入邀请码申请加入，或联系管理员获取邀请</view>
     <view class="join-form">
