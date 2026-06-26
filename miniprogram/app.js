@@ -1,6 +1,6 @@
 App({
   globalData: {
-    baseUrl: 'http://localhost:9999/api',
+    baseUrl: 'https://tradepass-274155-4-1446724178.sh.run.tcloudbase.com/api',
     token: '',
     userInfo: null,
     memberInfo: null,
