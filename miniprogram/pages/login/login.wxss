@@ -1,36 +1,36 @@
 page { background: #fff; }
 .page { display: flex; flex-direction: column; min-height: 100vh; }
 
+/* 品牌区 */
 .hero {
   background: linear-gradient(160deg, #0f766e, #14b8a6, #5eead4, #ccfbf1);
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: 120rpx 60rpx 80rpx;
+  padding: 100rpx 56rpx 60rpx;
 }
 .brand {
   color: rgba(255,255,255,0.9);
-  font-size: 48rpx;
+  font-size: 44rpx;
   font-weight: 700;
-  letter-spacing: 6rpx;
-  margin-bottom: 40rpx;
+  letter-spacing: 4rpx;
+  margin-bottom: 32rpx;
 }
 .title {
   color: #fff;
-  font-size: 52rpx;
+  font-size: 48rpx;
   font-weight: 700;
-  margin-bottom: 12rpx;
+  margin-bottom: 10rpx;
 }
 .subtitle {
   color: rgba(255,255,255,0.8);
-  font-size: 28rpx;
+  font-size: 26rpx;
 }
 
 /* 登录面板 */
 .login-panel {
   background: #fff;
-  flex: 1;
-  padding: 48rpx 50rpx;
+  padding: 44rpx 50rpx 60rpx;
 }
 
 .btn-wechat {
@@ -50,9 +50,9 @@ page { background: #fff; }
 .agree-row {
   align-items: flex-start;
   display: flex;
-  gap: 12rpx;
-  margin-top: 24rpx;
-  padding: 0 4rpx;
+  gap: 10rpx;
+  margin-top: 22rpx;
+  padding: 0 2rpx;
 }
 .agree-check {
   border: 2rpx solid #d1d5db;
@@ -60,14 +60,14 @@ page { background: #fff; }
   color: #fff;
   flex-shrink: 0;
   font-size: 18rpx;
-  height: 34rpx;
-  line-height: 34rpx;
-  margin-top: 3rpx;
+  height: 32rpx;
+  line-height: 32rpx;
+  margin-top: 2rpx;
   text-align: center;
-  width: 34rpx;
+  width: 32rpx;
 }
 .agree-check.on { background: #07c160; border-color: #07c160; }
-.agree-label { color: #9ca3af; font-size: 24rpx; line-height: 1.6; }
+.agree-label { color: #9ca3af; font-size: 23rpx; line-height: 1.5; }
 .agree-link { color: #0f766e; }
 
 .btn-phone {
@@ -78,21 +78,21 @@ page { background: #fff; }
   color: #374151;
   display: flex;
   font-size: 28rpx;
-  height: 90rpx;
+  height: 88rpx;
   justify-content: center;
-  margin-top: 24rpx;
+  margin-top: 22rpx;
   width: 100%;
 }
 .btn-phone::after { border: none; }
 
 .other {
   color: #6b7280;
-  font-size: 26rpx;
-  margin-top: 28rpx;
+  font-size: 25rpx;
+  margin-top: 26rpx;
   text-align: center;
 }
 
-/* 弹窗 */
+/* 弹窗通用 */
 .mask {
   align-items: flex-end;
   background: rgba(0,0,0,0.45);
