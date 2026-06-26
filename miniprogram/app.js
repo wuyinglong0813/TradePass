@@ -12,9 +12,7 @@ App({
     if (token) {
       this.globalData.token = token;
       this.loadMe();
-      return;
     }
-    this.doLogin();
   },
 
   doLogin() {

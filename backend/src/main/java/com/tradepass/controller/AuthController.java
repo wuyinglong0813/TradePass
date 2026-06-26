@@ -237,15 +237,20 @@ public class AuthController {
 
         if (users.isEmpty()) {
             // 新用户：创建账号
-            db.update("INSERT INTO sys_user (openid, nickname, phone) VALUES (?, ?, ?)", openid, "新用户", "");
+            String nick = request.nickName() != null && !request.nickName().isBlank() ? request.nickName() : "微信用户";
+            db.update("INSERT INTO sys_user (openid, nickname, phone) VALUES (?, ?, ?)", openid, nick, "");
             long newId = db.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
-            UserProfile user = new UserProfile(String.valueOf(newId), openid, "", "新用户", null, "GUEST");
+            UserProfile user = new UserProfile(String.valueOf(newId), openid, "", nick, null, "GUEST");
             currentUserId = newId;
             return ApiResponse.ok(new LoginSession(tokenFor(newId), user));
         }
 
         MemberInfo member = users.get(0);
         currentUserId = Long.parseLong(member.userId());
+        // 更新昵称（如果用户授权了新的）
+        if (request.nickName() != null && !request.nickName().isBlank()) {
+            db.update("UPDATE sys_user SET nickname = ? WHERE id = ?", request.nickName(), currentUserId);
+        }
         // 设置当前公司为用户第一个 ACTIVE 公司
         var cos = loadUserCompanies(currentUserId);
         currentCompanyId = cos.isEmpty() ? 0L : Long.parseLong(cos.get(0).companyId());
@@ -421,7 +426,7 @@ public class AuthController {
     }
 
     // ---- 请求体 ----
-    public record WechatLoginRequest(@NotBlank(message = "微信登录 code 不能为空") String code) {
+    public record WechatLoginRequest(@NotBlank(message = "微信登录 code 不能为空") String code, String nickName, String avatarUrl) {
     }
 
     public record BindPhoneRequest(@NotBlank(message = "手机号不能为空") String phone) {

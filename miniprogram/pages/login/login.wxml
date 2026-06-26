@@ -1,0 +1,31 @@
+<view class="page">
+  <view class="logo-area">
+    <view class="logo-icon">T</view>
+    <view class="brand-name">贸易通</view>
+    <view class="slogan">企业贸易好帮手</view>
+  </view>
+
+  <view class="login-area">
+    <!-- 已有用户信息则显示 -->
+    <block wx:if="{{avatarUrl}}">
+      <image class="avatar" src="{{avatarUrl}}" mode="aspectFill"/>
+      <view class="nickname">{{nickName}}</view>
+    </block>
+
+    <!-- 微信一键登录 -->
+    <button wx:if="{{!hasLogin}}" class="wechat-login-btn" bindtap="getUserProfile">
+      <view class="wechat-icon">微</view>
+      <view>微信一键登录</view>
+    </button>
+
+    <button wx:if="{{hasLogin && !phone}}" class="phone-btn" open-type="getPhoneNumber" bindgetphonenumber="getPhoneNumber">
+      获取手机号
+    </button>
+
+    <button wx:if="{{hasLogin}}" class="enter-btn" bindtap="enterApp">
+      进入贸易通
+    </button>
+
+    <view class="agreement">登录即同意《用户服务协议》和《隐私政策》</view>
+  </view>
+</view>
