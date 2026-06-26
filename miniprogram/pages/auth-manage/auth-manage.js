@@ -46,7 +46,7 @@ Page({
 
   onShareAppMessage() {
     const code = this.data.inviteCode;
-    if (!code) return { title: '贸易通', path: '/pages/index/index' };
+    if (!code) return { title: '财源通天', path: '/pages/index/index' };
     return {
       title: '邀请你加入我的企业',
       path: `/pages/index/index?inviteCode=${code}&type=member`

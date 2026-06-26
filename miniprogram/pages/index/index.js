@@ -259,7 +259,7 @@ Page({
 
   onShareAppMessage() {
     const code = this.data.counterpartyInviteCode;
-    if (!code) return { title: '贸易通', path: '/pages/index/index' };
+    if (!code) return { title: '财源通天', path: '/pages/index/index' };
     return {
       title: '邀请你成为供方合作伙伴',
       path: `/pages/index/index?inviteCode=${code}&type=counterparty`

@@ -1,5 +1,5 @@
 <view class="page">
-  <!-- 头部：贸易通 + 公司名 -->
+  <!-- 头部：财源通天 + 公司名 -->
   <view class="hero card">
     <view class="company">{{counterpartyName}}</view>
   </view>

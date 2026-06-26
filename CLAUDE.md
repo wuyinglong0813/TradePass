@@ -4,7 +4,7 @@ This file provides guidance to Claude Code when working in this repository.
 
 ## Project
 
-贸易通 (TradePass) — enterprise trade WeChat mini-program. **Single Spring Boot app** + native mini-program frontend.
+财源通天 (TradePass) — enterprise trade WeChat mini-program. **Single Spring Boot app** + native mini-program frontend.
 
 ## Build & Run
 
