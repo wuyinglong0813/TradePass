@@ -22,3 +22,7 @@
 .welcome-desc { color: #6b7280; font-size: 26rpx; margin-bottom: 32rpx; }
 .welcome-btn { background: #0f766e; border-radius: 16rpx; color: #fff; font-size: 30rpx; font-weight: 600; padding: 20rpx 0; width: 100%; }
 .welcome-btn::after { border: none; }
+
+.logout-btn { background: #fff; border-radius: 16rpx; color: #ef4444; font-size: 30rpx; font-weight: 600; margin-top: 24rpx; padding: 28rpx 0; text-align: center; }
+.hint-card { background: #f0fdfa; }
+.hint-text { color: #0f766e; font-size: 25rpx; }

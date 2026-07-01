@@ -1,7 +1,10 @@
 {
+  "lazyCodeLoading": "requiredComponents",
   "pages": [
+    "pages/privacy/privacy",
     "pages/login/login",
     "pages/index/index",
+    "pages/company/company",
     "pages/me/me",
     "pages/company-bind/company-bind",
     "pages/order-detail/order-detail",
@@ -10,23 +13,34 @@
     "pages/role-manage/role-manage"
   ],
   "window": {
-    "navigationBarTitleText": "财源通天",
+    "navigationBarTitleText": "商签通",
     "navigationBarBackgroundColor": "#0f766e",
     "navigationBarTextStyle": "white",
     "backgroundColor": "#f6f7f9"
   },
   "tabBar": {
-    "color": "#6b7280",
+    "color": "#9aa3a1",
     "selectedColor": "#0f766e",
     "backgroundColor": "#ffffff",
+    "borderStyle": "white",
     "list": [
       {
         "pagePath": "pages/index/index",
-        "text": "首页"
+        "text": "首页",
+        "iconPath": "images/tab/tab_home.png",
+        "selectedIconPath": "images/tab/tab_home_on.png"
+      },
+      {
+        "pagePath": "pages/company/company",
+        "text": "企业",
+        "iconPath": "images/tab/tab_company.png",
+        "selectedIconPath": "images/tab/tab_company_on.png"
       },
       {
         "pagePath": "pages/me/me",
-        "text": "我的"
+        "text": "我的",
+        "iconPath": "images/tab/tab_me.png",
+        "selectedIconPath": "images/tab/tab_me_on.png"
       }
     ]
   }

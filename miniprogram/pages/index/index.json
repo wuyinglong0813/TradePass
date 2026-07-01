@@ -1,3 +1,6 @@
 {
-  "navigationBarTitleText": "财源通天"
+  "navigationBarTitleText": "商签通",
+  "usingComponents": {
+    "empty-state": "/components/empty-state/empty-state"
+  }
 }

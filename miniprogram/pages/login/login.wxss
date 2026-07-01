@@ -1,103 +1,155 @@
-page { background: #fff; }
+page { background: #f6f8f9; }
 .page { display: flex; flex-direction: column; min-height: 100vh; }
 
-/* 品牌区 */
+/* 顶部品牌区：flex:1 吸收多余空间，让吉祥物与品牌信息整体居中 */
 .hero {
-  background: linear-gradient(160deg, #0f766e, #14b8a6, #5eead4, #ccfbf1);
+  align-items: center;
+  background: linear-gradient(170deg, #0f766e 0%, #14b8a6 55%, #5eead4 100%);
   display: flex;
+  flex: 1;
   flex-direction: column;
   justify-content: center;
-  padding: 100rpx 56rpx 60rpx;
+  padding: 100rpx 56rpx 110rpx;
 }
+
+.disc {
+  align-items: center;
+  background: #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 16rpx 40rpx rgba(0, 0, 0, 0.12), 0 0 0 16rpx rgba(255, 255, 255, 0.18);
+  display: flex;
+  height: 300rpx;
+  justify-content: center;
+  overflow: hidden;
+  width: 300rpx;
+}
+.mascot {
+  height: 280rpx;
+  width: 280rpx;
+}
+
 .brand {
-  color: rgba(255,255,255,0.9);
-  font-size: 44rpx;
+  color: #fff;
+  font-size: 42rpx;
   font-weight: 700;
-  letter-spacing: 4rpx;
-  margin-bottom: 32rpx;
+  letter-spacing: 6rpx;
+  margin-top: 44rpx;
 }
 .title {
   color: #fff;
-  font-size: 48rpx;
-  font-weight: 700;
-  margin-bottom: 10rpx;
+  font-size: 32rpx;
+  font-weight: 600;
+  margin-top: 22rpx;
 }
 .subtitle {
-  color: rgba(255,255,255,0.8);
-  font-size: 26rpx;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 24rpx;
+  margin-top: 10rpx;
 }
 
-/* 登录面板 */
-.login-panel {
-  background: #fff;
-  padding: 44rpx 50rpx 60rpx;
+/* 底部操作区：按内容自适应，不再 flex:1，避免底部大留白 */
+.panel {
+  background: #f6f8f9;
+  border-radius: 40rpx 40rpx 0 0;
+  margin-top: -40rpx;
+  padding: 64rpx 56rpx calc(48rpx + env(safe-area-inset-bottom));
+  position: relative;
 }
 
-.btn-wechat {
+.btn-primary {
   align-items: center;
-  background: #07c160;
-  border-radius: 16rpx;
+  background: linear-gradient(90deg, #0f766e, #14b8a6);
+  border: none;
+  border-radius: 48rpx;
+  box-shadow: 0 12rpx 28rpx rgba(15, 118, 110, 0.28);
   color: #fff;
   display: flex;
   font-size: 32rpx;
   font-weight: 600;
-  height: 100rpx;
+  height: 96rpx;
   justify-content: center;
+  letter-spacing: 2rpx;
   width: 100%;
 }
-.btn-wechat::after { border: none; }
+.btn-primary::after { border: none; }
+.btn-primary.disabled {
+  background: #cbd5d1;
+  box-shadow: none;
+  color: #fff;
+}
+
+.btn-secondary {
+  color: #0f766e;
+  font-size: 28rpx;
+  margin-top: 36rpx;
+  text-align: center;
+}
 
 .agree-row {
-  align-items: flex-start;
+  align-items: center;
   display: flex;
-  gap: 10rpx;
-  margin-top: 22rpx;
-  padding: 0 2rpx;
+  gap: 12rpx;
+  justify-content: center;
+  margin-top: 56rpx;
+  padding: 0 10rpx;
 }
 .agree-check {
-  border: 2rpx solid #d1d5db;
+  align-items: center;
+  border: 2rpx solid #c2c9c7;
   border-radius: 50%;
   color: #fff;
+  display: flex;
   flex-shrink: 0;
-  font-size: 18rpx;
+  font-size: 20rpx;
   height: 32rpx;
-  line-height: 32rpx;
-  margin-top: 2rpx;
-  text-align: center;
+  justify-content: center;
   width: 32rpx;
 }
-.agree-check.on { background: #07c160; border-color: #07c160; }
-.agree-label { color: #9ca3af; font-size: 23rpx; line-height: 1.5; }
+.agree-check.on { background: #0f766e; border-color: #0f766e; }
+.agree-label { color: #9aa3a1; font-size: 23rpx; line-height: 1.5; }
 .agree-link { color: #0f766e; }
 
-.btn-phone {
-  align-items: center;
-  background: #f5f5f5;
-  border: none;
-  border-radius: 16rpx;
-  color: #374151;
-  display: flex;
-  font-size: 28rpx;
-  height: 88rpx;
-  justify-content: center;
-  margin-top: 22rpx;
-  width: 100%;
-}
-.btn-phone::after { border: none; }
-
-.other {
-  color: #6b7280;
-  font-size: 25rpx;
-  margin-top: 26rpx;
+.skip {
+  color: #aab2b0;
+  font-size: 26rpx;
+  margin-top: 72rpx;
   text-align: center;
 }
 
-/* 弹窗通用 */
+/* 未同意协议气泡 */
+.bubble {
+  background: rgba(31, 41, 55, 0.92);
+  border-radius: 12rpx;
+  color: #fff;
+  font-size: 24rpx;
+  left: 50%;
+  opacity: 0;
+  padding: 16rpx 28rpx;
+  pointer-events: none;
+  position: absolute;
+  top: 8rpx;
+  transform: translate(-50%, -10rpx);
+  transition: opacity 0.2s, transform 0.2s;
+  white-space: nowrap;
+  z-index: 50;
+}
+.bubble::after {
+  border: 12rpx solid transparent;
+  border-top-color: rgba(31, 41, 55, 0.92);
+  bottom: -22rpx;
+  content: '';
+  left: 50%;
+  position: absolute;
+  transform: translateX(-50%);
+}
+.bubble.show { opacity: 1; transform: translate(-50%, 0); }
+
+/* 弹层 */
 .mask {
   align-items: flex-end;
-  background: rgba(0,0,0,0.45);
-  bottom: 0; left: 0; right: 0; top: 0;
+  background: rgba(0, 0, 0, 0.45);
   display: flex;
+  inset: 0;
   justify-content: center;
   position: fixed;
   z-index: 200;
@@ -109,26 +161,8 @@ page { background: #fff; }
   width: 100%;
 }
 .sheet-title { font-size: 34rpx; font-weight: 700; margin-bottom: 32rpx; }
-.sheet-input {
-  background: #f5f5f5;
-  border-radius: 16rpx;
-  font-size: 30rpx;
-  height: 96rpx;
-  padding: 0 28rpx;
-  width: 100%;
-  box-sizing: border-box;
-}
-.sheet-btn {
-  background: #0f766e;
-  border-radius: 16rpx;
-  color: #fff;
-  font-size: 30rpx;
-  font-weight: 600;
-  height: 96rpx;
-  line-height: 96rpx;
-  margin-top: 28rpx;
-  width: 100%;
-}
+.sheet-input { background: #f5f5f5; border-radius: 16rpx; box-sizing: border-box; font-size: 30rpx; height: 96rpx; padding: 0 28rpx; width: 100%; }
+.sheet-btn { background: #0f766e; border-radius: 48rpx; color: #fff; font-size: 30rpx; font-weight: 600; height: 96rpx; line-height: 96rpx; margin-top: 28rpx; width: 100%; }
 .sheet-btn::after { border: none; }
 .sheet-btn[disabled] { opacity: 0.4; }
 
@@ -146,15 +180,5 @@ page { background: #fff; }
 .modal-body { flex: 1; max-height: 45vh; }
 .h2 { font-size: 28rpx; font-weight: 700; margin: 16rpx 0 12rpx; }
 .p { color: #4b5563; font-size: 26rpx; line-height: 2; }
-.modal-btn {
-  background: #0f766e;
-  border-radius: 12rpx;
-  color: #fff;
-  font-size: 28rpx;
-  font-weight: 600;
-  height: 84rpx;
-  line-height: 84rpx;
-  margin-top: 24rpx;
-  width: 100%;
-}
+.modal-btn { background: #0f766e; border-radius: 12rpx; color: #fff; font-size: 28rpx; font-weight: 600; height: 84rpx; line-height: 84rpx; margin-top: 24rpx; width: 100%; }
 .modal-btn::after { border: none; }

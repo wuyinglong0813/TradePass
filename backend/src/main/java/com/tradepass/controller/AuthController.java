@@ -2,6 +2,7 @@ package com.tradepass.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tradepass.common.ApiResponse;
+import com.tradepass.common.AuthContext;
 import com.tradepass.common.BusinessException;
 import com.tradepass.common.TradePassDtos.CompanyProfile;
 import com.tradepass.common.TradePassDtos.CompanyRole;
@@ -19,10 +20,10 @@ import org.springframework.jdbc.core.RowMapper;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -49,10 +50,6 @@ public class AuthController {
 
     record RoleDef(String text, List<String> permissions) {
     }
-
-    /** 当前登录用户 ID + 当前操作的企业 ID */
-    private volatile long currentUserId = 1;
-    private volatile long currentCompanyId = 1;
 
     // RowMapper
     private static final RowMapper<MemberInfo> MEMBER_ROW = (rs, rowNum) -> {
@@ -196,14 +193,54 @@ public class AuthController {
                     counterparty_company_name VARCHAR(128) NOT NULL,
                     relation_type VARCHAR(32) NOT NULL,
                     status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
-                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE KEY uk_company_counterparty (company_id, counterparty_company_name)
                 )
             """);
         } catch (Exception ignored) {}
 
+        // 种子供方关系（仅在表为空时灌入）
+        Integer cpCount = db.queryForObject("SELECT COUNT(1) FROM counterparty_relation", Integer.class);
+        if (cpCount == null || cpCount == 0) {
+            db.update("INSERT INTO counterparty_relation (company_id, counterparty_company_name, relation_type, status) VALUES (1, '河北通瑞贸易有限公司', 'SUPPLIER', 'ACTIVE')");
+            db.update("INSERT INTO counterparty_relation (company_id, counterparty_company_name, relation_type, status) VALUES (1, '河北逸泽昌贸易有限公司', 'SUPPLIER', 'ACTIVE')");
+            db.update("INSERT INTO counterparty_relation (company_id, counterparty_company_name, relation_type, status) VALUES (2, '上海浦发贸易有限公司', 'SUPPLIER', 'ACTIVE')");
+            db.update("INSERT INTO counterparty_relation (company_id, counterparty_company_name, relation_type, status) VALUES (2, '浙江义乌商贸有限公司', 'SUPPLIER', 'ACTIVE')");
+            db.update("INSERT INTO counterparty_relation (company_id, counterparty_company_name, relation_type, status) VALUES (2, '江苏南通纺织品有限公司', 'SUPPLIER', 'ACTIVE')");
+        }
+
         // 第二家公司
         db.execute("INSERT IGNORE INTO company (id, name, credit_code, legal_person_name, certification_status, real_name_status, face_status, seal_status) VALUES (2, '上海远航进出口有限公司', '91310000MA00000002', '王海', 'VERIFIED', 'VERIFIED', 'VERIFIED', 'UPLOADED')");
         db.execute("INSERT IGNORE INTO company_member (company_id, user_id, role_code, is_legal_person) VALUES (2, 1, 'SALES', 0)");
+
+        // 订单表（销售/采购订单，排行与订单列表共用同一数据源）
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS trade_order (
+                id BIGINT PRIMARY KEY AUTO_INCREMENT,
+                company_id BIGINT NOT NULL,
+                direction VARCHAR(16) NOT NULL,
+                counterparty_name VARCHAR(128) NOT NULL,
+                amount DECIMAL(18,2) NOT NULL,
+                order_date DATE NOT NULL,
+                status VARCHAR(32) NOT NULL DEFAULT 'CONFIRMED',
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_company_dir (company_id, direction)
+            )
+        """);
+        // 种子订单（仅在表为空时灌入，避免重复）
+        Integer orderCount = db.queryForObject("SELECT COUNT(1) FROM trade_order", Integer.class);
+        if (orderCount == null || orderCount == 0) {
+            db.update("INSERT INTO trade_order (company_id, direction, counterparty_name, order_no, amount, order_date) VALUES (1,'SALE','河北通瑞贸易有限公司','ORD-001',1280000.00, DATE_SUB(CURDATE(), INTERVAL 3 DAY))");
+            db.update("INSERT INTO trade_order (company_id, direction, counterparty_name, order_no, amount, order_date) VALUES (1,'SALE','河北逸泽昌贸易有限公司','ORD-002',860000.00, DATE_SUB(CURDATE(), INTERVAL 2 MONTH))");
+            db.update("INSERT INTO trade_order (company_id, direction, counterparty_name, order_no, amount, order_date) VALUES (1,'SALE','河北佰盛电缆科技有限公司','ORD-003',620000.00, DATE_SUB(CURDATE(), INTERVAL 1 YEAR))");
+            db.update("INSERT INTO trade_order (company_id, direction, counterparty_name, order_no, amount, order_date) VALUES (1,'PURCHASE','河北通瑞贸易有限公司','ORD-004',960000.00, DATE_SUB(CURDATE(), INTERVAL 5 DAY))");
+            db.update("INSERT INTO trade_order (company_id, direction, counterparty_name, order_no, amount, order_date) VALUES (1,'PURCHASE','河北逸泽昌贸易有限公司','ORD-005',710000.00, DATE_SUB(CURDATE(), INTERVAL 1 MONTH))");
+            db.update("INSERT INTO trade_order (company_id, direction, counterparty_name, order_no, amount, order_date) VALUES (2,'SALE','上海浦发贸易有限公司','ORD-006',2560000.00, DATE_SUB(CURDATE(), INTERVAL 2 DAY))");
+            db.update("INSERT INTO trade_order (company_id, direction, counterparty_name, order_no, amount, order_date) VALUES (2,'SALE','浙江义乌商贸有限公司','ORD-007',1890000.00, DATE_SUB(CURDATE(), INTERVAL 7 DAY))");
+            db.update("INSERT INTO trade_order (company_id, direction, counterparty_name, order_no, amount, order_date) VALUES (2,'SALE','江苏南通纺织品有限公司','ORD-008',1430000.00, DATE_SUB(CURDATE(), INTERVAL 1 MONTH))");
+            db.update("INSERT INTO trade_order (company_id, direction, counterparty_name, order_no, amount, order_date) VALUES (2,'PURCHASE','上海浦发贸易有限公司','ORD-009',980000.00, DATE_SUB(CURDATE(), INTERVAL 10 DAY))");
+            db.update("INSERT INTO trade_order (company_id, direction, counterparty_name, order_no, amount, order_date) VALUES (2,'PURCHASE','浙江义乌商贸有限公司','ORD-010',810000.00, DATE_SUB(CURDATE(), INTERVAL 1 MONTH))");
+        }
     }
 
     // ================================================================
@@ -214,6 +251,13 @@ public class AuthController {
     public ApiResponse<LoginSession> wechatLogin(@Valid @RequestBody WechatLoginRequest request) {
         // 调微信接口拿 openid
         String openid = resolveOpenid(request.code());
+
+        // 若前端传来手机号动态令牌（手机号快捷登录），用 access_token 换取真实手机号
+        String resolvedPhone = request.phone();
+        if (request.phoneCode() != null && !request.phoneCode().isBlank()) {
+            resolvedPhone = resolvePhoneByCode(request.phoneCode());
+        }
+        final String phoneToUse = resolvedPhone;
 
         // 查用户
         List<MemberInfo> users = db.query(
@@ -238,36 +282,39 @@ public class AuthController {
         if (users.isEmpty()) {
             // 新用户：创建账号
             String nick = request.nickName() != null && !request.nickName().isBlank() ? request.nickName() : "微信用户";
-            String phone = request.phone() != null ? request.phone() : "";
+            String phone = phoneToUse != null ? phoneToUse : "";
             db.update("INSERT INTO sys_user (openid, nickname, phone) VALUES (?, ?, ?)", openid, nick, phone);
             long newId = db.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
             UserProfile user = new UserProfile(String.valueOf(newId), openid, phone, nick, null, "GUEST");
-            currentUserId = newId;
             return ApiResponse.ok(new LoginSession(tokenFor(newId), user));
         }
 
         MemberInfo member = users.get(0);
-        currentUserId = Long.parseLong(member.userId());
+        long userId = Long.parseLong(member.userId());
         // 更新昵称和手机号
         if (request.nickName() != null && !request.nickName().isBlank()) {
-            db.update("UPDATE sys_user SET nickname = ? WHERE id = ?", request.nickName(), currentUserId);
+            db.update("UPDATE sys_user SET nickname = ? WHERE id = ?", request.nickName(), userId);
         }
-        if (request.phone() != null && !request.phone().isBlank()) {
-            db.update("UPDATE sys_user SET phone = ? WHERE id = ?", request.phone(), currentUserId);
+        if (phoneToUse != null && !phoneToUse.isBlank()) {
+            db.update("UPDATE sys_user SET phone = ? WHERE id = ?", phoneToUse, userId);
         }
-        // 设置当前公司为用户第一个 ACTIVE 公司
-        var cos = loadUserCompanies(currentUserId);
-        currentCompanyId = cos.isEmpty() ? 0L : Long.parseLong(cos.get(0).companyId());
-        UserProfile user = new UserProfile(member.userId(), openid, member.phone(), member.userName(), String.valueOf(currentCompanyId), member.roleCode());
-        return ApiResponse.ok(new LoginSession(tokenFor(Long.parseLong(member.userId())), user));
+        // 当前公司 = 用户第一家 ACTIVE 企业
+        var cos = loadUserCompanies(userId);
+        String currentCompanyId = cos.isEmpty() ? null : cos.get(0).companyId();
+        String shownPhone = (phoneToUse != null && !phoneToUse.isBlank()) ? phoneToUse : member.phone();
+        UserProfile user = new UserProfile(member.userId(), openid, shownPhone, member.userName(), currentCompanyId, member.roleCode());
+        return ApiResponse.ok(new LoginSession(tokenFor(userId), user));
     }
 
     @PostMapping("/auth/bind-phone")
     public ApiResponse<UserProfile> bindPhone(@Valid @RequestBody BindPhoneRequest request) {
-        db.update("UPDATE sys_user SET phone = ? WHERE id = ?", request.phone(), currentUserId);
-        MemberInfo member = loadMember(currentUserId, currentCompanyId);
+        long userId = AuthContext.userId();
+        Long companyId = AuthContext.companyId();
+        db.update("UPDATE sys_user SET phone = ? WHERE id = ?", request.phone(), userId);
+        MemberInfo member = loadMember(userId, companyId == null ? 0L : companyId);
         if (member == null) return ApiResponse.ok(null);
-        return ApiResponse.ok(new UserProfile(member.userId(), "demo-openid", request.phone(), member.userName(), String.valueOf(currentCompanyId), member.roleCode()));
+        return ApiResponse.ok(new UserProfile(member.userId(), "demo-openid", request.phone(), member.userName(),
+                companyId == null ? null : String.valueOf(companyId), member.roleCode()));
     }
 
     // ================================================================
@@ -275,47 +322,90 @@ public class AuthController {
     // ================================================================
 
     @GetMapping("/me")
-    public ApiResponse<MePayload> me(@RequestHeader(value = "Authorization", required = false) String token) {
-        MemberInfo member = loadMember(currentUserId, currentCompanyId);
-        CompanyProfile company = loadCompany(currentCompanyId);
-        List<CompanyRole> companies = loadUserCompanies(currentUserId);
+    public ApiResponse<MePayload> me() {
+        return ApiResponse.ok(buildMe(AuthContext.userId(), AuthContext.companyId()));
+    }
 
-        if (member == null) return ApiResponse.ok(null);
+    /** 统一待办中心：汇总当前用户在当前企业下的审批 / 认证等待办事项 */
+    @GetMapping("/me/todos")
+    public ApiResponse<List<TodoItem>> myTodos() {
+        long userId = AuthContext.userId();
+        Long companyId = AuthContext.companyId();
+        List<TodoItem> todos = new ArrayList<>();
+        if (companyId == null) {
+            return ApiResponse.ok(todos);
+        }
+        boolean manager = !db.queryForList(
+                "SELECT 1 FROM company_member WHERE company_id = ? AND user_id = ? AND status = 'ACTIVE' AND role_code IN ('LEGAL','ADMIN')",
+                companyId, userId).isEmpty();
+        if (manager) {
+            Integer pending = db.queryForObject(
+                    "SELECT COUNT(1) FROM company_member WHERE company_id = ? AND status = 'PENDING'", Integer.class, companyId);
+            if (pending != null && pending > 0) {
+                todos.add(new TodoItem("APPROVAL", "成员待审批", pending + " 位同事申请加入企业", pending, "auth-manage"));
+            }
+            var co = db.queryForList("SELECT certification_status FROM company WHERE id = ?", companyId);
+            if (!co.isEmpty()) {
+                String cs = (String) co.get(0).get("certification_status");
+                if (cs != null && !"VERIFIED".equals(cs)) {
+                    todos.add(new TodoItem("CERT", "企业认证待完成", "完成认证后可使用全部签约能力", 1, "company-cert"));
+                }
+            }
+        }
+        return ApiResponse.ok(todos);
+    }
+
+    public record TodoItem(String type, String title, String desc, int count, String target) {
+    }
+
+    private MePayload buildMe(long userId, Long companyId) {
+        List<CompanyRole> companies = loadUserCompanies(userId);
+        // 当前企业：上下文给定且在用户企业内，否则取第一家
+        Long effectiveCompanyId = companyId;
+        if (effectiveCompanyId == null && !companies.isEmpty()) {
+            effectiveCompanyId = Long.parseLong(companies.get(0).companyId());
+        }
+        MemberInfo member = loadMember(userId, effectiveCompanyId == null ? 0L : effectiveCompanyId);
+        if (member == null) {
+            // 用户存在但还未加入任何企业
+            var urows = db.queryForList("SELECT nickname, phone FROM sys_user WHERE id = ?", userId);
+            String nick = urows.isEmpty() ? "微信用户" : (String) urows.get(0).get("nickname");
+            String phone = urows.isEmpty() ? "" : (String) urows.get(0).get("phone");
+            UserProfile u = new UserProfile(String.valueOf(userId), "demo-openid", phone, nick, null, "GUEST");
+            return new MePayload(u, fallbackCompany(), null, companies);
+        }
+        CompanyProfile company = effectiveCompanyId == null ? null : loadCompany(effectiveCompanyId);
         UserProfile user = new UserProfile(member.userId(), "demo-openid", member.phone(), member.userName(),
-                String.valueOf(currentCompanyId), member.roleCode());
-        return ApiResponse.ok(new MePayload(user, company != null ? company : fallbackCompany(), member, companies));
+                effectiveCompanyId == null ? null : String.valueOf(effectiveCompanyId), member.roleCode());
+        return new MePayload(user, company != null ? company : fallbackCompany(), member, companies);
     }
 
     @PostMapping("/me/switch-company")
     public ApiResponse<MePayload> switchCompany(@Valid @RequestBody SwitchCompanyRequest request) {
+        long userId = AuthContext.userId();
         long newCompanyId = Long.parseLong(request.companyId());
         // 验证用户确实是该公司成员
-        var rows = db.queryForList("SELECT id FROM company_member WHERE company_id = ? AND user_id = ? AND status = 'ACTIVE'", newCompanyId, currentUserId);
+        var rows = db.queryForList("SELECT id FROM company_member WHERE company_id = ? AND user_id = ? AND status = 'ACTIVE'", newCompanyId, userId);
         if (rows.isEmpty()) throw new BusinessException("你不是该公司成员");
-
-        currentCompanyId = newCompanyId;
-        return me(null);
+        return ApiResponse.ok(buildMe(userId, newCompanyId));
     }
 
     @PostMapping("/me/company")
     public ApiResponse<MePayload> bindCompany(@Valid @RequestBody BindCompanyRequest request) {
+        long userId = AuthContext.userId();
+        long companyId = parseId(request.id());
         // 更新或插入公司
         db.update("INSERT INTO company (id, name, credit_code, legal_person_name, certification_status) VALUES (?, ?, ?, ?, 'PENDING') ON DUPLICATE KEY UPDATE name=VALUES(name), credit_code=VALUES(credit_code), legal_person_name=VALUES(legal_person_name)",
-                parseId(request.id()), request.name(), request.creditCode(), request.legalPersonName());
-        // 关联用户
-        db.update("INSERT IGNORE INTO company_member (company_id, user_id, role_code, is_legal_person) VALUES (?, ?, 'LEGAL', 1)",
-                parseId(request.id()), currentUserId);
-
-        MemberInfo member = loadMember(currentUserId, currentCompanyId);
-        CompanyProfile company = loadCompany(currentCompanyId);
-        UserProfile user = new UserProfile(member.userId(), "demo-openid", member.phone(), member.userName(),
-                company.id(), "LEGAL");
-        List<CompanyRole> cos = loadUserCompanies(currentUserId);
-        return ApiResponse.ok(new MePayload(user, company, member, cos));
+                companyId, request.name(), request.creditCode(), request.legalPersonName());
+        // 关联用户为法人
+        db.update("INSERT IGNORE INTO company_member (company_id, user_id, role_code, is_legal_person, status) VALUES (?, ?, 'LEGAL', 1, 'ACTIVE')",
+                companyId, userId);
+        // 新建/绑定后即以该企业为当前企业
+        return ApiResponse.ok(buildMe(userId, companyId));
     }
 
     // ================================================================
-    // Dev 用户切换
+    // Dev 用户切换（开发专用，生产应整体下线）
     // ================================================================
 
     @GetMapping("/dev/users")
@@ -333,15 +423,16 @@ public class AuthController {
         return ApiResponse.ok(users);
     }
 
+    /** Dev 切换用户：返回该用户的 token，前端换 token 即完成切换（无服务端全局状态） */
     @PostMapping("/dev/switch-user")
-    public ApiResponse<DevUser> switchUser(@Valid @RequestBody SwitchUserRequest request) {
-        MemberInfo member = loadMemberAnyCompany(parseId(request.userId()));
+    public ApiResponse<LoginSession> switchUser(@Valid @RequestBody SwitchUserRequest request) {
+        long userId = parseId(request.userId());
+        MemberInfo member = loadMemberAnyCompany(userId);
         if (member == null) return ApiResponse.ok(null);
-        currentUserId = parseId(request.userId());
-        // 切换到用户的第一家公司，没有则设 0
-        var cos = loadUserCompanies(currentUserId);
-        currentCompanyId = cos.isEmpty() ? 0L : Long.parseLong(cos.get(0).companyId());
-        return ApiResponse.ok(new DevUser(member.userId(), member.userName(), member.phone(), member.roleCode(), member.roleText()));
+        var cos = loadUserCompanies(userId);
+        String currentCompanyId = cos.isEmpty() ? null : cos.get(0).companyId();
+        UserProfile user = new UserProfile(member.userId(), "dev-openid", member.phone(), member.userName(), currentCompanyId, member.roleCode());
+        return ApiResponse.ok(new LoginSession(tokenFor(userId), user));
     }
 
     // ================================================================
@@ -429,8 +520,58 @@ public class AuthController {
         }
     }
 
+    /** 用手机号动态令牌 code 调微信接口换取真实手机号 */
+    private String resolvePhoneByCode(String phoneCode) {
+        try {
+            String token = getAccessToken();
+            String url = "https://api.weixin.qq.com/wxa/business/getuserphonenumber?access_token=" + token;
+            var mapper = new ObjectMapper();
+            String body = mapper.writeValueAsString(Map.of("code", phoneCode));
+            var client = java.net.http.HttpClient.newHttpClient();
+            var httpReq = java.net.http.HttpRequest.newBuilder()
+                    .uri(java.net.URI.create(url))
+                    .header("Content-Type", "application/json")
+                    .POST(java.net.http.HttpRequest.BodyPublishers.ofString(body))
+                    .build();
+            var resp = client.send(httpReq, java.net.http.HttpResponse.BodyHandlers.ofString());
+            var node = mapper.readTree(resp.body());
+            if (node.path("errcode").asInt(-1) != 0) {
+                throw new BusinessException("获取手机号失败: " + node.path("errmsg").asText());
+            }
+            return node.path("phone_info").path("phoneNumber").asText();
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new BusinessException("获取手机号异常: " + e.getMessage());
+        }
+    }
+
+    /** 获取小程序 access_token（演示用，未做缓存；生产需缓存并按 expires_in 刷新） */
+    private String getAccessToken() {
+        try {
+            if (wechatAppSecret == null || wechatAppSecret.isBlank()) {
+                throw new BusinessException("未配置 WECHAT_APP_SECRET，无法获取 access_token");
+            }
+            String url = String.format(
+                    "https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=%s&secret=%s",
+                    wechatAppId, wechatAppSecret);
+            var client = java.net.http.HttpClient.newHttpClient();
+            var httpReq = java.net.http.HttpRequest.newBuilder().uri(java.net.URI.create(url)).GET().build();
+            var resp = client.send(httpReq, java.net.http.HttpResponse.BodyHandlers.ofString());
+            var node = new ObjectMapper().readTree(resp.body());
+            if (!node.has("access_token")) {
+                throw new BusinessException("获取 access_token 失败: " + resp.body());
+            }
+            return node.get("access_token").asText();
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new BusinessException("获取 access_token 异常: " + e.getMessage());
+        }
+    }
+
     // ---- 请求体 ----
-    public record WechatLoginRequest(@NotBlank(message = "微信登录 code 不能为空") String code, String nickName, String avatarUrl, String phone) {
+    public record WechatLoginRequest(@NotBlank(message = "微信登录 code 不能为空") String code, String nickName, String avatarUrl, String phone, String phoneCode) {
     }
 
     public record BindPhoneRequest(@NotBlank(message = "手机号不能为空") String phone) {

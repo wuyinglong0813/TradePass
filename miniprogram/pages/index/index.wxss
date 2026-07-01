@@ -1,3 +1,87 @@
+/* ===== 未登录欢迎页 ===== */
+.welcome-wrap {
+  min-height: 100vh;
+  background: #f6f7f9;
+}
+
+.welcome-banner {
+  position: relative;
+  background: linear-gradient(160deg, #0a6e63 0%, #0f766e 40%, #14b8a6 100%);
+  padding: 120rpx 40rpx 80rpx;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.wb-circle {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+}
+.wb-c1 { width: 320rpx; height: 320rpx; top: -100rpx; right: -80rpx; }
+.wb-c2 { width: 180rpx; height: 180rpx; bottom: -40rpx; left: -40rpx; }
+.wb-c3 { width: 90rpx; height: 90rpx; top: 180rpx; left: 50rpx; }
+
+.wb-icon {
+  width: 160rpx;
+  height: 160rpx;
+  position: relative;
+  z-index: 1;
+}
+
+.wb-title {
+  color: #fff;
+  font-size: 48rpx;
+  font-weight: 700;
+  margin-top: 24rpx;
+  position: relative;
+  z-index: 1;
+}
+
+.wb-desc {
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 26rpx;
+  margin-top: 14rpx;
+  position: relative;
+  z-index: 1;
+}
+
+.wb-btn {
+  background: #fff;
+  border: none;
+  border-radius: 48rpx;
+  color: #0f766e;
+  font-size: 32rpx;
+  font-weight: 700;
+  height: 92rpx;
+  line-height: 92rpx;
+  margin-top: 48rpx;
+  width: 400rpx;
+  position: relative;
+  z-index: 1;
+}
+.wb-btn::after { border: none; }
+
+/* 功能预览卡片 */
+.preview-card {
+  background: #fff;
+  border-radius: 20rpx;
+  margin: 24rpx 28rpx;
+  padding: 36rpx 32rpx;
+  box-shadow: 0 2rpx 12rpx rgba(0,0,0,0.03);
+}
+.preview-title {
+  font-size: 32rpx;
+  font-weight: 700;
+  color: #111827;
+  margin-bottom: 10rpx;
+}
+.preview-desc {
+  font-size: 24rpx;
+  color: #9ca3af;
+}
+
 .hero {
   background: linear-gradient(135deg, #0f766e, #14b8a6);
   color: #ffffff;
@@ -152,8 +236,9 @@ button.add-btn::after { border: none; }
   font-size: 36rpx;
 }
 
-.empty {
+.loading-hint {
   color: #6b7280;
+  font-size: 26rpx;
   padding: 40rpx 0;
   text-align: center;
 }

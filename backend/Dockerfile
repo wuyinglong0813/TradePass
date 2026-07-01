@@ -11,4 +11,6 @@ WORKDIR /app
 COPY --from=builder /build/target/tradepass-server-*.jar app.jar
 
 EXPOSE 9999
+ENV SPRING_PROFILES_ACTIVE=prod
+ENV TRADEPASS_DEV_ENABLED=false
 ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar /app/app.jar"]

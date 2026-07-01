@@ -1,0 +1,43 @@
+.lg {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  padding: 160rpx 56rpx 0;
+}
+.lg-disc {
+  align-items: center;
+  background: radial-gradient(circle at 50% 45%, #fff7e8 0%, #fdeccf 60%, #f6f8f9 100%);
+  border-radius: 50%;
+  display: flex;
+  height: 320rpx;
+  justify-content: center;
+  overflow: hidden;
+  width: 320rpx;
+}
+.lg-mascot {
+  height: 280rpx;
+  width: 280rpx;
+}
+.lg-text {
+  color: #9aa3a1;
+  font-size: 28rpx;
+  margin-top: 48rpx;
+  text-align: center;
+}
+.lg-btn {
+  align-items: center;
+  background: linear-gradient(90deg, #0f766e, #14b8a6);
+  border: none;
+  border-radius: 48rpx;
+  box-shadow: 0 12rpx 28rpx rgba(15, 118, 110, 0.28);
+  color: #fff;
+  display: flex;
+  font-size: 30rpx;
+  font-weight: 600;
+  height: 88rpx;
+  justify-content: center;
+  letter-spacing: 4rpx;
+  margin-top: 48rpx;
+  width: 320rpx;
+}
+.lg-btn::after { border: none; }

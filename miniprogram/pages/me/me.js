@@ -16,14 +16,24 @@ Page({
 
   onShow() {
     const loggedIn = !!(app.globalData.token || wx.getStorageSync('tradepass_token'));
-    this.setData({ isLoggedIn: loggedIn });
+    // dev 阶段始终显示切换用户入口；生产发布前改回 platform === 'devtools' 判断
+    let isDev = true;
+    this.setData({ isLoggedIn: loggedIn, isDev });
     if (!loggedIn) return;
     this.loadMe();
-    this.loadDevUsers();
+    if (isDev) this.loadDevUsers();
   },
 
   goLogin() {
     wx.reLaunch({ url: '/pages/login/login' });
+  },
+
+  logout() {
+    wx.showModal({
+      title: '退出登录',
+      content: '确定要退出当前账号吗？',
+      success: (res) => { if (res.confirm) app.logout(); }
+    });
   },
 
   async loadMe() {

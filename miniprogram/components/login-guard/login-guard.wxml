@@ -1,0 +1,7 @@
+<view class="lg">
+  <view class="lg-disc">
+    <image class="lg-mascot" src="/images/mascot.png" mode="aspectFit"/>
+  </view>
+  <view class="lg-text">{{text}}</view>
+  <button class="lg-btn" bindtap="goLogin">去登录</button>
+</view>

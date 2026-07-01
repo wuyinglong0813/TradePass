@@ -5,6 +5,10 @@ wechat:
   app-id: ${WECHAT_APP_ID:wxd6d1e93a3868253e}
   app-secret: ${WECHAT_APP_SECRET:}
 
+tradepass:
+  dev:
+    enabled: ${TRADEPASS_DEV_ENABLED:true}
+
 spring:
   application:
     name: tradepass

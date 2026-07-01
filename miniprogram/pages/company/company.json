@@ -1,0 +1,6 @@
+{
+  "navigationBarTitleText": "企业",
+  "usingComponents": {
+    "login-guard": "/components/login-guard/login-guard"
+  }
+}

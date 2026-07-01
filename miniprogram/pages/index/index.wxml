@@ -1,9 +1,25 @@
 <view class="page">
   <!-- 未登录 -->
-  <view class="welcome-hero card" wx:if="{{!isLoggedIn}}">
-    <view class="welcome-title">欢迎来到财源通天</view>
-    <view class="welcome-desc">登录后享受企业贸易管理服务</view>
-    <button class="welcome-btn" bindtap="goLogin">登录 / 注册</button>
+  <view class="welcome-wrap" wx:if="{{!isLoggedIn}}">
+    <view class="welcome-banner">
+      <view class="wb-circle wb-c1"></view>
+      <view class="wb-circle wb-c2"></view>
+      <view class="wb-circle wb-c3"></view>
+      <image class="wb-icon" src="/images/logo.png" mode="aspectFit"/>
+      <view class="wb-title">商签通</view>
+      <view class="wb-desc">安全合规的企业贸易管理平台</view>
+      <button class="wb-btn" bindtap="goLogin">点击登录 / 注册</button>
+    </view>
+
+    <!-- 功能预览（点击跳登录） -->
+    <view class="preview-card" bindtap="goLogin">
+      <view class="preview-title">客户销售业绩排名</view>
+      <view class="preview-desc">登录后查看您的交易排名数据</view>
+    </view>
+    <view class="preview-card" bindtap="goLogin">
+      <view class="preview-title">供应的公司</view>
+      <view class="preview-desc">登录后管理您的供应商伙伴</view>
+    </view>
   </view>
 
   <!-- 已登录但未加入企业 -->
@@ -39,8 +55,8 @@
       </view>
     </view>
 
-    <view wx:if="{{loading}}" class="empty">加载中...</view>
-    <view wx:if="{{showEmpty}}" class="empty">暂无排行数据</view>
+    <view wx:if="{{loading}}" class="loading-hint">加载中...</view>
+    <empty-state wx:if="{{showEmpty}}" compact="{{true}}" text="当前周期暂无交易排行"/>
     <block wx:if="{{showRanking}}" wx:for="{{ranking}}" wx:key="counterpartyName">
       <view class="rank-row" data-name="{{item.counterpartyName}}" bindtap="openCounterparty">
         <view class="rank-no">{{item.rank}}</view>
@@ -54,14 +70,19 @@
     </block>
   </view>
 
-  <!-- 供应商专属：供应的公司（在排行下方） -->
+  <!-- 供应商专属：供应的公司 -->
   <view class="counterparty-section card" wx:if="{{role === 'supplier'}}">
     <view class="section-head">
       <view class="title">供应的公司</view>
       <button class="add-btn" open-type="share" wx:if="{{isLegalPerson}}" bindtap="addCounterparty">＋</button>
       <view class="add-btn" wx:else bindtap="addCounterparty">＋</view>
     </view>
-    <view wx:if="{{counterparties.length === 0}}" class="empty">还没有添加供应的公司</view>
+    <empty-state
+      wx:if="{{counterparties.length === 0}}"
+      compact="{{true}}"
+      text="还没有添加供应的公司"
+      buttonText="{{counterpartyEmptyBtn}}"
+      bind:tap="addCounterparty"/>
     <block wx:for="{{counterparties}}" wx:key="id">
       <view class="counterparty-item" data-name="{{item.counterpartyName}}" bindtap="openCounterparty">
         <view class="counterparty-name">{{item.counterpartyName}}</view>

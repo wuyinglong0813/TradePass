@@ -4,11 +4,13 @@
     <button class="invite-btn" open-type="share" bindtap="shareInvite">邀请成员</button>
   </view>
 
-  <view class="card" wx:if="{{authorizations.length === 0}}">
-    <view class="empty">暂无成员</view>
+  <view class="card">
+    <search-bar placeholder="搜索成员姓名 / 手机号" value="{{keyword}}" bind:input="onSearch"/>
   </view>
 
-  <block wx:for="{{authorizations}}" wx:key="id">
+  <empty-state wx:if="{{filtered.length === 0}}" text="暂无成员，点击右上角邀请同事加入"/>
+
+  <block wx:for="{{filtered}}" wx:key="id">
     <view class="auth-card card {{item.status === 'PENDING' ? 'pending' : ''}}">
       <view class="auth-head">
         <view>

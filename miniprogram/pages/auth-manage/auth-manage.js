@@ -4,10 +4,23 @@ const app = getApp();
 Page({
   data: {
     authorizations: [],
+    filtered: [],
+    keyword: '',
     showApproveModal: false,
     approveTargetId: '',
     approveRoles: [],
     approveCode: ''
+  },
+
+  noop() {},
+
+  onSearch(e) {
+    const keyword = (e.detail.value || '').trim().toLowerCase();
+    const filtered = !keyword ? this.data.authorizations : this.data.authorizations.filter(m =>
+      (m.memberName || '').toLowerCase().indexOf(keyword) >= 0 ||
+      (m.phone || '').indexOf(keyword) >= 0
+    );
+    this.setData({ keyword, filtered });
   },
 
   onShow() {
@@ -28,6 +41,7 @@ Page({
     try {
       const list = await request({ url: `/authorizations?companyId=${cid}` });
       this.setData({ authorizations: list || [] });
+      this.onSearch({ detail: { value: this.data.keyword } });
     } catch (e) {}
   },
 
@@ -35,9 +49,8 @@ Page({
 
   async shareInvite() {
     const cid = (app.globalData.userInfo && app.globalData.userInfo.currentCompanyId) || '1';
-    const uid = (app.globalData.userInfo && app.globalData.userInfo.id) || '1';
     try {
-      const result = await request({ url: '/companies/invite', method: 'POST', data: { companyId: cid, userId: parseInt(uid) } });
+      const result = await request({ url: '/companies/invite', method: 'POST', data: { companyId: cid } });
       this.setData({ inviteCode: result.code });
       // 触发分享
       wx.showShareMenu({ withShareTicket: true });
@@ -46,7 +59,7 @@ Page({
 
   onShareAppMessage() {
     const code = this.data.inviteCode;
-    if (!code) return { title: '财源通天', path: '/pages/index/index' };
+    if (!code) return { title: '商签通', path: '/pages/index/index' };
     return {
       title: '邀请你加入我的企业',
       path: `/pages/index/index?inviteCode=${code}&type=member`

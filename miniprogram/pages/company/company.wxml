@@ -1,0 +1,99 @@
+<view class="page">
+  <login-guard wx:if="{{!isLoggedIn}}" text="登录后管理您的企业"/>
+
+  <block wx:else>
+    <!-- 无企业空态 -->
+    <view class="no-company" wx:if="{{!hasCompany}}">
+      <!-- 顶部青绿 Banner -->
+      <view class="nc-banner">
+        <view class="nc-banner-circle nc-circle-lg"></view>
+        <view class="nc-banner-circle nc-circle-md"></view>
+        <view class="nc-banner-circle nc-circle-sm"></view>
+        <view class="nc-banner-title">企业</view>
+      </view>
+
+      <!-- 下方内容区 -->
+      <view class="nc-body">
+        <view class="nc-icon-box">
+          <view class="nc-icon">🏢</view>
+        </view>
+        <view class="nc-title">您还没有企业</view>
+        <view class="nc-desc">创建企业成为法人，或输入邀请码加入已有企业</view>
+        <button class="nc-btn" bindtap="goCreateCompany">创建企业</button>
+        <view class="nc-link" bindtap="openJoin">输入邀请码加入</view>
+      </view>
+    </view>
+
+    <block wx:else>
+      <!-- 当前企业卡片 -->
+      <view class="card company-card">
+        <view class="cc-head" bindtap="switchCompany">
+          <view class="cc-name">{{company.name}}</view>
+          <view class="cc-switch" wx:if="{{companies.length > 1}}">切换 ▾</view>
+        </view>
+        <view class="cc-tags">
+          <text class="cc-badge" style="color:{{certBadge.color}};border-color:{{certBadge.color}}">{{certBadge.text}}</text>
+          <text class="cc-role">{{member.roleText}}</text>
+        </view>
+        <view class="cc-meta">法人：{{company.legalPersonName || '—'}}</view>
+      </view>
+
+      <!-- 待办中心 -->
+      <view class="card todo-card" wx:if="{{todos.length > 0}}">
+        <view class="section-title">待办 <text class="todo-count">{{todos.length}}</text></view>
+        <view class="todo-row" wx:for="{{todos}}" wx:key="type" data-target="{{item.target}}" bindtap="goTodo">
+          <view class="todo-dot"></view>
+          <view class="todo-main">
+            <view class="todo-title">{{item.title}}</view>
+            <view class="todo-desc">{{item.desc}}</view>
+          </view>
+          <view class="todo-badge" wx:if="{{item.count > 1}}">{{item.count}}</view>
+          <view class="arrow">›</view>
+        </view>
+      </view>
+
+      <!-- 管理功能（法人/管理员可见） -->
+      <view class="card" wx:if="{{canManage}}">
+        <view class="section-title">企业管理</view>
+        <view class="menu-row" bindtap="goCert">
+          <view class="menu-label">企业认证</view>
+          <view class="menu-desc">营业执照 · 实名 · 人脸 · 电子章</view>
+          <view class="arrow">›</view>
+        </view>
+        <view class="menu-row" bindtap="goAuthManage">
+          <view class="menu-label">组织成员</view>
+          <view class="menu-desc">成员审批 · 角色分配 · 邀请</view>
+          <view class="arrow">›</view>
+        </view>
+        <view class="menu-row" bindtap="goRoleManage">
+          <view class="menu-label">角色权限</view>
+          <view class="menu-desc">自定义角色 · 权限配置</view>
+          <view class="arrow">›</view>
+        </view>
+      </view>
+
+      <!-- 我的企业列表 -->
+      <view class="card">
+        <view class="section-title">我的企业</view>
+        <block wx:for="{{companies}}" wx:key="companyId">
+          <view class="company-role-row">
+            <view class="company-role-name">{{item.companyName}}</view>
+            <view class="company-role-tag">{{item.roleText}}</view>
+            <view class="company-role-check" wx:if="{{item.companyId === currentCompanyId}}">当前</view>
+          </view>
+        </block>
+        <view class="add-row" bindtap="goCreateCompany">＋ 创建新企业</view>
+        <view class="add-row" bindtap="openJoin">＋ 输入邀请码加入</view>
+      </view>
+    </block>
+  </block>
+
+  <!-- 加入企业弹层 -->
+  <view class="mask" wx:if="{{showJoinModal}}" bindtap="closeJoin">
+    <view class="sheet" catchtap="noop">
+      <view class="sheet-title">加入企业</view>
+      <input class="sheet-input" placeholder="请输入邀请码" value="{{joinCode}}" bindinput="onJoinInput"/>
+      <button class="sheet-btn" bindtap="submitJoin">提交申请</button>
+    </view>
+  </view>
+</view>

@@ -1,0 +1,5 @@
+<view class="sb">
+  <view class="sb-icon">🔍</view>
+  <input class="sb-input" placeholder="{{placeholder}}" value="{{value}}" bindinput="onInput" confirm-type="search" bindconfirm="onConfirm"/>
+  <view wx:if="{{value}}" class="sb-clear" bindtap="onClear">✕</view>
+</view>

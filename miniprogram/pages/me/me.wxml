@@ -1,10 +1,6 @@
 <view class="page">
   <!-- 未登录 -->
-  <view class="card" wx:if="{{!isLoggedIn}}">
-    <view class="welcome-title">欢迎来到财源通天</view>
-    <view class="welcome-desc">登录后管理您的企业</view>
-    <button class="welcome-btn" bindtap="goLogin">登录 / 注册</button>
-  </view>
+  <login-guard wx:if="{{!isLoggedIn}}" text="没有查到您的信息，请登录后查看"/>
 
   <block wx:else>
   <view class="profile card">
@@ -25,32 +21,18 @@
     </block>
   </view>
 
-  <!-- 管理菜单（法人/管理员可见） -->
-  <view class="card" wx:if="{{canManageAuth}}">
-    <view class="section-title">企业管理</view>
-    <view class="menu-row" bindtap="goAuthManage">
-      <view class="menu-label">授权管理</view>
-      <view class="menu-desc">成员审批 · 角色分配 · 邀请</view>
-      <view class="arrow">›</view>
-    </view>
-    <view class="menu-row" bindtap="goRoleManage">
-      <view class="menu-label">角色管理</view>
-      <view class="menu-desc">自定义角色 · 权限配置</view>
-      <view class="arrow">›</view>
-    </view>
-    <view class="menu-row" bindtap="goCompanyCert">
-      <view class="menu-label">企业认证</view>
-      <view class="menu-desc">公司信息 · 实名 · 电子章</view>
-      <view class="arrow">›</view>
-    </view>
+  <view class="card hint-card">
+    <view class="hint-text">企业认证、成员与角色管理已移至底部「企业」页</view>
   </view>
 
-  <!-- Dev 用户切换 -->
-  <view class="card">
+  <!-- Dev 用户切换（仅开发者工具可见） -->
+  <view class="card" wx:if="{{isDev}}">
     <view class="section-title">切换用户（开发）</view>
     <picker mode="selector" range="{{devUsers}}" range-key="label" value="{{devUserIndex}}" bindchange="onSwitchUser">
       <view class="user-picker">{{devUsers[devUserIndex].label}} ▾</view>
     </picker>
   </view>
+
+  <view class="logout-btn" bindtap="logout">退出登录</view>
   </block>
 </view>

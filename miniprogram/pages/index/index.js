@@ -29,7 +29,9 @@ Page({
     joinCompanyId: '',
     companies: [],
     isLegalPerson: false,
-    counterpartyInviteCode: ''
+    counterpartyInviteCode: '',
+    counterpartyEmptyBtn: '',
+    isLoggedIn: false
   },
 
   onLoad(options) {
@@ -80,7 +82,7 @@ Page({
       const result = await request({
         url: '/companies/join',
         method: 'POST',
-        data: { code, userId: parseInt(user.id) }
+        data: { code }
       });
       wx.showToast({ title: result.message || '加入成功', icon: 'success' });
       app.globalData.pendingInvite = null;
@@ -122,7 +124,7 @@ Page({
   checkMemberStatus() {
     const member = app.globalData.memberInfo;
     const isLegal = member && member.roleCode === 'LEGAL';
-    this.setData({ isLegalPerson: !!isLegal });
+    this.setData({ isLegalPerson: !!isLegal, counterpartyEmptyBtn: isLegal ? '邀请供方' : '' });
     if (!member || member.memberStatus === 'NONE' || !member.roleCode || member.roleCode === 'GUEST') {
       this.setData({ showJoinForm: true });
     } else if (member.memberStatus === 'PENDING') {
@@ -151,7 +153,7 @@ Page({
       const result = await request({
         url: '/companies/join',
         method: 'POST',
-        data: { code: companyId, userId: parseInt(user.id) }
+        data: { code: companyId }
       });
       wx.showToast({ title: result.message, icon: 'success' });
       // 重新加载 me 信息
@@ -249,11 +251,10 @@ Page({
       return;
     }
     const cid = (app.globalData.userInfo && app.globalData.userInfo.currentCompanyId) || '1';
-    const uid = (app.globalData.userInfo && app.globalData.userInfo.id) || '1';
     request({
       url: '/companies/counterparty-invite',
       method: 'POST',
-      data: { companyId: cid, userId: parseInt(uid) }
+      data: { companyId: cid }
     }).then(result => {
       this.setData({ counterpartyInviteCode: result.code });
       // 触发微信分享
@@ -265,7 +266,7 @@ Page({
 
   onShareAppMessage() {
     const code = this.data.counterpartyInviteCode;
-    if (!code) return { title: '财源通天', path: '/pages/index/index' };
+    if (!code) return { title: '商签通', path: '/pages/index/index' };
     return {
       title: '邀请你成为供方合作伙伴',
       path: `/pages/index/index?inviteCode=${code}&type=counterparty`

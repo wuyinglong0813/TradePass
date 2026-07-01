@@ -1,13 +1,111 @@
 <view class="page">
-  <view class="card">
-    <block wx:for="{{actions}}" wx:key="key">
-      <view class="action-row" data-key="{{item.key}}" bindtap="handleAction">
-        <view>
-          <view class="action-title">{{item.title}}</view>
-          <view class="action-desc">状态：{{item.status}}</view>
+  <!-- ===== 已有企业：认证步骤 ===== -->
+  <block wx:if="{{hasCompany}}">
+    <view class="cert-banner">
+      <view class="cert-banner-circle cert-c-lg"></view>
+      <view class="cert-banner-circle cert-c-md"></view>
+      <view class="cert-company-name">{{companyName || '企业信息'}}</view>
+      <view class="cert-badge">{{certStatusText}}</view>
+      <view class="cert-legal">法人：{{legalPersonName || '—'}}</view>
+    </view>
+    <view class="cert-card" wx:if="{{actions.length > 0}}">
+      <view class="section-title">认证流程</view>
+      <block wx:for="{{actions}}" wx:key="key">
+        <view class="cert-row" data-key="{{item.key}}" bindtap="handleAction">
+          <view class="cert-row-left">
+            <view class="cert-step-num {{item.done ? 'done' : ''}}">{{item.done ? '✓' : index + 1}}</view>
+            <view class="cert-step-info">
+              <view class="cert-step-title">{{item.title}}</view>
+              <view class="cert-step-desc">{{item.desc}}</view>
+            </view>
+          </view>
+          <view class="cert-status" style="color:{{item.statusColor}}">{{item.statusText}}</view>
+          <view class="arrow" wx:if="{{!item.done}}">›</view>
         </view>
-        <view class="arrow">›</view>
+      </block>
+    </view>
+  </block>
+
+  <!-- ===== 新企业 Step1：协议确认 ===== -->
+  <view class="agree-page" wx:elif="{{step === 'agreement'}}">
+    <!-- 企业信息 -->
+    <view class="agree-card">
+      <view class="agree-title">企业信息确认</view>
+      <view class="agree-row">
+        <view class="agree-key">企业/个体工商户名称</view>
+        <view class="agree-val">{{companyName}}</view>
       </view>
-    </block>
+      <view class="agree-row">
+        <view class="agree-key">统一社会信用代码/工商注册号</view>
+        <view class="agree-val">{{creditCode}}</view>
+      </view>
+      <view class="agree-row">
+        <view class="agree-key">法定代表人/负责人姓名</view>
+        <view class="agree-val">{{legalPersonName}}</view>
+      </view>
+    </view>
+
+    <!-- 底部：协议 + 按钮 + 技术支持 -->
+    <view class="agree-bottom">
+      <view class="agree-check-row" bindtap="toggleAgree">
+        <view class="agree-checkbox {{agreed ? 'checked' : ''}}">{{agreed ? '✓' : ''}}</view>
+        <text class="agree-text">我已阅读并同意</text><text class="agree-link" catchtap="openAgreement" data-type="service">《商签通服务协议》</text><text class="agree-text">、</text><text class="agree-link" catchtap="openAgreement" data-type="privacy">《隐私协议》</text><text class="agree-text">、</text><text class="agree-link" catchtap="openAgreement" data-type="ca">《数字证书服务协议(机构)》</text><text class="agree-text">，同意申请商签通CA证书</text>
+      </view>
+      <button class="agree-btn" bindtap="goAgreeNext">同意并继续</button>
+      <view class="agree-footer">
+        <image class="agree-footer-icon" src="/images/logo.png" mode="aspectFit"/>
+        <text class="agree-footer-text">商签通提供技术支持</text>
+      </view>
+    </view>
   </view>
+
+  <!-- ===== 新企业 Step2：认证方式 ===== -->
+  <block wx:elif="{{step === 'auth'}}">
+    <view class="auth-card">
+      <view class="section-title">认证方式</view>
+      <view class="auth-type-row">
+        <view class="auth-type-label">法定代表人</view>
+      </view>
+    </view>
+
+    <view class="auth-card">
+      <view class="section-title">法定代表人身份认证方式</view>
+      <view class="auth-options">
+        <view class="auth-option {{authMethod === 'face' ? 'active' : ''}}" bindtap="selectAuthMethod" data-method="face">
+          <view class="auth-option-icon">📷</view>
+          <view class="auth-option-text">人脸认证</view>
+          <view class="auth-option-check" wx:if="{{authMethod === 'face'}}">✓</view>
+        </view>
+        <view class="auth-option {{authMethod === 'phone' ? 'active' : ''}}" bindtap="selectAuthMethod" data-method="phone">
+          <view class="auth-option-icon">📱</view>
+          <view class="auth-option-text">手机号认证</view>
+          <view class="auth-option-check" wx:if="{{authMethod === 'phone'}}">✓</view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 手机号认证表单 -->
+    <view class="auth-card" wx:if="{{authMethod === 'phone'}}">
+      <view class="form-item">
+        <view class="label">手机号</view>
+        <input class="input" placeholder="请输入手机号" type="number" maxlength="11" value="{{phone}}" bindinput="onPhoneInput" />
+      </view>
+      <view class="form-item">
+        <view class="label">验证码</view>
+        <view class="sms-row">
+          <input class="input sms-input" placeholder="请输入验证码" value="{{smsCode}}" bindinput="onSmsInput" />
+          <view class="sms-btn" bindtap="sendSms">{{smsText}}</view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 人脸认证说明 -->
+    <view class="auth-card" wx:if="{{authMethod === 'face'}}">
+      <view class="face-desc">请确保光线充足，面部正对摄像头，按照提示完成人脸识别</view>
+    </view>
+
+    <view class="btn-wrap">
+      <button class="submit-btn" loading="{{submitting}}" bindtap="submitAuth">开始认证</button>
+    </view>
+  </block>
 </view>
