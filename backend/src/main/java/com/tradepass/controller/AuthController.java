@@ -220,6 +220,7 @@ public class AuthController {
                 company_id BIGINT NOT NULL,
                 direction VARCHAR(16) NOT NULL,
                 counterparty_name VARCHAR(128) NOT NULL,
+                order_no VARCHAR(64),
                 amount DECIMAL(18,2) NOT NULL,
                 order_date DATE NOT NULL,
                 status VARCHAR(32) NOT NULL DEFAULT 'CONFIRMED',
@@ -227,6 +228,8 @@ public class AuthController {
                 INDEX idx_company_dir (company_id, direction)
             )
         """);
+        // 兼容已有表：追加 order_no 列
+        try { db.execute("ALTER TABLE trade_order ADD COLUMN order_no VARCHAR(64) AFTER counterparty_name"); } catch (Exception ignored) {}
         // 种子订单（仅在表为空时灌入，避免重复）
         Integer orderCount = db.queryForObject("SELECT COUNT(1) FROM trade_order", Integer.class);
         if (orderCount == null || orderCount == 0) {
