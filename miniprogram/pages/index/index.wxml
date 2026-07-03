@@ -1,28 +1,86 @@
 <view class="page">
-  <!-- 未登录 -->
-  <view class="welcome-wrap" wx:if="{{!isLoggedIn}}">
-    <view class="welcome-banner">
-      <view class="wb-circle wb-c1"></view>
-      <view class="wb-circle wb-c2"></view>
-      <view class="wb-circle wb-c3"></view>
-      <image class="wb-icon" src="/images/logo.png" mode="aspectFit"/>
-      <view class="wb-title">商签通</view>
-      <view class="wb-desc">安全合规的企业贸易管理平台</view>
-      <button class="wb-btn" bindtap="goLogin">点击登录 / 注册</button>
-    </view>
 
-    <!-- 功能预览（点击跳登录） -->
-    <view class="preview-card" bindtap="goLogin">
-      <view class="preview-title">客户销售业绩排名</view>
-      <view class="preview-desc">登录后查看您的交易排名数据</view>
-    </view>
-    <view class="preview-card" bindtap="goLogin">
-      <view class="preview-title">供应的公司</view>
-      <view class="preview-desc">登录后管理您的供应商伙伴</view>
+  <!-- ===== 隐私协议弹窗 ===== -->
+  <view class="privacy-overlay" wx:if="{{showPrivacy}}">
+    <view class="privacy-popup">
+      <view class="pp-logo">
+        <image class="pp-logo-img" src="/images/logo.png" mode="aspectFit"/>
+        <text class="pp-name">商签通</text>
+      </view>
+      <view class="pp-card">
+        <view class="pp-text">
+          <text>在你使用</text>
+          <text class="pp-bold">【商签通】</text>
+          <text>服务之前，请仔细阅读</text>
+          <text class="pp-link" bindtap="showPrivacyDetail">《商签通小程序隐私保护指引》</text>
+          <text>。如你同意《商签通小程序隐私保护指引》，请点击"同意"开始使用</text>
+          <text class="pp-bold">【商签通】</text>
+        </view>
+      </view>
+      <view class="pp-actions">
+        <view class="pp-check {{shaking ? 'shaking' : ''}}" bindtap="togglePrivacyAgree">
+          <view class="pp-checkbox {{privacyAgreed ? 'checked' : ''}} {{shaking ? 'error' : ''}}">{{privacyAgreed ? '✓' : ''}}</view>
+          <text class="pp-check-text {{shaking ? 'error' : ''}}">{{shaking ? '请先阅读并同意隐私保护指引' : '我已阅读并同意《商签通小程序隐私保护指引》'}}</text>
+        </view>
+        <button class="pp-btn" bindtap="doPrivacyAgree">同意</button>
+        <view class="pp-deny" bindtap="doPrivacyDeny">拒绝</view>
+      </view>
     </view>
   </view>
 
-  <!-- 已登录但未加入企业 -->
+  <!-- ===== 隐私协议详情弹窗 ===== -->
+  <view class="privacy-overlay" wx:if="{{showPrivacyDetail}}" bindtap="closePrivacyDetail">
+    <view class="pp-detail-sheet" catchtap="noop">
+      <view class="ppd-header">
+        <view class="ppd-title">商签通小程序隐私保护指引</view>
+        <view class="ppd-close" bindtap="closePrivacyDetail">✕</view>
+      </view>
+      <scroll-view class="ppd-body" scroll-y>
+        <view class="ppd-text">
+          <view class="p">欢迎使用商签通（以下简称"本小程序"）。我们深知个人信息对您的重要性，并会尽全力保护您的个人信息安全可靠。</view>
+          <view class="h3">一、我们收集的信息</view>
+          <view class="p">1. 您在注册账户时提供的个人信息，包括但不限于：手机号码、微信昵称、头像等。</view>
+          <view class="p">2. 您在使用企业认证功能时提供的企业信息，包括但不限于：企业名称、统一社会信用代码、法定代表人姓名、身份证号等。</view>
+          <view class="h3">二、信息的使用</view>
+          <view class="p">1. 我们使用收集的信息来提供、维护和改善我们的服务。</view>
+          <view class="h3">三、信息的分享</view>
+          <view class="p">1. 未经您的明确同意，我们不会与第三方分享您的个人信息。</view>
+          <view class="h3">四、信息安全</view>
+          <view class="p">我们采用业界通行的安全技术和组织措施来保护您的个人信息，防止未经授权的访问、使用或泄露。</view>
+          <view class="h3">五、您的权利</view>
+          <view class="p">您有权访问、更正、删除您的个人信息，以及撤回同意。您可以通过小程序内的设置或联系我们来行使这些权利。</view>
+        </view>
+      </scroll-view>
+    </view>
+  </view>
+
+  <!-- 主内容（隐私弹窗时隐藏） -->
+  <block wx:if="{{!showPrivacy}}">
+
+  <!-- ===== 未登录 ===== -->
+  <block wx:if="{{!isLoggedIn}}">
+    <view class="welcome-wrap">
+      <view class="welcome-banner">
+        <view class="wb-circle wb-c1"></view>
+        <view class="wb-circle wb-c2"></view>
+        <view class="wb-circle wb-c3"></view>
+        <image class="wb-icon" src="/images/logo.png" mode="aspectFit"/>
+        <view class="wb-title">商签通</view>
+        <view class="wb-desc">安全合规的企业贸易管理平台</view>
+        <button class="wb-btn" bindtap="goLogin">点击登录 / 注册</button>
+      </view>
+      <view class="preview-card" bindtap="goLogin">
+        <view class="preview-title">客户销售业绩排名</view>
+        <view class="preview-desc">登录后查看您的交易排名数据</view>
+      </view>
+      <view class="preview-card" bindtap="goLogin">
+        <view class="preview-title">供应的公司</view>
+        <view class="preview-desc">登录后管理您的供应商伙伴</view>
+      </view>
+    </view>
+  </block>
+
+  <!-- ===== 已登录但未加入企业 ===== -->
   <view class="join-hero card" wx:elif="{{showJoinForm}}">
     <view class="join-title">你还未加入任何企业</view>
     <view class="join-desc">输入邀请码申请加入，或联系管理员获取邀请</view>
@@ -32,63 +90,124 @@
     </view>
   </view>
 
-  <!-- 已加入企业（正常首页） -->
+  <!-- ===== 已加入企业（正常首页） ===== -->
   <block wx:else>
-  <view class="hero card">
-    <view class="company-row" bindtap="switchCompany">
-      <view class="company">{{companyDisplayName}}</view>
-      <view class="company-arrow" wx:if="{{companies.length > 1}}">▼</view>
+
+  <!-- 问候 + 公司信息 -->
+  <view class="top-bar">
+    <view class="greeting">
+      <view class="greeting-text">{{userName ? '你好，' + userName : '欢迎回来'}}</view>
+      <view class="greeting-sub">企业贸易管理，从这里开始</view>
     </view>
-    <picker class="role-picker" mode="selector" range="{{roleOptions}}" range-key="text" value="{{roleIndex}}" bindchange="onRoleChange">
-      <view class="role-picker-text">{{roleOptions[roleIndex].text}} ▾</view>
-    </picker>
+    <view class="company-bar" bindtap="switchCompany">
+      <view class="company-bar-name">{{companyDisplayName}}</view>
+      <view class="company-bar-arrow" wx:if="{{companies.length > 1}}">▼</view>
+    </view>
   </view>
 
-  <!-- 客户销售业绩排名 / 采购业绩排名 -->
-  <view class="card">
-    <view class="section-head">
-      <view class="title">{{rankingTitle}}</view>
-      <view class="periods">
-        <block wx:for="{{periods}}" wx:key="key">
-          <view class="period {{item.activeClass}}" data-period="{{item.key}}" bindtap="switchPeriod">{{item.text}}</view>
-        </block>
+  <!-- Banner 轮播 -->
+  <swiper class="banner-swiper" indicator-dots="{{true}}" indicator-color="rgba(255,255,255,0.4)" indicator-active-color="#fff" autoplay="{{true}}" interval="4000" circular="{{true}}">
+    <swiper-item wx:for="{{banners}}" wx:key="id">
+      <view class="banner" style="background:{{item.bg}}">
+        <view class="banner-content">
+          <view class="banner-title">{{item.title}}</view>
+          <view class="banner-desc">{{item.desc}}</view>
+        </view>
+      </view>
+    </swiper-item>
+  </swiper>
+
+  <!-- 数据概览 -->
+  <view class="stats-row">
+    <view class="stat-card">
+      <view class="stat-value">¥{{stats.totalAmount}}</view>
+      <view class="stat-label">{{periodText}}交易额</view>
+    </view>
+    <view class="stat-card">
+      <view class="stat-value">{{stats.totalOrders}}<text class="stat-unit">笔</text></view>
+      <view class="stat-label">{{periodText}}订单</view>
+    </view>
+    <view class="stat-card">
+      <view class="stat-value">{{stats.counterpartyCount}}<text class="stat-unit">家</text></view>
+      <view class="stat-label">合作客户</view>
+    </view>
+  </view>
+
+  <!-- 角色 Tab -->
+  <view class="role-tabs">
+    <view class="role-tab {{role === 'supplier' ? 'active' : ''}}" bindtap="switchRole" data-role="supplier">我是供应商</view>
+    <view class="role-tab {{role === 'buyer' ? 'active' : ''}}" bindtap="switchRole" data-role="buyer">我是采购商</view>
+  </view>
+
+  <!-- 排行榜卡片 -->
+  <view class="card ranking-card">
+    <view class="card-head">
+      <view class="card-title">{{rankingTitle}}</view>
+      <view class="period-tabs">
+        <view
+          wx:for="{{periods}}"
+          wx:key="key"
+          class="period-tab {{item.key === period ? 'active' : ''}}"
+          data-period="{{item.key}}"
+          bindtap="switchPeriod">{{item.text}}</view>
       </view>
     </view>
 
     <view wx:if="{{loading}}" class="loading-hint">加载中...</view>
-    <empty-state wx:if="{{showEmpty}}" compact="{{true}}" text="当前周期暂无交易排行"/>
-    <block wx:if="{{showRanking}}" wx:for="{{ranking}}" wx:key="counterpartyName">
-      <view class="rank-row" data-name="{{item.counterpartyName}}" bindtap="openCounterparty">
-        <view class="rank-no">{{item.rank}}</view>
-        <view class="rank-main">
-          <view class="counterparty-name">{{item.counterpartyName}}</view>
-          <view class="muted">{{item.orderCount}} 笔订单</view>
+    <view class="empty-hint" wx:elif="{{ranking.length === 0}}">
+      <view class="empty-icon">📊</view>
+      <view class="empty-text">暂无交易排行数据</view>
+      <view class="empty-sub">添加订单后即可查看排名</view>
+    </view>
+
+    <block wx:else>
+      <view class="rank-row"
+        wx:for="{{ranking}}"
+        wx:key="counterpartyName"
+        data-name="{{item.counterpartyName}}"
+        bindtap="openCounterparty">
+        <view class="rank-no rank-no-{{item.rank <= 3 ? item.rank : 'normal'}}">
+          {{item.rank <= 3 ? '' : item.rank}}
+          <text wx:if="{{item.rank === 1}}">🥇</text>
+          <text wx:elif="{{item.rank === 2}}">🥈</text>
+          <text wx:elif="{{item.rank === 3}}">🥉</text>
         </view>
-        <view class="amount">¥{{item.amount}}</view>
-        <view class="arrow">›</view>
+        <view class="rank-main">
+          <view class="rank-name">{{item.counterpartyName}}</view>
+          <view class="rank-meta">{{item.orderCount}} 笔订单</view>
+        </view>
+        <view class="rank-amount">¥{{item.amount}}</view>
+        <view class="rank-arrow">›</view>
       </view>
     </block>
   </view>
 
-  <!-- 供应商专属：供应的公司 -->
-  <view class="counterparty-section card" wx:if="{{role === 'supplier'}}">
-    <view class="section-head">
-      <view class="title">供应的公司</view>
+  <!-- 供应的公司（供应商角色） -->
+  <view class="card counterparty-card" wx:if="{{role === 'supplier'}}">
+    <view class="card-head">
+      <view class="card-title">供应的公司</view>
       <button class="add-btn" open-type="share" wx:if="{{isLegalPerson}}" bindtap="addCounterparty">＋</button>
       <view class="add-btn" wx:else bindtap="addCounterparty">＋</view>
     </view>
-    <empty-state
-      wx:if="{{counterparties.length === 0}}"
-      compact="{{true}}"
-      text="还没有添加供应的公司"
-      buttonText="{{counterpartyEmptyBtn}}"
-      bind:tap="addCounterparty"/>
+    <view class="empty-hint" wx:if="{{counterparties.length === 0}}">
+      <view class="empty-icon">🏢</view>
+      <view class="empty-text">还没有添加供应的公司</view>
+      <view class="empty-sub" wx:if="{{isLegalPerson}}">点击 ＋ 邀请供方合作伙伴</view>
+    </view>
     <block wx:for="{{counterparties}}" wx:key="id">
-      <view class="counterparty-item" data-name="{{item.counterpartyName}}" bindtap="openCounterparty">
-        <view class="counterparty-name">{{item.counterpartyName}}</view>
-        <view class="arrow">›</view>
+      <view class="cp-item" data-name="{{item.counterpartyName}}" bindtap="openCounterparty">
+        <view class="cp-avatar">{{item.counterpartyName[0]}}</view>
+        <view class="cp-info">
+          <view class="cp-name">{{item.counterpartyName}}</view>
+          <view class="cp-status">{{item.status === 'ACTIVE' ? '合作中' : item.status}}</view>
+        </view>
+        <view class="rank-arrow">›</view>
       </view>
     </block>
   </view>
+
+  <view class="page-end">— 已经到底了 —</view>
+
+  </block>
   </block>
 </view>

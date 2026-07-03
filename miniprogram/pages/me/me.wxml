@@ -3,36 +3,74 @@
   <login-guard wx:if="{{!isLoggedIn}}" text="没有查到您的信息，请登录后查看"/>
 
   <block wx:else>
-  <view class="profile card">
-    <view class="hello">您好，{{userDisplayName}}</view>
-    <view class="role-badge">{{memberRoleText}}</view>
+  <!-- 个人信息卡片 -->
+  <view class="profile-card">
+    <view class="profile-bg"></view>
+    <view class="profile-main">
+      <view class="profile-avatar">{{userNameFirst}}</view>
+      <view class="profile-info">
+        <view class="profile-name">{{userDisplayName}}</view>
+        <view class="profile-phone">{{maskedPhone}}</view>
+      </view>
+    </view>
+    <view class="profile-role">{{memberRoleText}}</view>
   </view>
 
   <!-- 我的企业 -->
   <view class="card">
     <view class="section-title">我的企业</view>
-    <view wx:if="{{companies.length === 0}}" class="empty">暂未加入任何企业</view>
+    <view wx:if="{{companies.length === 0}}" class="empty-hint">
+      <view class="empty-icon">🏢</view>
+      <view class="empty-text">暂未加入任何企业</view>
+    </view>
     <block wx:for="{{companies}}" wx:key="companyId">
-      <view class="company-role-row">
-        <view class="company-role-name">{{item.companyName}}</view>
-        <view class="company-role-tag">{{item.roleText}}</view>
-        <view class="company-role-check" wx:if="{{item.companyId === currentCompanyId}}">当前</view>
+      <view class="company-row {{item.companyId === currentCompanyId ? 'current' : ''}}">
+        <view class="cr-avatar">{{item.companyName[0]}}</view>
+        <view class="cr-info">
+          <view class="cr-name">{{item.companyName}}</view>
+          <view class="cr-tags">
+            <view class="cr-tag">{{item.roleText}}</view>
+            <view class="cr-check" wx:if="{{item.companyId === currentCompanyId}}">当前</view>
+          </view>
+        </view>
+        <view class="arrow">›</view>
       </view>
     </block>
   </view>
 
-  <view class="card hint-card">
-    <view class="hint-text">企业认证、成员与角色管理已移至底部「企业」页</view>
+  <!-- 设置 -->
+  <view class="card">
+    <view class="section-title">设置</view>
+    <view class="menu-row" bindtap="openPrivacy">
+      <view class="menu-icon">🔒</view>
+      <view class="menu-label">隐私设置</view>
+      <view class="arrow">›</view>
+    </view>
+    <view class="menu-row" bindtap="openAgreement">
+      <view class="menu-icon">📄</view>
+      <view class="menu-label">用户协议</view>
+      <view class="arrow">›</view>
+    </view>
+    <view class="menu-row" bindtap="openAbout">
+      <view class="menu-icon">ℹ️</view>
+      <view class="menu-label">关于商签通</view>
+      <view class="arrow">›</view>
+    </view>
   </view>
 
-  <!-- Dev 用户切换（仅开发者工具可见） -->
-  <view class="card" wx:if="{{isDev}}">
-    <view class="section-title">切换用户（开发）</view>
-    <picker mode="selector" range="{{devUsers}}" range-key="label" value="{{devUserIndex}}" bindchange="onSwitchUser">
-      <view class="user-picker">{{devUsers[devUserIndex].label}} ▾</view>
-    </picker>
+  <!-- 开发者工具 -->
+  <view class="card dev-card" wx:if="{{isDev}}">
+    <view class="section-title dev-title" bindtap="toggleDev">开发者工具 {{devOpen ? '▾' : '▸'}}</view>
+    <block wx:if="{{devOpen}}">
+      <picker mode="selector" range="{{devUsers}}" range-key="label" value="{{devUserIndex}}" bindchange="onSwitchUser">
+        <view class="user-picker">{{devUsers[devUserIndex].label}} ▾</view>
+      </picker>
+    </block>
   </view>
 
+  <!-- 退出登录 -->
   <view class="logout-btn" bindtap="logout">退出登录</view>
+
+  <view class="page-end">— 已经到底了 —</view>
   </block>
 </view>

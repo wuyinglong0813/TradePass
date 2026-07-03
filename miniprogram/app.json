@@ -1,9 +1,10 @@
 {
   "lazyCodeLoading": "requiredComponents",
   "pages": [
-    "pages/privacy/privacy",
-    "pages/login/login",
     "pages/index/index",
+    "pages/login/login",
+    "pages/phone-login/phone-login",
+    "pages/privacy/privacy",
     "pages/company/company",
     "pages/me/me",
     "pages/company-bind/company-bind",

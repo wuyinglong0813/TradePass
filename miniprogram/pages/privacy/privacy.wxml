@@ -19,9 +19,9 @@
 
   <!-- 底部操作 -->
   <view class="bottom-actions">
-    <view class="ba-check" bindtap="toggleAgree">
-      <view class="ba-checkbox {{agreed ? 'checked' : ''}}">{{agreed ? '✓' : ''}}</view>
-      <text class="ba-check-text">我已阅读并同意《商签通小程序隐私保护指引》</text>
+    <view class="ba-check {{shaking ? 'shaking' : ''}}" bindtap="toggleAgree">
+      <view class="ba-checkbox {{agreed ? 'checked' : ''}} {{shaking ? 'error' : ''}}">{{agreed ? '✓' : ''}}</view>
+      <text class="ba-check-text {{shaking ? 'error' : ''}}">{{shaking ? '请先阅读并同意隐私保护指引' : '我已阅读并同意《商签通小程序隐私保护指引》'}}</text>
     </view>
     <button class="ba-btn" bindtap="doAgree">同意</button>
     <view class="ba-deny" bindtap="doDeny">不同意</view>

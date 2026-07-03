@@ -1,5 +1,6 @@
 {
   "navigationBarTitleText": "企业",
+  "enablePullDownRefresh": true,
   "usingComponents": {
     "login-guard": "/components/login-guard/login-guard"
   }

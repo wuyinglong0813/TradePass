@@ -7,7 +7,9 @@ Page({
     isLoggedIn: false,
     hasCompany: false,
     company: {},
+    companyNameFirst: '',
     certBadge: { text: '', color: '' },
+    certProgress: 0,
     member: {},
     canManage: false,
     companies: [],
@@ -24,6 +26,10 @@ Page({
     this.loadData();
   },
 
+  onPullDownRefresh() {
+    this.loadData().finally(() => wx.stopPullDownRefresh());
+  },
+
   async loadData() {
     try {
       const payload = await request({ url: '/me' });
@@ -32,10 +38,21 @@ Page({
       const companies = payload.companies || [];
       const hasCompany = !!(member && member.roleCode && member.roleCode !== 'GUEST') && companies.length > 0;
       const canManage = member.roleCode === 'LEGAL' || member.roleCode === 'ADMIN';
+
+      // 认证进度
+      const certStatus = company.certificationStatus || '';
+      let certProgress = 0;
+      if (certStatus === 'CERTIFIED') certProgress = 100;
+      else if (certStatus === 'IN_PROGRESS') certProgress = 60;
+      else if (certStatus === 'PENDING') certProgress = 20;
+      else certProgress = 0;
+
       this.setData({
         hasCompany,
         company,
-        certBadge: dict.certification(company.certificationStatus),
+        companyNameFirst: (company.name || '企')[0],
+        certBadge: dict.certification(certStatus),
+        certProgress,
         member,
         canManage,
         companies,
@@ -48,7 +65,10 @@ Page({
   async loadTodos() {
     try {
       const todos = await request({ url: '/me/todos' });
-      this.setData({ todos: todos || [] });
+      // 给每种待办加上图标
+      const iconMap = { APPROVAL: '👤', CERT: '🏅' };
+      const enhanced = (todos || []).map(t => ({ ...t, icon: iconMap[t.type] || '📋' }));
+      this.setData({ todos: enhanced });
     } catch (e) { this.setData({ todos: [] }); }
   },
 

@@ -1,14 +1,11 @@
 Page({
   data: {
     agreed: false,
-    showAgreementModal: false
+    showAgreementModal: false,
+    shaking: false
   },
 
-  onLoad() {
-    if (wx.getStorageSync('privacy_agreed')) {
-      wx.reLaunch({ url: '/pages/index/index' });
-    }
-  },
+  onLoad() {},
 
   toggleAgree() {
     this.setData({ agreed: !this.data.agreed });
@@ -26,7 +23,8 @@ Page({
 
   doAgree() {
     if (!this.data.agreed) {
-      wx.showToast({ title: '请先阅读并同意隐私保护指引', icon: 'none' });
+      this.setData({ shaking: true });
+      setTimeout(() => this.setData({ shaking: false }), 500);
       return;
     }
     wx.setStorageSync('privacy_agreed', true);

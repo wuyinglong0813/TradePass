@@ -1,28 +1,225 @@
-.profile { background: #fff; }
-.hello { font-size: 34rpx; font-weight: 700; margin-bottom: 12rpx; }
-.role-badge { background: #ccfbf1; border-radius: 8rpx; color: #0f766e; display: inline-block; font-size: 24rpx; font-weight: 600; padding: 4rpx 16rpx; }
-.section-title { font-size: 32rpx; font-weight: 700; margin-bottom: 16rpx; }
-.empty { color: #6b7280; padding: 30rpx 0; text-align: center; }
+page { background: #f5f6f8; }
 
-.company-role-row { align-items: center; border-bottom: 1rpx solid #eef2f7; display: flex; padding: 20rpx 0; }
-.company-role-row:last-child { border-bottom: none; }
-.company-role-name { flex: 1; font-size: 28rpx; font-weight: 600; }
-.company-role-tag { background: #ccfbf1; border-radius: 6rpx; color: #0f766e; font-size: 22rpx; margin-right: 12rpx; padding: 4rpx 12rpx; }
-.company-role-check { background: #eef2ff; border-radius: 6rpx; color: #4f46e5; font-size: 20rpx; padding: 4rpx 12rpx; }
+.page {
+  padding-bottom: calc(24rpx + env(safe-area-inset-bottom));
+}
 
-.menu-row { align-items: center; border-bottom: 1rpx solid #eef2f7; display: flex; padding: 24rpx 0; }
+/* ===== 个人信息卡片 ===== */
+.profile-card {
+  background: linear-gradient(160deg, #0f766e, #14b8a6);
+  border-radius: 0 0 28rpx 28rpx;
+  padding: 40rpx 32rpx 32rpx;
+  position: relative;
+  overflow: hidden;
+}
+
+.profile-bg {
+  position: absolute;
+  top: -60rpx;
+  right: -40rpx;
+  width: 240rpx;
+  height: 240rpx;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.06);
+}
+
+.profile-main {
+  align-items: center;
+  display: flex;
+  gap: 24rpx;
+  position: relative;
+  z-index: 1;
+}
+
+.profile-avatar {
+  align-items: center;
+  background: rgba(255,255,255,0.22);
+  border-radius: 50%;
+  color: #fff;
+  display: flex;
+  font-size: 44rpx;
+  font-weight: 700;
+  height: 112rpx;
+  justify-content: center;
+  width: 112rpx;
+}
+
+.profile-info {
+  flex: 1;
+}
+
+.profile-name {
+  color: #fff;
+  font-size: 36rpx;
+  font-weight: 700;
+}
+
+.profile-phone {
+  color: rgba(255,255,255,0.75);
+  font-size: 24rpx;
+  margin-top: 6rpx;
+}
+
+.profile-role {
+  background: rgba(255,255,255,0.2);
+  border-radius: 8rpx;
+  color: #fff;
+  display: inline-block;
+  font-size: 24rpx;
+  margin-top: 20rpx;
+  padding: 6rpx 20rpx;
+  position: relative;
+  z-index: 1;
+}
+
+/* ===== 通用卡片 ===== */
+.card {
+  background: #fff;
+  border-radius: 20rpx;
+  margin: 20rpx 24rpx;
+  padding: 28rpx;
+  box-shadow: 0 1rpx 4rpx rgba(0,0,0,0.03);
+}
+
+.section-title {
+  font-size: 30rpx;
+  font-weight: 700;
+  margin-bottom: 16rpx;
+  color: #1a1a1a;
+}
+
+.arrow { color: #ccc; font-size: 40rpx; flex-shrink: 0; }
+
+.page-end {
+  color: #ccc;
+  font-size: 22rpx;
+  padding: 24rpx 0 40rpx;
+  text-align: center;
+}
+
+/* ===== 企业列表 ===== */
+.company-row {
+  align-items: center;
+  border-bottom: 1rpx solid #f5f5f5;
+  display: flex;
+  padding: 18rpx 0;
+}
+
+.company-row:last-child { border-bottom: none; }
+
+.company-row.current {
+  background: #f0fdfa;
+  border-radius: 12rpx;
+  margin: 0 -16rpx;
+  padding: 18rpx 16rpx;
+}
+
+.cr-avatar {
+  align-items: center;
+  background: linear-gradient(135deg, #0f766e, #14b8a6);
+  border-radius: 12rpx;
+  color: #fff;
+  display: flex;
+  font-size: 28rpx;
+  font-weight: 700;
+  height: 68rpx;
+  justify-content: center;
+  margin-right: 18rpx;
+  width: 68rpx;
+}
+
+.cr-info { flex: 1; }
+
+.cr-name {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.cr-tags {
+  display: flex;
+  gap: 8rpx;
+  margin-top: 6rpx;
+}
+
+.cr-tag {
+  background: #ccfbf1;
+  border-radius: 6rpx;
+  color: #0f766e;
+  font-size: 22rpx;
+  padding: 2rpx 10rpx;
+}
+
+.cr-check {
+  background: #eef2ff;
+  border-radius: 6rpx;
+  color: #4f46e5;
+  font-size: 20rpx;
+  padding: 2rpx 10rpx;
+}
+
+/* ===== 空状态 ===== */
+.empty-hint {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  padding: 36rpx 0 24rpx;
+}
+
+.empty-icon { font-size: 56rpx; margin-bottom: 12rpx; }
+
+.empty-text { color: #999; font-size: 26rpx; }
+
+/* ===== 设置菜单 ===== */
+.menu-row {
+  align-items: center;
+  border-bottom: 1rpx solid #f5f5f5;
+  display: flex;
+  padding: 22rpx 0;
+}
+
 .menu-row:last-child { border-bottom: none; }
-.menu-label { font-size: 30rpx; font-weight: 600; margin-right: 16rpx; }
-.menu-desc { color: #9ca3af; flex: 1; font-size: 24rpx; }
-.arrow { color: #9ca3af; font-size: 48rpx; }
 
-.user-picker { background: #f3f4f6; border-radius: 12rpx; color: #374151; font-size: 28rpx; margin-top: 8rpx; padding: 16rpx 24rpx; }
+.menu-icon {
+  font-size: 36rpx;
+  margin-right: 20rpx;
+}
 
-.welcome-title { font-size: 36rpx; font-weight: 700; margin-bottom: 12rpx; }
-.welcome-desc { color: #6b7280; font-size: 26rpx; margin-bottom: 32rpx; }
-.welcome-btn { background: #0f766e; border-radius: 16rpx; color: #fff; font-size: 30rpx; font-weight: 600; padding: 20rpx 0; width: 100%; }
-.welcome-btn::after { border: none; }
+.menu-label {
+  flex: 1;
+  font-size: 28rpx;
+  font-weight: 500;
+  color: #1a1a1a;
+}
 
-.logout-btn { background: #fff; border-radius: 16rpx; color: #ef4444; font-size: 30rpx; font-weight: 600; margin-top: 24rpx; padding: 28rpx 0; text-align: center; }
-.hint-card { background: #f0fdfa; }
-.hint-text { color: #0f766e; font-size: 25rpx; }
+/* ===== 开发者工具 ===== */
+.dev-card {
+  opacity: 0.85;
+}
+
+.dev-title {
+  color: #999;
+  cursor: pointer;
+}
+
+.user-picker {
+  background: #f5f5f5;
+  border-radius: 12rpx;
+  color: #374151;
+  font-size: 28rpx;
+  margin-top: 12rpx;
+  padding: 16rpx 24rpx;
+}
+
+/* ===== 退出登录 ===== */
+.logout-btn {
+  background: #fff;
+  border-radius: 20rpx;
+  color: #ef4444;
+  font-size: 30rpx;
+  font-weight: 500;
+  margin: 24rpx 24rpx 0;
+  padding: 28rpx 0;
+  text-align: center;
+  box-shadow: 0 1rpx 4rpx rgba(0,0,0,0.03);
+}

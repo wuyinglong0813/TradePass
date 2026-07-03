@@ -4,15 +4,12 @@
   <block wx:else>
     <!-- 无企业空态 -->
     <view class="no-company" wx:if="{{!hasCompany}}">
-      <!-- 顶部青绿 Banner -->
       <view class="nc-banner">
         <view class="nc-banner-circle nc-circle-lg"></view>
         <view class="nc-banner-circle nc-circle-md"></view>
         <view class="nc-banner-circle nc-circle-sm"></view>
         <view class="nc-banner-title">企业</view>
       </view>
-
-      <!-- 下方内容区 -->
       <view class="nc-body">
         <view class="nc-icon-box">
           <view class="nc-icon">🏢</view>
@@ -28,7 +25,10 @@
       <!-- 当前企业卡片 -->
       <view class="card company-card">
         <view class="cc-head" bindtap="switchCompany">
-          <view class="cc-name">{{company.name}}</view>
+          <view class="cc-name-row">
+            <view class="cc-avatar">{{companyNameFirst}}</view>
+            <view class="cc-name">{{company.name}}</view>
+          </view>
           <view class="cc-switch" wx:if="{{companies.length > 1}}">切换 ▾</view>
         </view>
         <view class="cc-tags">
@@ -36,13 +36,26 @@
           <text class="cc-role">{{member.roleText}}</text>
         </view>
         <view class="cc-meta">法人：{{company.legalPersonName || '—'}}</view>
+        <!-- 认证进度 -->
+        <view class="cc-progress" wx:if="{{company.certificationStatus !== 'CERTIFIED'}}">
+          <view class="cc-progress-bar">
+            <view class="cc-progress-fill" style="width:{{certProgress}}%"></view>
+          </view>
+          <view class="cc-progress-text">认证进度 {{certProgress}}%</view>
+        </view>
+        <view class="cc-ok" wx:else>
+          <text class="cc-ok-icon">✓</text> 企业已认证
+        </view>
       </view>
 
       <!-- 待办中心 -->
       <view class="card todo-card" wx:if="{{todos.length > 0}}">
-        <view class="section-title">待办 <text class="todo-count">{{todos.length}}</text></view>
+        <view class="section-title">
+          待办中心
+          <text class="todo-count">{{todos.length}}</text>
+        </view>
         <view class="todo-row" wx:for="{{todos}}" wx:key="type" data-target="{{item.target}}" bindtap="goTodo">
-          <view class="todo-dot"></view>
+          <view class="todo-icon">{{item.icon}}</view>
           <view class="todo-main">
             <view class="todo-title">{{item.title}}</view>
             <view class="todo-desc">{{item.desc}}</view>
@@ -56,18 +69,27 @@
       <view class="card" wx:if="{{canManage}}">
         <view class="section-title">企业管理</view>
         <view class="menu-row" bindtap="goCert">
-          <view class="menu-label">企业认证</view>
-          <view class="menu-desc">营业执照 · 实名 · 人脸 · 电子章</view>
+          <view class="menu-icon">🏅</view>
+          <view class="menu-main">
+            <view class="menu-label">企业认证</view>
+            <view class="menu-desc">营业执照 · 实名 · 人脸 · 电子章</view>
+          </view>
           <view class="arrow">›</view>
         </view>
         <view class="menu-row" bindtap="goAuthManage">
-          <view class="menu-label">组织成员</view>
-          <view class="menu-desc">成员审批 · 角色分配 · 邀请</view>
+          <view class="menu-icon">👥</view>
+          <view class="menu-main">
+            <view class="menu-label">组织成员</view>
+            <view class="menu-desc">成员审批 · 角色分配 · 邀请</view>
+          </view>
           <view class="arrow">›</view>
         </view>
         <view class="menu-row" bindtap="goRoleManage">
-          <view class="menu-label">角色权限</view>
-          <view class="menu-desc">自定义角色 · 权限配置</view>
+          <view class="menu-icon">🔑</view>
+          <view class="menu-main">
+            <view class="menu-label">角色权限</view>
+            <view class="menu-desc">自定义角色 · 权限配置</view>
+          </view>
           <view class="arrow">›</view>
         </view>
       </view>
@@ -76,15 +98,25 @@
       <view class="card">
         <view class="section-title">我的企业</view>
         <block wx:for="{{companies}}" wx:key="companyId">
-          <view class="company-role-row">
-            <view class="company-role-name">{{item.companyName}}</view>
-            <view class="company-role-tag">{{item.roleText}}</view>
-            <view class="company-role-check" wx:if="{{item.companyId === currentCompanyId}}">当前</view>
+          <view class="company-role-row {{item.companyId === currentCompanyId ? 'current' : ''}}">
+            <view class="cr-avatar">{{item.companyName[0]}}</view>
+            <view class="cr-info">
+              <view class="cr-name">{{item.companyName}}</view>
+              <view class="cr-tags">
+                <view class="cr-tag">{{item.roleText}}</view>
+                <view class="cr-check" wx:if="{{item.companyId === currentCompanyId}}">当前</view>
+              </view>
+            </view>
+            <view class="arrow">›</view>
           </view>
         </block>
-        <view class="add-row" bindtap="goCreateCompany">＋ 创建新企业</view>
-        <view class="add-row" bindtap="openJoin">＋ 输入邀请码加入</view>
+        <view class="add-actions">
+          <view class="add-btn" bindtap="goCreateCompany">＋ 创建新企业</view>
+          <view class="add-btn" bindtap="openJoin">＋ 输入邀请码加入</view>
+        </view>
       </view>
+
+      <view class="page-end">— 已经到底了 —</view>
     </block>
   </block>
 
