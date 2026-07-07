@@ -1,20 +1,6 @@
 const { request } = require('../../utils/request');
 const app = getApp();
 
-const ALL_PERM_DEFS = [
-  { value: 'supplier_view', label: '供方首页' },
-  { value: 'buyer_view', label: '需方首页' },
-  { value: 'counterparty_manage', label: '供方公司管理' },
-  { value: 'order_view', label: '订单查看' },
-  { value: 'order_create', label: '下单' },
-  { value: 'invoice_view', label: '发票查看' },
-  { value: 'reconciliation', label: '对账' },
-  { value: 'member_manage', label: '成员管理' },
-  { value: 'auth_manage', label: '授权管理' },
-  { value: 'company_manage', label: '企业认证' },
-  { value: 'seal_manage', label: '电子章管理' }
-];
-
 Page({
   data: {
     roles: [],
@@ -29,7 +15,12 @@ Page({
   async loadRoles() {
     const cid = (app.globalData.userInfo && app.globalData.userInfo.currentCompanyId) || '1';
     try {
-      const list = await request({ url: `/roles?companyId=${cid}` });
+      const [permDefs, list] = await Promise.all([
+        request({ url: '/permissions' }),
+        request({ url: `/roles?companyId=${cid}` })
+      ]);
+      // 缓存权限定义供后续使用
+      this._permDefs = permDefs || [];
       this.setData({ roles: (list || []).map(r => ({
         ...r,
         permsDisplay: this.formatPerms(r.permissions)
@@ -43,13 +34,18 @@ Page({
     try { arr = JSON.parse(permissions); } catch (e) { arr = permissions.split(','); }
     if (arr.length === 0) return '无';
     if (arr.includes('all')) return '全部权限';
-    return arr.map(v => (ALL_PERM_DEFS.find(p => p.value === v.trim()) || { label: v }).label).join('、');
+    const defs = this._permDefs || [];
+    return arr.map(v => {
+      const def = defs.find(p => p.code === v.trim());
+      return def ? def.label : v;
+    }).join('、');
   },
 
   showAddRole() {
+    const defs = this._permDefs || [];
     this.setData({
       showModal: true, editRoleId: '', roleName: '',
-      allPerms: ALL_PERM_DEFS.map(p => ({ ...p, checked: false }))
+      allPerms: defs.map(p => ({ code: p.code, label: p.label, checked: false }))
     });
   },
 
@@ -57,9 +53,10 @@ Page({
     const { id, name, perms } = e.currentTarget.dataset;
     let selected = [];
     try { selected = JSON.parse(perms); } catch (e) { selected = (perms || '').split(',').map(s => s.trim()); }
+    const defs = this._permDefs || [];
     this.setData({
       showModal: true, editRoleId: id, roleName: name,
-      allPerms: ALL_PERM_DEFS.map(p => ({ ...p, checked: selected.includes(p.value) }))
+      allPerms: defs.map(p => ({ code: p.code, label: p.label, checked: selected.includes(p.code) }))
     });
   },
 
@@ -68,9 +65,9 @@ Page({
   onNameInput(e) { this.setData({ roleName: e.detail.value }); },
 
   togglePerm(e) {
-    const val = e.currentTarget.dataset.value;
+    const code = e.currentTarget.dataset.code;
     const allPerms = this.data.allPerms.map(p =>
-      p.value === val ? { ...p, checked: !p.checked } : p
+      p.code === code ? { ...p, checked: !p.checked } : p
     );
     this.setData({ allPerms });
   },
@@ -78,7 +75,7 @@ Page({
   async saveRole() {
     const name = this.data.roleName.trim();
     if (!name) { wx.showToast({ title: '请输入角色名', icon: 'none' }); return; }
-    const perms = this.data.allPerms.filter(p => p.checked).map(p => p.value);
+    const perms = this.data.allPerms.filter(p => p.checked).map(p => p.code);
     const cid = (app.globalData.userInfo && app.globalData.userInfo.currentCompanyId) || '1';
     try {
       if (this.data.editRoleId) {

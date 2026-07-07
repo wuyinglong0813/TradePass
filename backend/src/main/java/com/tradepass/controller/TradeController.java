@@ -10,6 +10,7 @@ import jakarta.validation.constraints.NotNull;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api")
@@ -114,7 +116,178 @@ public class TradeController {
         }
     }
 
+    // ---- 模板分类 ----
+
+    @GetMapping("/contract-template-categories")
+    public ApiResponse<List<Map<String, Object>>> listTemplateCategories() {
+        long companyId = AuthContext.requireCompanyId();
+        return ApiResponse.ok(db.queryForList(
+                "SELECT id, name FROM template_category WHERE company_id = ? ORDER BY sort_order", companyId));
+    }
+
+    @PostMapping("/contract-template-categories")
+    public ApiResponse<Map<String, Object>> addCategory(@RequestBody Map<String, Object> body) {
+        long companyId = AuthContext.requireCompanyId();
+        String name = ((String) body.getOrDefault("name", "")).trim();
+        if (name.isEmpty()) throw new BusinessException("分类名不能为空");
+        db.update("INSERT IGNORE INTO template_category (company_id, name) VALUES (?, ?)", companyId, name);
+        return ApiResponse.ok(db.queryForList("SELECT id, name FROM template_category WHERE company_id = ? AND name = ?", companyId, name).get(0));
+    }
+
+    @PostMapping("/contract-template-categories/{id}/delete")
+    public ApiResponse<String> deleteCategory(@PathVariable Long id) {
+        db.update("DELETE FROM template_category WHERE id = ?", id);
+        return ApiResponse.ok("已删除");
+    }
+
+    // ---- 合同模板 ----
+
+    @GetMapping("/contract-templates")
+    public ApiResponse<List<Map<String, Object>>> listTemplates(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String category) {
+        long companyId = AuthContext.requireCompanyId();
+        StringBuilder sql = new StringBuilder("SELECT id, name, category, content, created_at, updated_at FROM contract_template WHERE company_id = ?");
+        List<Object> params = new java.util.ArrayList<>();
+        params.add(companyId);
+        if (keyword != null && !keyword.isBlank()) {
+            sql.append(" AND name LIKE ?");
+            params.add("%" + keyword.trim() + "%");
+        }
+        if (category != null && !category.isBlank() && !"all".equalsIgnoreCase(category)) {
+            sql.append(" AND category = ?");
+            params.add(category.trim());
+        }
+        sql.append(" ORDER BY updated_at DESC");
+        return ApiResponse.ok(db.queryForList(sql.toString(), params.toArray()));
+    }
+
+    @GetMapping("/contract-templates/{id}")
+    public ApiResponse<Map<String, Object>> getTemplate(@PathVariable Long id) {
+        var rows = db.queryForList("SELECT id, name, category, content, created_at, updated_at FROM contract_template WHERE id = ?", id);
+        if (rows.isEmpty()) throw new BusinessException("模板不存在");
+        return ApiResponse.ok(rows.get(0));
+    }
+
+    @PostMapping("/contract-templates")
+    public ApiResponse<Map<String, Object>> createTemplate(@RequestBody Map<String, Object> body) {
+        long companyId = AuthContext.requireCompanyId();
+        String name = (String) body.getOrDefault("name", "");
+        String category = (String) body.getOrDefault("category", "");
+        String content = (String) body.getOrDefault("content", "");
+        if (name.isBlank()) throw new BusinessException("模板名称不能为空");
+        db.update("INSERT INTO contract_template (company_id, name, category, content) VALUES (?,?,?,?)",
+                companyId, name, category, content);
+        long id = db.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
+        return ApiResponse.ok(db.queryForList("SELECT id, name, category, content, created_at, updated_at FROM contract_template WHERE id = ?", id).get(0));
+    }
+
+    @PostMapping("/contract-templates/{id}")
+    public ApiResponse<Map<String, Object>> updateTemplate(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+        String name = (String) body.getOrDefault("name", "");
+        String category = (String) body.getOrDefault("category", "");
+        String content = (String) body.getOrDefault("content", "");
+        if (name.isBlank()) throw new BusinessException("模板名称不能为空");
+        db.update("UPDATE contract_template SET name = ?, category = ?, content = ? WHERE id = ?", name, category, content, id);
+        return ApiResponse.ok(db.queryForList("SELECT id, name, category, content, created_at, updated_at FROM contract_template WHERE id = ?", id).get(0));
+    }
+
+    @PostMapping("/contract-templates/{id}/delete")
+    public ApiResponse<String> deleteTemplate(@PathVariable Long id) {
+        db.update("DELETE FROM contract_template WHERE id = ?", id);
+        return ApiResponse.ok("已删除");
+    }
+
+    // ---- 合同 ----
+
+    @GetMapping("/contracts")
+    public ApiResponse<List<ContractPayload>> listContracts(@RequestParam(required = false) String counterpartyName) {
+        long companyId = AuthContext.requireCompanyId();
+        String sql = "SELECT * FROM trade_contract WHERE company_id = ?";
+        Object[] params;
+        if (counterpartyName != null && !counterpartyName.isBlank()) {
+            sql += " AND counterparty_name = ?";
+            params = new Object[]{companyId, counterpartyName};
+        } else {
+            params = new Object[]{companyId};
+        }
+        sql += " ORDER BY created_at DESC";
+        var rows = db.queryForList(sql, params);
+        List<ContractPayload> list = rows.stream().map(r -> new ContractPayload(
+                String.valueOf((Long) r.get("id")),
+                (String) r.get("counterparty_name"),
+                (String) r.get("name"),
+                (String) r.get("template_name"),
+                (java.math.BigDecimal) r.get("amount"),
+                r.get("start_date") != null ? r.get("start_date").toString() : null,
+                r.get("end_date") != null ? r.get("end_date").toString() : null,
+                (String) r.get("terms"),
+                (String) r.get("status"),
+                String.valueOf((Long) r.get("initiated_by")),
+                r.get("created_at") != null ? r.get("created_at").toString() : null
+        )).toList();
+        return ApiResponse.ok(list);
+    }
+
+    /** 发起签订合同 */
+    @PostMapping("/contracts")
+    public ApiResponse<ContractPayload> createContract(@Valid @RequestBody CreateContractRequest request) {
+        long companyId = AuthContext.requireCompanyId();
+        long userId = AuthContext.userId();
+        db.update("INSERT INTO trade_contract (company_id, counterparty_name, name, template_name, amount, start_date, end_date, terms, status, initiated_by) VALUES (?,?,?,?,?,?,?,?,'PENDING',?)",
+                companyId, request.counterpartyName(), request.name(), request.templateName(),
+                request.amount(), request.startDate(), request.endDate(), request.terms(), userId);
+        long id = db.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
+        return ApiResponse.ok(new ContractPayload(String.valueOf(id), request.counterpartyName(), request.name(),
+                request.templateName(), request.amount(), request.startDate(), request.endDate(), request.terms(),
+                "PENDING", String.valueOf(userId), LocalDate.now().toString()));
+    }
+
+    /** 审批通过合同（仅对方公司可操作） */
+    @PostMapping("/contracts/{id}/approve")
+    public ApiResponse<String> approveContract(@PathVariable Long id) {
+        var rows = db.queryForList("SELECT * FROM trade_contract WHERE id = ? AND status = 'PENDING'", id);
+        if (rows.isEmpty()) throw new BusinessException("合同不存在或状态不是待审批");
+        db.update("UPDATE trade_contract SET status = 'ACTIVE' WHERE id = ?", id);
+        return ApiResponse.ok("合同已签署生效");
+    }
+
+    /** 拒绝合同 */
+    @PostMapping("/contracts/{id}/reject")
+    public ApiResponse<String> rejectContract(@PathVariable Long id) {
+        var rows = db.queryForList("SELECT * FROM trade_contract WHERE id = ? AND status = 'PENDING'", id);
+        if (rows.isEmpty()) throw new BusinessException("合同不存在或状态不是待审批");
+        db.update("UPDATE trade_contract SET status = 'REJECTED' WHERE id = ?", id);
+        return ApiResponse.ok("合同已拒绝");
+    }
+
+    /** 待审批的合同列表（我是对方公司，看别人发给我的合同） */
+    @GetMapping("/contracts/pending")
+    public ApiResponse<List<ContractPayload>> pendingContracts() {
+        Long companyId = AuthContext.companyId();
+        if (companyId == null) return ApiResponse.ok(List.of());
+        String companyName = db.queryForObject("SELECT name FROM company WHERE id = ?", String.class, companyId);
+        if (companyName == null) return ApiResponse.ok(List.of());
+        var rows = db.queryForList("SELECT * FROM trade_contract WHERE counterparty_name = ? AND status = 'PENDING' ORDER BY created_at DESC", companyName);
+        List<ContractPayload> list = rows.stream().map(r -> new ContractPayload(
+                String.valueOf((Long) r.get("id")),
+                (String) r.get("counterparty_name"),
+                (String) r.get("name"),
+                (String) r.get("template_name"),
+                (java.math.BigDecimal) r.get("amount"),
+                r.get("start_date") != null ? r.get("start_date").toString() : null,
+                r.get("end_date") != null ? r.get("end_date").toString() : null,
+                (String) r.get("terms"),
+                (String) r.get("status"),
+                String.valueOf((Long) r.get("initiated_by")),
+                r.get("created_at") != null ? r.get("created_at").toString() : null
+        )).toList();
+        return ApiResponse.ok(list);
+    }
+
     public record CreateOrderRequest(@NotBlank String direction, @NotBlank String counterpartyName, @NotNull BigDecimal amount, @NotNull LocalDate orderDate) {}
     public record TradeOrderPayload(String id, String direction, String counterpartyName, BigDecimal amount, LocalDate orderDate, String status) {}
     public record AddCounterpartyRequest(@NotBlank String counterpartyName) {}
+    public record CreateContractRequest(@NotBlank String counterpartyName, @NotBlank String name, String templateName, @NotNull BigDecimal amount, String startDate, String endDate, String terms) {}
+    public record ContractPayload(String id, String counterpartyName, String name, String templateName, BigDecimal amount, String startDate, String endDate, String terms, String status, String initiatedBy, String createdAt) {}
 }

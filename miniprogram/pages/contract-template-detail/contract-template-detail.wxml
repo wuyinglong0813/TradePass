@@ -1,0 +1,39 @@
+<view class="page">
+  <!-- 基本信息 -->
+  <view class="card">
+    <view class="form-group">
+      <view class="form-label">模板名称</view>
+      <input class="form-input" placeholder="请输入模板名称" value="{{name}}" bindinput="onNameInput"/>
+    </view>
+
+    <view class="form-group">
+      <view class="form-label">分类</view>
+      <view class="cat-list">
+        <view class="cat-item {{category === item ? 'active' : ''}}"
+          wx:for="{{categories}}"
+          wx:key="*this"
+          data-cat="{{item}}"
+          bindtap="onCategoryTap">{{item}}</view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 模板内容 -->
+  <view class="card">
+    <view class="form-group">
+      <view class="form-label">模板内容（条款）</view>
+      <textarea
+        class="form-textarea"
+        placeholder="请输入合同模板条款内容，支持换行...\n例：\n第一条：合同双方\n甲方：[公司名称A]\n乙方：[公司名称B]\n\n第二条：合同金额\n合同总金额为 ¥[金额]\n\n第三条：履行期限\n自 [开始日期] 至 [结束日期]"
+        value="{{content}}"
+        bindinput="onContentInput"
+        maxlength="5000"/>
+    </view>
+  </view>
+
+  <!-- 操作按钮 -->
+  <view class="btn-area">
+    <button class="btn-save" bindtap="save">保存模板</button>
+    <view class="btn-delete" bindtap="deleteTemplate">删除此模板</view>
+  </view>
+</view>

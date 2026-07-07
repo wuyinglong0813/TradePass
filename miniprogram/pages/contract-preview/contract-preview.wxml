@@ -1,0 +1,105 @@
+<view class="page">
+  <!-- 合同信息头 -->
+  <view class="contract-header">
+    <view class="ch-name">{{contractName}}</view>
+    <view class="ch-party">与 {{counterpartyName}} 的合同</view>
+  </view>
+
+  <!-- Tab 切换 -->
+  <view class="tabs">
+    <view
+      class="tab-item {{activeTab === item.key ? 'active' : ''}}"
+      wx:for="{{tabs}}"
+      wx:key="key"
+      data-tab="{{item.key}}"
+      bindtap="switchTab">{{item.label}}</view>
+  </view>
+
+  <!-- 销售单 -->
+  <block wx:if="{{activeTab === 'sales'}}">
+    <view class="list-empty" wx:if="{{salesList.length === 0}}">
+      <view class="empty-icon">📦</view>
+      <view class="empty-text">暂无销售单</view>
+    </view>
+    <view class="list" wx:else>
+      <view class="order-card"
+        wx:for="{{salesList}}"
+        wx:key="id"
+        data-type="销售单"
+        data-id="{{item.id}}"
+        bindtap="onItemTap">
+        <view class="oc-top">
+          <view class="oc-no">{{item.orderNo}}</view>
+          <view class="oc-status {{item.status === '已签收' ? 'done' : item.status === '已发货' ? 'shipped' : 'pending'}}">{{item.status}}</view>
+        </view>
+        <view class="oc-body">
+          <view class="oc-product">{{item.product}}</view>
+          <view class="oc-qty">×{{item.qty}}</view>
+        </view>
+        <view class="oc-bottom">
+          <view class="oc-date">{{item.date}}</view>
+          <view class="oc-amount">¥{{item.amount}}</view>
+        </view>
+      </view>
+    </view>
+  </block>
+
+  <!-- 物流单 -->
+  <block wx:if="{{activeTab === 'logistics'}}">
+    <view class="list-empty" wx:if="{{logisticsList.length === 0}}">
+      <view class="empty-icon">🚚</view>
+      <view class="empty-text">暂无物流单</view>
+    </view>
+    <view class="list" wx:else>
+      <view class="order-card"
+        wx:for="{{logisticsList}}"
+        wx:key="id"
+        data-type="物流单"
+        data-id="{{item.id}}"
+        bindtap="onItemTap">
+        <view class="oc-top">
+          <view class="oc-no">{{item.trackingNo}}</view>
+          <view class="oc-status {{item.status === '已签收' ? 'done' : 'shipped'}}">{{item.status}}</view>
+        </view>
+        <view class="oc-body">
+          <view class="oc-product">{{item.carrier}}</view>
+          <view class="oc-qty">{{item.weight}}</view>
+        </view>
+        <view class="oc-bottom">
+          <view class="oc-date">{{item.date}}</view>
+        </view>
+      </view>
+    </view>
+  </block>
+
+  <!-- 发票浏览 -->
+  <block wx:if="{{activeTab === 'invoice'}}">
+    <view class="list-empty" wx:if="{{invoiceList.length === 0}}">
+      <view class="empty-icon">🧾</view>
+      <view class="empty-text">暂无发票</view>
+    </view>
+    <view class="list" wx:else>
+      <view class="order-card"
+        wx:for="{{invoiceList}}"
+        wx:key="id"
+        data-type="发票"
+        data-id="{{item.id}}"
+        bindtap="onItemTap">
+        <view class="oc-top">
+          <view class="oc-no">{{item.invoiceNo}}</view>
+          <view class="oc-status {{item.status === '已开票' ? 'done' : 'pending'}}">{{item.status}}</view>
+        </view>
+        <view class="oc-body">
+          <view class="oc-product">{{item.type}}</view>
+          <view class="oc-qty">税率{{item.taxRate}}</view>
+        </view>
+        <view class="oc-bottom">
+          <view class="oc-date">{{item.date}}</view>
+          <view class="oc-amount">¥{{item.amount}}</view>
+        </view>
+      </view>
+    </view>
+  </block>
+
+  <view class="page-end">— 已经到底了 —</view>
+</view>

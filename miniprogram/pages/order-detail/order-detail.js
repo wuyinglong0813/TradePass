@@ -1,43 +1,75 @@
-const { request } = require('../../utils/request');
+const app = getApp();
+
+function hasPerm(perm) {
+  const member = app.globalData.memberInfo;
+  if (!member || !member.permissions) return false;
+  const perms = member.permissions;
+  if (perms.includes('all')) return true;
+  return perms.includes(perm);
+}
 
 Page({
   data: {
     counterpartyName: '',
-    orders: [],
+    myCompanyName: '',
+    // 快捷操作（带权限控制）
+    canSignContract: false,
+    canReconciliation: false,
+    canInventory: false,
+    // 合同列表（我方与该公司签订的所有合同）
+    contracts: [],
+    // 月销售趋势
     monthlySales: [],
-    actions: [
-      { icon: '📝', label: '签订合同' },
-      { icon: '📋', label: '合同浏览' },
-      { icon: '📦', label: '销售单浏览' },
-      { icon: '🔄', label: '退换货单浏览' },
-      { icon: '🚚', label: '物流单浏览' },
-      { icon: '🧾', label: '发票浏览' },
-      { icon: '📄', label: '合同模版' },
-      { icon: '💰', label: '对账情况' }
-    ]
+    // 弹窗
+    showModal: false,
+    modalTitle: '',
+    modalContent: ''
   },
 
   onLoad(options) {
     const name = decodeURIComponent(options.counterpartyName || '');
-    this.setData({ counterpartyName: name });
-    this.loadOrders(name);
-    this.generateMonthlySales();
+    // 获取我方当前企业名
+    const companies = app.globalData.companies || [];
+    const cid = (app.globalData.userInfo && app.globalData.userInfo.currentCompanyId) || '';
+    const cur = companies.find(c => c.companyId === cid);
+    this.setData({
+      counterpartyName: name,
+      myCompanyName: (cur && cur.companyName) || '我的企业',
+      canSignContract: hasPerm('contract_sign'),
+      canReconciliation: hasPerm('reconciliation'),
+      canInventory: hasPerm('inventory_view')
+    });
+    // 异步加载
+    setTimeout(() => {
+      this.loadContracts(name);
+      this.generateMonthlySales();
+    }, 100);
   },
 
-  async loadOrders(counterpartyName) {
+  /* 加载合同列表 */
+  async loadContracts(counterpartyName) {
+    const { request } = require('../../utils/request');
     try {
       const list = await request({
-        url: `/orders?counterpartyName=${encodeURIComponent(counterpartyName)}`
+        url: `/contracts?counterpartyName=${encodeURIComponent(counterpartyName)}`
       });
-      this.setData({ orders: (list || []).slice(0, 5) });
-    } catch (error) {
-      // 静默
-    }
+      const statusMap = { ACTIVE: '履行中', PENDING: '待签署', REJECTED: '已拒绝', COMPLETED: '已完成' };
+      const contracts = (list || []).map(c => ({
+        id: parseInt(c.id),
+        name: c.name,
+        startDate: c.startDate || '',
+        endDate: c.endDate || '',
+        amount: c.amount || 0,
+        templateName: c.templateName || '',
+        status: c.status,
+        statusText: statusMap[c.status] || c.status
+      }));
+      this.setData({ contracts });
+    } catch (e) { /* 静默 */ }
   },
 
   generateMonthlySales() {
     const months = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'];
-    // 生成演示数据：随机百分比，模拟销售趋势
     const baseValues = [30, 25, 40, 35, 50, 45, 60, 55, 70, 65, 80, 75];
     const sales = months.map((m, i) => ({
       month: m,
@@ -46,8 +78,35 @@ Page({
     this.setData({ monthlySales: sales });
   },
 
-  onAction(event) {
-    const action = event.currentTarget.dataset.action;
-    wx.showToast({ title: action + '（开发中）', icon: 'none' });
-  }
+  /* 点击合同 → 进入合同预览页 */
+  onContractTap(e) {
+    const contract = e.currentTarget.dataset.contract;
+    wx.navigateTo({
+      url: `/pages/contract-preview/contract-preview?contractId=${contract.id}&contractName=${encodeURIComponent(contract.name)}&counterpartyName=${encodeURIComponent(this.data.counterpartyName)}`
+    });
+  },
+
+  /* 功能区点击 */
+  onAction(e) {
+    const key = e.currentTarget.dataset.key;
+    const name = this.data.counterpartyName;
+    switch (key) {
+      case 'sign':
+        wx.navigateTo({
+          url: `/pages/sign-contract/sign-contract?counterpartyName=${encodeURIComponent(name)}`
+        });
+        break;
+      case 'reconciliation':
+        wx.navigateTo({
+          url: `/pages/reconciliation/reconciliation?counterpartyName=${encodeURIComponent(name)}`
+        });
+        break;
+      case 'inventory':
+        this.setData({ showModal: true, modalTitle: '库存情况', modalContent: '查看与该公司的商品库存\n支持库存预警与补货提醒' });
+        break;
+    }
+  },
+
+  closeModal() { this.setData({ showModal: false }); },
+  noop() {}
 });

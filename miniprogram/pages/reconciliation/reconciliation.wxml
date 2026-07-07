@@ -1,0 +1,66 @@
+<view class="page">
+  <!-- 头部 -->
+  <view class="hero">
+    <view class="hero-name">与 {{counterpartyName}} 的对账</view>
+    <view class="hero-date">本期对账期间：2026年7月</view>
+  </view>
+
+  <!-- 概览 -->
+  <view class="overview card">
+    <view class="ov-row">
+      <view class="ov-item">
+        <view class="ov-value">¥{{overview.totalSales}}</view>
+        <view class="ov-label">销售总额</view>
+      </view>
+      <view class="ov-item">
+        <view class="ov-value">¥{{overview.totalInvoiced}}</view>
+        <view class="ov-label">已开票额</view>
+      </view>
+    </view>
+    <view class="ov-divider"></view>
+    <view class="ov-row">
+      <view class="ov-item done">
+        <view class="ov-value">{{overview.matched === overview.totalSales ? '✓' : '¥' + overview.matched}}</view>
+        <view class="ov-label">已对平</view>
+      </view>
+      <view class="ov-item {{overview.unmatched > 0 ? 'warn' : ''}}">
+        <view class="ov-value">¥{{overview.unmatched}}</view>
+        <view class="ov-label">待处理差异</view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 对账明细列表 -->
+  <view class="card">
+    <view class="section-title">对账明细</view>
+    <view class="detail-item"
+      wx:for="{{items}}"
+      wx:key="id"
+      data-item="{{item}}"
+      bindtap="onItemTap">
+      <view class="di-header">
+        <view class="di-no">{{item.orderNo}}</view>
+        <view class="di-status {{item.status === 'MATCHED' ? 'matched' : 'unmatched'}}">{{item.statusText}}</view>
+      </view>
+      <view class="di-body">
+        <view class="di-col">
+          <view class="di-col-label">销售金额</view>
+          <view class="di-col-value">¥{{item.salesAmount}}</view>
+        </view>
+        <view class="di-col">
+          <view class="di-col-label">发票</view>
+          <view class="di-col-value">{{item.invoiceNo}}</view>
+        </view>
+        <view class="di-col">
+          <view class="di-col-label">开票金额</view>
+          <view class="di-col-value">¥{{item.invoiceAmount}}</view>
+        </view>
+      </view>
+      <view class="di-footer" wx:if="{{item.diff > 0}}">
+        <text class="di-diff">差异：¥{{item.diff}}（待处理）</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="page-end">— 已经到底了 —</view>
+</view>

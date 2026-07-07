@@ -2,6 +2,14 @@ const { request } = require('../../utils/request');
 const dict = require('../../utils/dict');
 const app = getApp();
 
+function hasPerm(perm) {
+  const member = app.globalData.memberInfo;
+  if (!member || !member.permissions) return false;
+  const perms = member.permissions;
+  if (perms.includes('all')) return true;
+  return perms.includes(perm);
+}
+
 Page({
   data: {
     isLoggedIn: false,
@@ -12,6 +20,7 @@ Page({
     certProgress: 0,
     member: {},
     canManage: false,
+    canContractTemplate: false,
     companies: [],
     currentCompanyId: '',
     todos: [],
@@ -51,6 +60,7 @@ Page({
         hasCompany,
         company,
         companyNameFirst: (company.name || '企')[0],
+        canContractTemplate: canManage && hasPerm('contract_template'),
         certBadge: dict.certification(certStatus),
         certProgress,
         member,
@@ -66,7 +76,7 @@ Page({
     try {
       const todos = await request({ url: '/me/todos' });
       // 给每种待办加上图标
-      const iconMap = { APPROVAL: '👤', CERT: '🏅' };
+      const iconMap = { APPROVAL: '👤', CERT: '🏅', CONTRACT: '📋' };
       const enhanced = (todos || []).map(t => ({ ...t, icon: iconMap[t.type] || '📋' }));
       this.setData({ todos: enhanced });
     } catch (e) { this.setData({ todos: [] }); }
@@ -76,7 +86,8 @@ Page({
     const target = e.currentTarget.dataset.target;
     const map = {
       'auth-manage': '/pages/auth-manage/auth-manage',
-      'company-cert': '/pages/company-cert/company-cert'
+      'company-cert': '/pages/company-cert/company-cert',
+      'contract-approval': '/pages/contract-approval/contract-approval'
     };
     if (map[target]) wx.navigateTo({ url: map[target] });
   },
@@ -99,6 +110,7 @@ Page({
   goCert() { wx.navigateTo({ url: '/pages/company-cert/company-cert' }); },
   goAuthManage() { wx.navigateTo({ url: '/pages/auth-manage/auth-manage' }); },
   goRoleManage() { wx.navigateTo({ url: '/pages/role-manage/role-manage' }); },
+  goContractTemplate() { wx.navigateTo({ url: '/pages/contract-template/contract-template' }); },
 
   openJoin() { this.setData({ showJoinModal: true, joinCode: '' }); },
   closeJoin() { this.setData({ showJoinModal: false }); },

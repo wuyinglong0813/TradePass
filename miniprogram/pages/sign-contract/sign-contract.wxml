@@ -1,0 +1,67 @@
+<view class="page">
+  <!-- 双方信息 -->
+  <view class="party-bar">
+    <view class="party-item">
+      <view class="pi-avatar my">{{myCompanyName[0]}}</view>
+      <view class="pi-name">{{myCompanyName}}</view>
+      <view class="pi-tag">我方</view>
+    </view>
+    <view class="party-vs">✍️</view>
+    <view class="party-item">
+      <view class="pi-avatar cp">{{counterpartyName[0]}}</view>
+      <view class="pi-name">{{counterpartyName}}</view>
+      <view class="pi-tag">对方</view>
+    </view>
+  </view>
+
+  <!-- 表单 -->
+  <view class="form">
+    <!-- 模板选择 -->
+    <view class="form-group">
+      <view class="form-label">合同模板</view>
+      <picker mode="selector" range="{{templates}}" value="{{templateIndex}}" bindchange="onTemplateChange">
+        <view class="form-picker">{{templates[templateIndex]}} ▾</view>
+      </picker>
+    </view>
+
+    <!-- 合同名称 -->
+    <view class="form-group">
+      <view class="form-label">合同名称</view>
+      <input class="form-input" placeholder="请输入合同名称" value="{{contractName}}" bindinput="onContractNameInput"/>
+    </view>
+
+    <!-- 日期 -->
+    <view class="form-group">
+      <view class="form-label">合同期限</view>
+      <view class="form-row">
+        <picker mode="date" value="{{startDate}}" bindchange="onStartDateChange">
+          <view class="form-date">{{startDate || '开始日期'}}</view>
+        </picker>
+        <view class="form-date-sep">至</view>
+        <picker mode="date" value="{{endDate}}" bindchange="onEndDateChange">
+          <view class="form-date">{{endDate || '结束日期'}}</view>
+        </picker>
+      </view>
+    </view>
+
+    <!-- 金额 -->
+    <view class="form-group">
+      <view class="form-label">合同金额</view>
+      <view class="form-amount-wrap">
+        <view class="form-currency">¥</view>
+        <input class="form-amount" type="digit" placeholder="请输入金额" value="{{amount}}" bindinput="onAmountInput"/>
+      </view>
+    </view>
+
+    <!-- 条款备注 -->
+    <view class="form-group">
+      <view class="form-label">合同条款（选填）</view>
+      <textarea class="form-textarea" placeholder="请输入合同主要条款..." value="{{terms}}" bindinput="onTermsInput" maxlength="500"/>
+    </view>
+  </view>
+
+  <!-- 提交 -->
+  <view class="submit-area">
+    <button class="submit-btn" bindtap="onSubmit">确认签订</button>
+  </view>
+</view>

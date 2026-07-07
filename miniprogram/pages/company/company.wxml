@@ -69,7 +69,7 @@
       <view class="card" wx:if="{{canManage}}">
         <view class="section-title">企业管理</view>
         <view class="menu-row" bindtap="goCert">
-          <view class="menu-icon">🏅</view>
+          <view class="menu-icon">🛡️</view>
           <view class="menu-main">
             <view class="menu-label">企业认证</view>
             <view class="menu-desc">营业执照 · 实名 · 人脸 · 电子章</view>
@@ -85,10 +85,18 @@
           <view class="arrow">›</view>
         </view>
         <view class="menu-row" bindtap="goRoleManage">
-          <view class="menu-icon">🔑</view>
+          <view class="menu-icon">⚙️</view>
           <view class="menu-main">
             <view class="menu-label">角色权限</view>
             <view class="menu-desc">自定义角色 · 权限配置</view>
+          </view>
+          <view class="arrow">›</view>
+        </view>
+        <view class="menu-row" wx:if="{{canContractTemplate}}" bindtap="goContractTemplate">
+          <view class="menu-icon">📋</view>
+          <view class="menu-main">
+            <view class="menu-label">合同模板</view>
+            <view class="menu-desc">管理通用合同模板库</view>
           </view>
           <view class="arrow">›</view>
         </view>

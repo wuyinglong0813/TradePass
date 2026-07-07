@@ -22,7 +22,7 @@
     <input class="form-input" placeholder="角色名称" value="{{roleName}}" bindinput="onNameInput"/>
     <view class="perm-title">权限点</view>
     <view class="perm-list">
-      <view class="perm-item" wx:for="{{allPerms}}" wx:key="value" data-value="{{item.value}}" bindtap="togglePerm">
+      <view class="perm-item" wx:for="{{allPerms}}" wx:key="code" data-code="{{item.code}}" bindtap="togglePerm">
         <view class="perm-check {{item.checked ? 'checked' : ''}}">{{item.checked ? '✓' : ''}}</view>
         <view class="perm-label">{{item.label}}</view>
       </view>

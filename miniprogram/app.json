@@ -9,6 +9,12 @@
     "pages/me/me",
     "pages/company-bind/company-bind",
     "pages/order-detail/order-detail",
+    "pages/contract-preview/contract-preview",
+    "pages/contract-template/contract-template",
+    "pages/contract-template-detail/contract-template-detail",
+    "pages/sign-contract/sign-contract",
+    "pages/reconciliation/reconciliation",
+    "pages/contract-approval/contract-approval",
     "pages/auth-manage/auth-manage",
     "pages/company-cert/company-cert",
     "pages/role-manage/role-manage"

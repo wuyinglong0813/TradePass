@@ -1,0 +1,158 @@
+page { background: #f5f6f8; }
+
+.page { padding-bottom: calc(120rpx + env(safe-area-inset-bottom)); }
+
+/* 双方信息 */
+.party-bar {
+  align-items: center;
+  background: linear-gradient(160deg, #0f766e, #14b8a6);
+  display: flex;
+  justify-content: center;
+  padding: 36rpx 40rpx;
+  gap: 32rpx;
+}
+
+.party-item {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+}
+
+.pi-avatar {
+  align-items: center;
+  border-radius: 24rpx;
+  color: #fff;
+  display: flex;
+  font-size: 40rpx;
+  font-weight: 700;
+  height: 88rpx;
+  justify-content: center;
+  width: 88rpx;
+}
+
+.pi-avatar.my { background: rgba(255,255,255,0.18); }
+.pi-avatar.cp { background: rgba(255,255,255,0.28); }
+
+.pi-name {
+  color: #fff;
+  font-size: 26rpx;
+  font-weight: 600;
+  margin-top: 10rpx;
+  max-width: 160rpx;
+  overflow: hidden;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pi-tag {
+  background: rgba(255,255,255,0.22);
+  border-radius: 6rpx;
+  color: #fff;
+  font-size: 20rpx;
+  margin-top: 6rpx;
+  padding: 2rpx 16rpx;
+}
+
+.party-vs { font-size: 40rpx; }
+
+/* 表单 */
+.form { padding: 24rpx; }
+
+.form-group {
+  background: #fff;
+  border-radius: 16rpx;
+  margin-bottom: 16rpx;
+  padding: 24rpx 28rpx;
+  box-shadow: 0 1rpx 4rpx rgba(0,0,0,0.03);
+}
+
+.form-label {
+  color: #999;
+  font-size: 24rpx;
+  margin-bottom: 12rpx;
+}
+
+.form-picker {
+  color: #0f766e;
+  font-size: 30rpx;
+  font-weight: 600;
+}
+
+.form-input {
+  color: #1a1a1a;
+  font-size: 30rpx;
+  font-weight: 500;
+  width: 100%;
+}
+
+.form-row {
+  align-items: center;
+  display: flex;
+  gap: 16rpx;
+}
+
+.form-date {
+  background: #f5f5f5;
+  border-radius: 10rpx;
+  color: #555;
+  flex: 1;
+  font-size: 26rpx;
+  padding: 16rpx 20rpx;
+}
+
+.form-date-sep { color: #999; font-size: 26rpx; }
+
+.form-amount-wrap {
+  align-items: baseline;
+  display: flex;
+  gap: 8rpx;
+}
+
+.form-currency {
+  color: #0f766e;
+  font-size: 32rpx;
+  font-weight: 700;
+}
+
+.form-amount {
+  color: #1a1a1a;
+  flex: 1;
+  font-size: 40rpx;
+  font-weight: 700;
+}
+
+.form-textarea {
+  background: #f5f5f5;
+  border-radius: 10rpx;
+  box-sizing: border-box;
+  color: #333;
+  font-size: 26rpx;
+  height: 180rpx;
+  padding: 16rpx 20rpx;
+  width: 100%;
+}
+
+/* 提交 */
+.submit-area {
+  background: #fff;
+  bottom: 0;
+  padding: 20rpx 24rpx calc(20rpx + env(safe-area-inset-bottom));
+  position: fixed;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.submit-btn {
+  background: linear-gradient(90deg, #0f766e, #14b8a6);
+  border: none;
+  border-radius: 48rpx;
+  color: #fff;
+  font-size: 32rpx;
+  font-weight: 600;
+  height: 96rpx;
+  line-height: 96rpx;
+  width: 100%;
+}
+
+.submit-btn::after { border: none; }

@@ -1,0 +1,35 @@
+<view class="page">
+  <view class="header-bar">
+    <view class="h-title">合同审批</view>
+    <view class="h-desc" wx:if="{{contracts.length > 0}}">对方公司发起的合同，需要你方审批</view>
+  </view>
+
+  <view class="list">
+    <view wx:if="{{loading}}" class="loading-hint">加载中...</view>
+
+    <view class="empty-hint" wx:elif="{{contracts.length === 0}}">
+      <view class="empty-icon">✅</view>
+      <view class="empty-text">暂无待审批合同</view>
+    </view>
+
+    <view class="contract-card"
+      wx:for="{{contracts}}"
+      wx:key="id">
+      <view class="cc-top">
+        <view class="cc-name">{{item.name}}</view>
+        <view class="cc-status pending">待签署</view>
+      </view>
+      <view class="cc-party">发起方：{{item.counterpartyName}}</view>
+      <view class="cc-dates" wx:if="{{item.startDate}}">{{item.startDate}} ~ {{item.endDate}}</view>
+      <view class="cc-amount">合同金额：<text class="cc-amount-value">¥{{item.amount}}</text></view>
+      <view class="cc-template" wx:if="{{item.templateName}}">模板：{{item.templateName}}</view>
+      <view class="cc-terms" wx:if="{{item.terms}}">{{item.terms}}</view>
+      <view class="cc-created">发起时间：{{item.createdAt}}</view>
+
+      <view class="cc-actions">
+        <button class="cc-btn approve" data-contract="{{item}}" bindtap="approve">✓ 同意签署</button>
+        <button class="cc-btn reject" data-contract="{{item}}" bindtap="reject">✕ 拒绝</button>
+      </view>
+    </view>
+  </view>
+</view>

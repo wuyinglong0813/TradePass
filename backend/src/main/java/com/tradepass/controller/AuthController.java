@@ -42,10 +42,10 @@ public class AuthController {
     // 角色定义
     static final Map<String, RoleDef> ROLES = Map.of(
             "LEGAL",     new RoleDef("法人",   List.of("all")),
-            "ADMIN",     new RoleDef("管理员", List.of("member_manage", "auth_manage", "company_manage")),
-            "SALES",     new RoleDef("销售员", List.of("supplier_view", "counterparty_manage", "order_view")),
-            "PURCHASER", new RoleDef("采购员", List.of("buyer_view", "order_create")),
-            "FINANCE",   new RoleDef("财务",   List.of("invoice_view", "reconciliation_view"))
+            "ADMIN",     new RoleDef("管理员", List.of("member_manage", "auth_manage", "company_manage", "contract_template")),
+            "SALES",     new RoleDef("销售员", List.of("supplier_view", "counterparty_manage", "order_view", "contract_sign", "contract_view", "reconciliation")),
+            "PURCHASER", new RoleDef("采购员", List.of("buyer_view", "order_create", "contract_view", "order_view")),
+            "FINANCE",   new RoleDef("财务",   List.of("invoice_view", "reconciliation"))
     );
 
     record RoleDef(String text, List<String> permissions) {
@@ -173,6 +173,97 @@ public class AuthController {
         """);
         // member 加 custom_permissions 字段
         try { db.execute("ALTER TABLE company_member ADD COLUMN custom_permissions JSON"); } catch (Exception ignored) {}
+
+        // 权限定义表（系统级，所有公司共用）
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS perm_def (
+                code VARCHAR(64) PRIMARY KEY,
+                label VARCHAR(64) NOT NULL,
+                sort_order INT NOT NULL DEFAULT 0
+            )
+        """);
+        seedPerm("supplier_view", "供方首页", 1);
+        seedPerm("buyer_view", "需方首页", 2);
+        seedPerm("counterparty_manage", "供方公司管理", 3);
+        seedPerm("order_view", "订单查看", 4);
+        seedPerm("order_create", "下单", 5);
+        seedPerm("contract_template", "合同模板管理", 6);
+        seedPerm("contract_sign", "签订合同", 7);
+        seedPerm("contract_view", "合同预览", 8);
+        seedPerm("invoice_view", "发票查看", 9);
+        seedPerm("reconciliation", "对账情况", 10);
+        seedPerm("inventory_view", "库存查看", 11);
+        seedPerm("member_manage", "成员管理", 12);
+        seedPerm("auth_manage", "授权管理", 13);
+        seedPerm("company_manage", "企业认证", 14);
+        seedPerm("seal_manage", "电子章管理", 15);
+
+        // 合同模板表
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS contract_template (
+                id BIGINT PRIMARY KEY AUTO_INCREMENT,
+                company_id BIGINT NOT NULL,
+                name VARCHAR(256) NOT NULL,
+                category VARCHAR(64),
+                content TEXT,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                INDEX idx_company (company_id)
+            )
+        """);
+        // 种子模板
+        // 模板分类表
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS template_category (
+                id BIGINT PRIMARY KEY AUTO_INCREMENT,
+                company_id BIGINT NOT NULL,
+                name VARCHAR(64) NOT NULL,
+                sort_order INT NOT NULL DEFAULT 0,
+                UNIQUE KEY uk_company_cat (company_id, name),
+                INDEX idx_company (company_id)
+            )
+        """);
+        seedTemplateCategory(1, "采购", 1);
+        seedTemplateCategory(1, "供货", 2);
+        seedTemplateCategory(1, "交易", 3);
+        seedTemplateCategory(1, "物流", 4);
+        seedTemplateCategory(1, "服务", 5);
+        seedTemplateCategory(1, "其他", 6);
+
+        seedContractTemplate(1, "标准采购合同模板", "采购");
+        seedContractTemplate(1, "框架供货协议模板", "供货");
+        seedContractTemplate(1, "单笔交易合同模板", "交易");
+        seedContractTemplate(1, "物流服务合同模板", "物流");
+
+        // 合同表
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS trade_contract (
+                id BIGINT PRIMARY KEY AUTO_INCREMENT,
+                company_id BIGINT NOT NULL,
+                counterparty_name VARCHAR(128) NOT NULL,
+                name VARCHAR(256) NOT NULL,
+                template_name VARCHAR(128),
+                amount DECIMAL(15,2) NOT NULL DEFAULT 0,
+                start_date DATE,
+                end_date DATE,
+                terms TEXT,
+                status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
+                initiated_by BIGINT NOT NULL,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_company (company_id),
+                INDEX idx_counterparty (counterparty_name)
+            )
+        """);
+        // 种子合同
+        seedContractIfEmpty(1, "河北通瑞贸易有限公司", "年度采购框架协议", "标准采购合同模板", 500000, "2026-01-01", "2026-12-31", "ACTIVE", 1);
+        seedContractIfEmpty(1, "河北通瑞贸易有限公司", "Q2季度供货合同", "供货协议模板", 180000, "2026-04-01", "2026-06-30", "ACTIVE", 1);
+        seedContractIfEmpty(1, "河北逸泽昌贸易有限公司", "设备采购补充协议", "单笔交易合同模板", 85000, "2026-05-15", "2026-08-15", "ACTIVE", 1);
+        seedContractIfEmpty(2, "上海浦发贸易有限公司", "年度销售代理合同", "标准采购合同模板", 320000, "2026-02-01", "2027-01-31", "PENDING", 2);
+        // 对方公司 发起给 我方公司 的合同（用于测试待审批流程）
+        try {
+            db.update("INSERT IGNORE INTO trade_contract (company_id, counterparty_name, name, template_name, amount, start_date, end_date, status, initiated_by) VALUES (?,?,?,?,?,?,?,?,?)",
+                    2, "河北光广贸易有限公司", "年度物流服务合同", "物流服务合同模板", 150000, "2026-03-01", "2027-02-28", "PENDING", 3);
+        } catch (Exception ignored) {}
 
         // 种子角色（每个公司一份预设）
         seedRole(1, "法人",   List.of("all"));
@@ -330,6 +421,12 @@ public class AuthController {
     }
 
     /** 统一待办中心：汇总当前用户在当前企业下的审批 / 认证等待办事项 */
+    /** 获取所有权限定义列表（系统级，供角色管理页使用） */
+    @GetMapping("/permissions")
+    public ApiResponse<List<Map<String, Object>>> permissions() {
+        return ApiResponse.ok(db.queryForList("SELECT code, label FROM perm_def ORDER BY sort_order"));
+    }
+
     @GetMapping("/me/todos")
     public ApiResponse<List<TodoItem>> myTodos() {
         long userId = AuthContext.userId();
@@ -352,6 +449,15 @@ public class AuthController {
                 String cs = (String) co.get(0).get("certification_status");
                 if (cs != null && !"VERIFIED".equals(cs)) {
                     todos.add(new TodoItem("CERT", "企业认证待完成", "完成认证后可使用全部签约能力", 1, "company-cert"));
+                }
+            }
+            // 待审批合同（对方发起给我方的）
+            String companyName = co.isEmpty() ? null : (String) co.get(0).get("name");
+            if (companyName != null) {
+                Integer pendingContracts = db.queryForObject(
+                        "SELECT COUNT(1) FROM trade_contract WHERE counterparty_name = ? AND status = 'PENDING'", Integer.class, companyName);
+                if (pendingContracts != null && pendingContracts > 0) {
+                    todos.add(new TodoItem("CONTRACT", "合同待审批", pendingContracts + " 份合同等待你方签署", pendingContracts, "contract-approval"));
                 }
             }
         }
@@ -480,6 +586,34 @@ public class AuthController {
 
     private long parseId(String id) {
         try { return Long.parseLong(id); } catch (NumberFormatException e) { return 0; }
+    }
+
+    private void seedPerm(String code, String label, int sortOrder) {
+        try {
+            db.update("INSERT IGNORE INTO perm_def (code, label, sort_order) VALUES (?, ?, ?)", code, label, sortOrder);
+        } catch (Exception ignored) {}
+    }
+
+    private void seedTemplateCategory(long companyId, String name, int sortOrder) {
+        try {
+            db.update("INSERT IGNORE INTO template_category (company_id, name, sort_order) VALUES (?, ?, ?)", companyId, name, sortOrder);
+        } catch (Exception ignored) {}
+    }
+
+    private void seedContractTemplate(long companyId, String name, String category) {
+        try {
+            db.update("INSERT IGNORE INTO contract_template (company_id, name, category) VALUES (?, ?, ?)", companyId, name, category);
+        } catch (Exception ignored) {}
+    }
+
+    private void seedContractIfEmpty(long companyId, String counterpartyName, String name, String templateName, double amount, String startDate, String endDate, String status, long initiatedBy) {
+        try {
+            Integer cnt = db.queryForObject("SELECT COUNT(1) FROM trade_contract WHERE company_id = ?", Integer.class, companyId);
+            if (cnt == null || cnt == 0) {
+                db.update("INSERT INTO trade_contract (company_id, counterparty_name, name, template_name, amount, start_date, end_date, status, initiated_by) VALUES (?,?,?,?,?,?,?,?,?)",
+                        companyId, counterpartyName, name, templateName, amount, startDate, endDate, status, initiatedBy);
+            }
+        } catch (Exception ignored) {}
     }
 
     private void seedRole(long companyId, String name, List<String> perms) {
