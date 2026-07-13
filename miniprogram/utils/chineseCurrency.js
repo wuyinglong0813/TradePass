@@ -92,16 +92,16 @@ const DEFAULT_TEMPLATE = {
       columns: ['产品名称', '规格型号', '单位', '数量', '单价(元)', '金额(元)'],
       rows: [['', '', '', '0', '0', '0']]
     },
-    { title: '二、质量要求、技术标准', type: 'clause', content: '' },
-    { title: '三、交货时间、地点、方式', type: 'clause', content: '' },
-    { title: '四、运输方式及费用承担', type: 'clause', content: '' },
-    { title: '五、包装标准及费用', type: 'clause', content: '' },
-    { title: '六、验收标准、方法', type: 'clause', content: '' },
-    { title: '七、结算方式及期限', type: 'clause', content: '' },
-    { title: '八、违约责任', type: 'clause', content: '' },
-    { title: '九、合同争议解决方式', type: 'clause', content: '' },
-    { title: '十、合同生效与变更', type: 'clause', content: '' },
-    { title: '十一、其他约定事项', type: 'clause', content: '' }
+    { title: '质量要求、技术标准', type: 'clause', content: '' },
+    { title: '交货时间、地点、方式', type: 'clause', content: '' },
+    { title: '运输方式及费用承担', type: 'clause', content: '' },
+    { title: '包装标准及费用', type: 'clause', content: '' },
+    { title: '验收标准、方法', type: 'clause', content: '' },
+    { title: '结算方式及期限', type: 'clause', content: '' },
+    { title: '违约责任', type: 'clause', content: '' },
+    { title: '合同争议解决方式', type: 'clause', content: '' },
+    { title: '合同生效与变更', type: 'clause', content: '' },
+    { title: '其他约定事项', type: 'clause', content: '' }
   ]
 };
 
@@ -139,17 +139,21 @@ function toChineseNum(n) {
 }
 
 /**
- * 重新编排条款序号
- * @param {Array<{title:string,content:string}>} clauses
- * @returns {Array} 重新编号后的条款（从"二"开始，因为"一"是产品表格）
+ * 重新编排条款序号（标题不含数字前缀，序号由 _label 统一管理）
+ * 兼容已有带数字前缀的标题，自动去除
+ * @returns {Array<{title:string, content:string, _num:string, _label:string}>}
  */
 function reorderClauses(clauses) {
-  return (clauses || []).map((c, i) => ({
-    title: c.title || '',
-    content: c.content || '',
-    _num: toChineseNum(i + 2),
-    _label: `${toChineseNum(i + 2)}、`
-  }));
+  return (clauses || []).map((c, i) => {
+    // 去除标题中可能已有的中文数字前缀（如 "二、xxx" → "xxx"）
+    const title = (c.title || '').replace(/^[一二三四五六七八九十]+、\s*/, '');
+    return {
+      title,
+      content: c.content || '',
+      _num: toChineseNum(i + 2),
+      _label: toChineseNum(i + 2) + '、'
+    };
+  });
 }
 
 module.exports = { numberToChineseCurrency, DEFAULT_TEMPLATE, calcTableTotal, toChineseNum, reorderClauses };
