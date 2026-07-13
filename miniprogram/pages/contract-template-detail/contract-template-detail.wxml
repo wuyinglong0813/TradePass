@@ -47,29 +47,22 @@
       <view class="table-wrap">
         <!-- 表头 -->
         <view class="table-row table-header">
-          <view class="th" wx:for="{{tableSection.columns}}" wx:key="*this" wx:for-index="ci">
-            <text>{{item}}</text>
+          <view class="th" wx:for="{{tableSection.columns}}" wx:for-item="col" wx:key="*this">
+            <text>{{col}}</text>
           </view>
           <view class="th th-del"></view>
         </view>
         <!-- 数据行 -->
-        <view class="table-row" wx:for="{{tableRows}}" wx:key="*this" wx:for-index="ri">
-          <view class="td" wx:for="{{tableSection.columns}}" wx:key="*this" wx:for-index="ci">
-            <block wx:if="{{ci >= 3}}">
-              <input class="td-input num" type="digit"
-                value="{{item[ci]}}"
-                data-row="{{ri}}" data-col="{{ci}}"
-                bindinput="onTableCellChange"/>
+        <view class="table-row" wx:for="{{tableRows}}" wx:for-item="row" wx:for-index="ri" wx:key="ri">
+          <view class="td" wx:for="{{tableSection.columns}}" wx:for-item="col" wx:for-index="ci" wx:key="ci">
+            <block wx:if="{{ci === 5}}">
+              <input class="td-input num auto" type="digit" value="{{row[ci]}}" disabled/>
             </block>
-            <block wx:elif="{{ci === 5}}">
-              <!-- 金额列：自动计算，只读 -->
-              <input class="td-input num auto" type="digit" value="{{item[ci]}}" disabled/>
+            <block wx:elif="{{ci >= 3}}">
+              <input class="td-input num" type="digit" value="{{row[ci]}}" data-row="{{ri}}" data-col="{{ci}}" bindinput="onTableCellChange"/>
             </block>
             <block wx:else>
-              <input class="td-input" type="text"
-                value="{{item[ci]}}"
-                data-row="{{ri}}" data-col="{{ci}}"
-                bindinput="onTableCellChange"/>
+              <input class="td-input" type="text" value="{{row[ci]}}" data-row="{{ri}}" data-col="{{ci}}" bindinput="onTableCellChange"/>
             </block>
           </view>
           <view class="td td-del">
@@ -98,12 +91,13 @@
   <!-- 条款 -->
   <view class="card">
     <view class="section-title">合同条款</view>
-    <view class="clause-item" wx:for="{{clauses}}" wx:key="*this" wx:for-index="idx">
+    <view class="clause-item" wx:for="{{clauses}}" wx:for-item="clause" wx:for-index="idx" wx:key="idx">
       <view class="clause-head">
-        <input class="clause-title-input" placeholder="条款标题" value="{{item.title}}" data-index="{{idx}}" bindinput="onClauseTitleChange"/>
+        <text class="clause-num">{{clause._label}}</text>
+        <input class="clause-title-input" placeholder="条款标题" value="{{clause.title}}" data-index="{{idx}}" bindinput="onClauseTitleChange"/>
         <view class="clause-del" data-index="{{idx}}" bindtap="deleteClause">✕</view>
       </view>
-      <textarea class="clause-textarea" placeholder="请输入条款内容..." value="{{item.content}}" data-index="{{idx}}" bindinput="onClauseContentChange" maxlength="2000"/>
+      <textarea class="clause-textarea" placeholder="请输入条款内容..." value="{{clause.content}}" data-index="{{idx}}" bindinput="onClauseContentChange" maxlength="2000"/>
     </view>
     <view class="add-clause-btn" bindtap="addClause">＋ 添加条款</view>
   </view>

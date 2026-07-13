@@ -1,4 +1,4 @@
-const { calcTableTotal } = require('../../utils/chineseCurrency');
+const { calcTableTotal, reorderClauses } = require('../../utils/chineseCurrency');
 
 Page({
   data: {
@@ -78,7 +78,8 @@ Page({
     });
 
     const tableSection = (content.sections || []).find(s => s.type === 'table');
-    const clauses = (content.sections || []).filter(s => s.type === 'clause');
+    const rawClauses = (content.sections || []).filter(s => s.type === 'clause');
+    const clauses = reorderClauses(rawClauses);
     const rows = (tableSection && tableSection.rows) ? tableSection.rows.map(r => [...r]) : [['', '', '', '0', '0', '0']];
     const result = calcTableTotal(rows);
 

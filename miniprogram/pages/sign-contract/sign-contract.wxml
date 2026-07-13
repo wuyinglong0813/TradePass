@@ -63,27 +63,21 @@
       <scroll-view class="table-scroll" scroll-x enable-flex>
         <view class="table-wrap">
           <view class="table-row table-header">
-            <view class="th" wx:for="{{tableSection.columns}}" wx:key="*this">
-              <text>{{item}}</text>
+            <view class="th" wx:for="{{tableSection.columns}}" wx:for-item="col" wx:key="*this">
+              <text>{{col}}</text>
             </view>
             <view class="th th-del"></view>
           </view>
-          <view class="table-row" wx:for="{{tableRows}}" wx:key="*this" wx:for-index="ri">
-            <view class="td" wx:for="{{tableSection.columns}}" wx:key="*this" wx:for-index="ci">
-              <block wx:if="{{ci >= 3 && ci < 5}}">
-                <input class="td-input num" type="digit"
-                  value="{{item[ci]}}"
-                  data-row="{{ri}}" data-col="{{ci}}"
-                  bindinput="onTableCellChange"/>
+          <view class="table-row" wx:for="{{tableRows}}" wx:for-item="row" wx:for-index="ri" wx:key="ri">
+            <view class="td" wx:for="{{tableSection.columns}}" wx:for-item="col" wx:for-index="ci" wx:key="ci">
+              <block wx:if="{{ci === 5}}">
+                <input class="td-input num auto" type="digit" value="{{row[ci]}}" disabled/>
               </block>
-              <block wx:elif="{{ci === 5}}">
-                <input class="td-input num auto" type="digit" value="{{item[ci]}}" disabled/>
+              <block wx:elif="{{ci >= 3}}">
+                <input class="td-input num" type="digit" value="{{row[ci]}}" data-row="{{ri}}" data-col="{{ci}}" bindinput="onTableCellChange"/>
               </block>
               <block wx:else>
-                <input class="td-input" type="text"
-                  value="{{item[ci]}}"
-                  data-row="{{ri}}" data-col="{{ci}}"
-                  bindinput="onTableCellChange"/>
+                <input class="td-input" type="text" value="{{row[ci]}}" data-row="{{ri}}" data-col="{{ci}}" bindinput="onTableCellChange"/>
               </block>
             </view>
             <view class="td td-del">
@@ -109,9 +103,9 @@
     <!-- 条款（只读展示） -->
     <view class="card" wx:if="{{clauses.length > 0}}">
       <view class="section-title">合同条款</view>
-      <view class="clause-ro" wx:for="{{clauses}}" wx:key="*this">
-        <view class="clause-ro-title">{{item.title}}</view>
-        <view class="clause-ro-content">{{item.content || '（无内容）'}}</view>
+      <view class="clause-ro" wx:for="{{clauses}}" wx:for-item="clause" wx:key="idx">
+        <view class="clause-ro-title">{{clause._label}}{{clause.title}}</view>
+        <view class="clause-ro-content">{{clause.content || '（无内容）'}}</view>
       </view>
     </view>
   </block>

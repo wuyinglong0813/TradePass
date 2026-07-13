@@ -99,36 +99,12 @@ Page({
     });
   },
 
-  showAddForm() { this.setData({ showAdd: true, newName: '', newCategory: '' }); },
-  hideAddForm() { this.setData({ showAdd: false }); },
-  onNameInput(e) { this.setData({ newName: e.detail.value }); },
-
-  async addTemplate() {
-    const name = this.data.newName.trim();
-    const category = this.data.newCategory;
-    if (!name) { wx.showToast({ title: '请输入模板名称', icon: 'none' }); return; }
-    try {
-      wx.showLoading({ title: '创建中...' });
-      // 预填购销合同默认 JSON 内容
-      const content = JSON.stringify(DEFAULT_TEMPLATE);
-      const result = await request({
-        url: '/contract-templates',
-        method: 'POST',
-        data: { name, category, content }
-      });
-      wx.hideLoading();
-      wx.showToast({ title: '模板创建成功', icon: 'success' });
-      this.setData({ showAdd: false });
-      // 直接跳转到编辑页
-      wx.navigateTo({
-        url: `/pages/contract-template-detail/contract-template-detail?id=${result.id}&name=${encodeURIComponent(name)}`
-      });
-    } catch (e) {
-      wx.hideLoading();
-      wx.showToast({ title: e.message, icon: 'none' });
-    }
+  showAddForm() {
+    // 直接跳转到编辑页新建，跳过弹窗
+    wx.navigateTo({
+      url: '/pages/contract-template-detail/contract-template-detail'
+    });
   },
-
   onCategoryTap(e) {
     this.setData({ newCategory: e.currentTarget.dataset.cat });
   }

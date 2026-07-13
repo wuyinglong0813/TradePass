@@ -1,5 +1,5 @@
 const { request } = require('../../utils/request');
-const { DEFAULT_TEMPLATE, calcTableTotal } = require('../../utils/chineseCurrency');
+const { DEFAULT_TEMPLATE, calcTableTotal, reorderClauses, toChineseNum } = require('../../utils/chineseCurrency');
 
 Page({
   data: {
@@ -7,7 +7,6 @@ Page({
     name: '',
     category: '',
     categories: ['采购', '供货', '交易', '物流', '服务', '其他'],
-    // 解析后的模板内容
     title: '',
     fields: [],
     tableSection: null,
@@ -25,7 +24,6 @@ Page({
     if (id) {
       this.loadTemplate();
     } else {
-      // 新建：使用默认购销合同模板
       this.initFromTemplate(DEFAULT_TEMPLATE);
     }
   },
@@ -35,26 +33,18 @@ Page({
       const tpl = await request({ url: `/contract-templates/${this.data.templateId}` });
       this.setData({ name: tpl.name || '', category: tpl.category || '' });
       let content;
-      try {
-        content = JSON.parse(tpl.content || '{}');
-      } catch (e) {
-        content = DEFAULT_TEMPLATE;
-      }
-      // 确保 content 有基本结构
-      if (!content.fields && !content.sections) {
-        content = DEFAULT_TEMPLATE;
-      }
+      try { content = JSON.parse(tpl.content || '{}'); } catch (e) { content = DEFAULT_TEMPLATE; }
+      if (!content.fields && !content.sections) { content = DEFAULT_TEMPLATE; }
       this.initFromTemplate(content);
-    } catch (e) {
-      wx.showToast({ title: e.message, icon: 'none' });
-    }
+    } catch (e) { wx.showToast({ title: e.message, icon: 'none' }); }
   },
 
   initFromTemplate(tpl) {
     const tableSection = (tpl.sections || []).find(s => s.type === 'table');
-    const clauses = (tpl.sections || []).filter(s => s.type === 'clause');
+    const rawClauses = (tpl.sections || []).filter(s => s.type === 'clause');
     const rows = (tableSection && tableSection.rows) ? tableSection.rows.map(r => [...r]) : [['', '', '', '0', '0', '0']];
     const result = calcTableTotal(rows);
+    const clauses = reorderClauses(rawClauses);
 
     this.setData({
       title: tpl.title || '购销合同',
@@ -63,21 +53,17 @@ Page({
       tableRows: result.rows,
       totalAmount: String(result.totalAmount),
       totalAmountCn: result.totalAmountCn,
-      clauses: clauses.map(c => ({ title: c.title || '', content: c.content || '' }))
+      clauses
     });
   },
 
-  // ======= 基本信息 =======
   onNameInput(e) { this.setData({ name: e.detail.value }); },
   onCategoryTap(e) { this.setData({ category: e.currentTarget.dataset.cat }); },
 
-  // ======= 合同信息字段 =======
   onFieldChange(e) {
     const index = e.currentTarget.dataset.index;
-    const value = e.detail.value;
-    this.setData({ [`fields[${index}].value`]: value });
+    this.setData({ [`fields[${index}].value`]: e.detail.value });
   },
-
   onDateFieldChange(e) {
     const index = e.currentTarget.dataset.index;
     this.setData({ [`fields[${index}].value`]: e.detail.value });
@@ -86,9 +72,9 @@ Page({
   // ======= 产品表格 =======
   onTableCellChange(e) {
     const { row, col } = e.currentTarget.dataset;
-    const value = e.detail.value;
     const rows = [...this.data.tableRows];
-    rows[row][col] = value;
+    if (!rows[row]) rows[row] = [];
+    rows[row][col] = e.detail.value;
     this.recalcTable(rows);
   },
 
@@ -96,24 +82,18 @@ Page({
     const cols = this.data.tableSection ? this.data.tableSection.columns.length : 6;
     const newRow = new Array(cols).fill('0');
     newRow[0] = ''; newRow[1] = ''; newRow[2] = '';
-    const rows = [...this.data.tableRows, newRow];
-    this.recalcTable(rows);
+    this.recalcTable([...this.data.tableRows, newRow]);
   },
 
   deleteTableRow(e) {
     const index = e.currentTarget.dataset.index;
     if (this.data.tableRows.length <= 1) return;
-    const rows = this.data.tableRows.filter((_, i) => i !== index);
-    this.recalcTable(rows);
+    this.recalcTable(this.data.tableRows.filter((_, i) => i !== index));
   },
 
   recalcTable(rows) {
     const result = calcTableTotal(rows);
-    this.setData({
-      tableRows: result.rows,
-      totalAmount: String(result.totalAmount),
-      totalAmountCn: result.totalAmountCn
-    });
+    this.setData({ tableRows: result.rows, totalAmount: String(result.totalAmount), totalAmountCn: result.totalAmountCn });
   },
 
   // ======= 条款 =======
@@ -128,34 +108,29 @@ Page({
   },
 
   addClause() {
-    const clauses = [...this.data.clauses, { title: '', content: '' }];
+    const nextNum = this.data.clauses.length + 2;
+    const clauses = reorderClauses([...this.data.clauses, { title: '', content: '' }]);
     this.setData({ clauses });
   },
 
   deleteClause(e) {
     const index = e.currentTarget.dataset.index;
-    const clauses = this.data.clauses.filter((_, i) => i !== index);
-    this.setData({ clauses });
+    const filtered = this.data.clauses.filter((_, i) => i !== index);
+    this.setData({ clauses: reorderClauses(filtered) });
   },
 
   // ======= 保存 =======
   async save() {
-    const { templateId, name, category, title, fields, tableSection, tableRows, totalAmount, totalAmountCn, clauses } = this.data;
+    const { templateId, name, category, title, fields, tableSection, tableRows, clauses } = this.data;
     if (!name.trim()) { wx.showToast({ title: '请输入模板名称', icon: 'none' }); return; }
 
-    // 构建产品表格的 rows（不含金额列，金额列是自动计算的）
     const saveRows = tableRows.map(r => [r[0] || '', r[1] || '', r[2] || '', r[3] || '0', r[4] || '0', r[5] || '0']);
 
     const content = JSON.stringify({
       title: title || name,
       fields: fields.map(f => ({ ...f })),
       sections: [
-        ...(tableSection ? [{
-          title: tableSection.title,
-          type: 'table',
-          columns: [...tableSection.columns],
-          rows: saveRows
-        }] : []),
+        ...(tableSection ? [{ title: tableSection.title, type: 'table', columns: [...tableSection.columns], rows: saveRows }] : []),
         ...clauses.map(c => ({ title: c.title, type: 'clause', content: c.content }))
       ]
     });
@@ -165,7 +140,8 @@ Page({
       if (templateId) {
         await request({ url: `/contract-templates/${templateId}`, method: 'POST', data: { name: name.trim(), category, content } });
       } else {
-        await request({ url: '/contract-templates', method: 'POST', data: { name: name.trim(), category, content } });
+        const result = await request({ url: '/contract-templates', method: 'POST', data: { name: name.trim(), category, content } });
+        this.setData({ templateId: String(result.id) });
       }
       wx.hideLoading();
       wx.showToast({ title: '已保存', icon: 'success' });
@@ -176,8 +152,8 @@ Page({
     }
   },
 
-  // ======= 删除 =======
   async deleteTemplate() {
+    if (!this.data.templateId) { wx.navigateBack(); return; }
     const res = await new Promise(r => {
       wx.showModal({ title: '确认删除', content: `确定删除模板"${this.data.name}"？删除后不可恢复`, success: r });
     });

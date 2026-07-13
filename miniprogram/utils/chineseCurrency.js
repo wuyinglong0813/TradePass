@@ -127,4 +127,30 @@ function calcTableTotal(rows) {
   };
 }
 
-module.exports = { numberToChineseCurrency, DEFAULT_TEMPLATE, calcTableTotal };
+const CHINESE_NUMS = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十',
+  '十一', '十二', '十三', '十四', '十五', '十六', '十七', '十八', '十九', '二十',
+  '二十一', '二十二', '二十三', '二十四', '二十五', '二十六', '二十七', '二十八', '二十九', '三十'];
+
+/**
+ * 数字转中文序号（1→一，11→十一）
+ */
+function toChineseNum(n) {
+  const idx = Math.max(0, n - 1);
+  return CHINESE_NUMS[idx] || String(n);
+}
+
+/**
+ * 重新编排条款序号
+ * @param {Array<{title:string,content:string}>} clauses
+ * @returns {Array} 重新编号后的条款（从"二"开始，因为"一"是产品表格）
+ */
+function reorderClauses(clauses) {
+  return (clauses || []).map((c, i) => ({
+    title: c.title || '',
+    content: c.content || '',
+    _num: toChineseNum(i + 2),
+    _label: `${toChineseNum(i + 2)}、`
+  }));
+}
+
+module.exports = { numberToChineseCurrency, DEFAULT_TEMPLATE, calcTableTotal, toChineseNum, reorderClauses };
