@@ -110,7 +110,10 @@ page { background: #f5f6f8; }
 }
 
 .hc-icon {
-  font-size: 28rpx;
+  width: 80rpx; height: 80rpx; border-radius: 50%;
+  background: linear-gradient(135deg, #0f766e, #14b8a6);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 30rpx; color: #fff; font-weight: 700;
 }
 
 /* ===== 柱状图 ===== */
@@ -163,8 +166,9 @@ page { background: #f5f6f8; }
 }
 
 .qa-icon {
-  font-size: 44rpx;
-  margin-bottom: 8rpx;
+  width: 88rpx; height: 88rpx; border-radius: 50%; margin-bottom: 8rpx;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 28rpx; color: #fff; font-weight: 700;
 }
 
 .qa-label {

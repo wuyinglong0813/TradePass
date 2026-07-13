@@ -9,7 +9,7 @@
       </view>
       <view class="hc-connector">
         <view class="hc-line"></view>
-        <view class="hc-icon">🤝</view>
+        <view class="hc-icon">合</view>
         <view class="hc-line"></view>
       </view>
       <view class="hc-side">
@@ -37,11 +37,11 @@
   <view class="card">
     <view class="quick-actions">
       <view class="qa-btn" wx:if="{{canSignContract}}" data-key="sign" bindtap="onAction">
-        <view class="qa-icon">✍️</view>
+        <view class="qa-icon" style="background:linear-gradient(135deg,#0f766e,#14b8a6)">签</view>
         <view class="qa-label">签订合同</view>
       </view>
       <view class="qa-btn" wx:if="{{canReconciliation}}" data-key="reconciliation" bindtap="onAction">
-        <view class="qa-icon">💰</view>
+        <view class="qa-icon" style="background:linear-gradient(135deg,#3b82f6,#6366f1)">账</view>
         <view class="qa-label">对账情况</view>
       </view>
     </view>

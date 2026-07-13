@@ -6,7 +6,7 @@
       <view class="pi-name">{{myCompanyName}}</view>
       <view class="pi-tag">我方</view>
     </view>
-    <view class="party-vs">✍️</view>
+    <view class="party-vs">签</view>
     <view class="party-item">
       <view class="pi-avatar cp">{{counterpartyName[0]}}</view>
       <view class="pi-name">{{counterpartyName}}</view>

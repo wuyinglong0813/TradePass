@@ -181,8 +181,9 @@ page { background: #f5f6f8; }
 .menu-row:last-child { border-bottom: none; }
 
 .menu-icon {
-  font-size: 36rpx;
-  margin-right: 20rpx;
+  width: 72rpx; height: 72rpx; border-radius: 16rpx;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 28rpx; font-weight: 700; color: #fff; margin-right: 20rpx; flex-shrink: 0;
 }
 
 .menu-label {

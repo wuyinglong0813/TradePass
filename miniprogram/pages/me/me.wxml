@@ -42,17 +42,17 @@
   <view class="card">
     <view class="section-title">设置</view>
     <view class="menu-row" bindtap="openPrivacy">
-      <view class="menu-icon">🔒</view>
+      <view class="menu-icon" style="background:linear-gradient(135deg,#64748b,#94a3b8)">密</view>
       <view class="menu-label">隐私设置</view>
       <view class="arrow">›</view>
     </view>
     <view class="menu-row" bindtap="openAgreement">
-      <view class="menu-icon">📄</view>
+      <view class="menu-icon" style="background:linear-gradient(135deg,#3b82f6,#6366f1)">协</view>
       <view class="menu-label">用户协议</view>
       <view class="arrow">›</view>
     </view>
     <view class="menu-row" bindtap="openAbout">
-      <view class="menu-icon">ℹ️</view>
+      <view class="menu-icon" style="background:linear-gradient(135deg,#0f766e,#14b8a6)">i</view>
       <view class="menu-label">关于商签通</view>
       <view class="arrow">›</view>
     </view>

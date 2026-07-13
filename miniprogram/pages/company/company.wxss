@@ -208,8 +208,9 @@ page { background: #f5f6f8; }
 .menu-row:last-child { border-bottom: none; }
 
 .menu-icon {
-  font-size: 40rpx;
-  margin-right: 20rpx;
+  width: 80rpx; height: 80rpx; border-radius: 18rpx;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 30rpx; font-weight: 700; color: #fff; margin-right: 20rpx; flex-shrink: 0;
 }
 
 .menu-main { flex: 1; }

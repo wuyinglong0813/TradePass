@@ -37,7 +37,7 @@
       data-template="{{item}}"
       bindtap="onTemplateTap">
       <view class="tpl-top">
-        <view class="tpl-icon">📋</view>
+        <view class="tpl-icon">📄</view>
         <view class="tpl-info">
           <view class="tpl-name">{{item.name}}</view>
           <view class="tpl-meta">{{item.category}}</view>
