@@ -83,8 +83,7 @@ const DEFAULT_TEMPLATE = {
     { key: 'contractNo', label: '合同编号', value: '', editable: false, hint: '签订时自动生成' },
     { key: 'supplier', label: '供方（甲方）', value: '', editable: true },
     { key: 'buyer', label: '需方（乙方）', value: '', editable: true },
-    { key: 'signDate', label: '签订日期', value: '', editable: true, type: 'date' },
-    { key: 'signPlace', label: '签订地点', value: '', editable: true }
+    { key: 'signDate', label: '签订日期', value: '', editable: true, type: 'date' }
   ],
   sections: [
     {
