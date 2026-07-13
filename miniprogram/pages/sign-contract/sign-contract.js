@@ -1,15 +1,25 @@
+const { calcTableTotal } = require('../../utils/chineseCurrency');
+
 Page({
   data: {
     counterpartyName: '',
     myCompanyName: '',
-    // 表单
-    templateIndex: 0,
+    // 模板
     templates: [],
-    contractName: '',
-    startDate: '',
-    endDate: '',
-    amount: '',
-    terms: ''
+    templateIndex: -1,
+    // 合同编号（签订时自动生成）
+    contractNo: '',
+    // 头部字段（供方/需方/日期/地点）
+    fields: [],
+    // 产品表格
+    tableSection: null,
+    tableRows: [],
+    totalAmount: '0',
+    totalAmountCn: '零元整',
+    // 条款
+    clauses: [],
+    // 是否已选择模板
+    hasTemplate: false
   },
 
   onLoad(options) {
@@ -25,38 +35,142 @@ Page({
     this.loadTemplates();
   },
 
-  loadTemplates() {
-    // 复用合同模板列表（后续可接独立接口）
+  async loadTemplates() {
+    const { request } = require('../../utils/request');
+    try {
+      const list = await request({ url: '/contract-templates' });
+      const templates = (list || []).map(t => ({ id: t.id, name: t.name, content: t.content }));
+      this.setData({ templates });
+      // 默认选中第一个模板
+      if (templates.length > 0) {
+        this.selectTemplate(0);
+      }
+    } catch (e) {
+      // 静默
+    }
+  },
+
+  selectTemplate(idx) {
+    const tpl = this.data.templates[idx];
+    if (!tpl) return;
+    let content;
+    try {
+      content = JSON.parse(tpl.content || '{}');
+    } catch (e) {
+      wx.showToast({ title: '模板格式异常', icon: 'none' });
+      return;
+    }
+    if (!content.fields && !content.sections) {
+      wx.showToast({ title: '模板内容为空', icon: 'none' });
+      return;
+    }
+
+    const myName = this.data.myCompanyName;
+    const cpName = this.data.counterpartyName;
+
+    // 自动填充字段
+    const fields = (content.fields || []).map(f => {
+      let value = f.value || '';
+      if (f.key === 'supplier') value = cpName;   // 供方=对方公司
+      else if (f.key === 'buyer') value = myName;  // 需方=我司
+      else if (f.key === 'signDate') value = new Date().toISOString().slice(0, 10);
+      return { ...f, value };
+    });
+
+    const tableSection = (content.sections || []).find(s => s.type === 'table');
+    const clauses = (content.sections || []).filter(s => s.type === 'clause');
+    const rows = (tableSection && tableSection.rows) ? tableSection.rows.map(r => [...r]) : [['', '', '', '0', '0', '0']];
+    const result = calcTableTotal(rows);
+
     this.setData({
-      templates: ['标准采购合同模板', '框架供货协议模板', '单笔交易合同模板', '物流服务合同模板']
+      templateIndex: idx,
+      fields,
+      tableSection: tableSection ? { title: tableSection.title, columns: [...tableSection.columns] } : null,
+      tableRows: result.rows,
+      totalAmount: String(result.totalAmount),
+      totalAmountCn: result.totalAmountCn,
+      clauses: clauses.map(c => ({ title: c.title || '', content: c.content || '' })),
+      hasTemplate: true
     });
   },
 
   onTemplateChange(e) {
-    this.setData({ templateIndex: parseInt(e.detail.value) });
+    const idx = parseInt(e.detail.value);
+    if (idx >= 0) {
+      this.selectTemplate(idx);
+    }
   },
 
-  /* 日期选择 */
-  onStartDateChange(e) { this.setData({ startDate: e.detail.value }); },
-  onEndDateChange(e) { this.setData({ endDate: e.detail.value }); },
+  // ======= 字段编辑 =======
+  onFieldChange(e) {
+    const index = e.currentTarget.dataset.index;
+    this.setData({ [`fields[${index}].value`]: e.detail.value });
+  },
 
-  /* 文本输入 */
-  onContractNameInput(e) { this.setData({ contractName: e.detail.value }); },
-  onAmountInput(e) { this.setData({ amount: e.detail.value }); },
-  onTermsInput(e) { this.setData({ terms: e.detail.value }); },
+  onDateFieldChange(e) {
+    const index = e.currentTarget.dataset.index;
+    this.setData({ [`fields[${index}].value`]: e.detail.value });
+  },
 
-  /* 提交签订 */
+  // ======= 产品表格编辑 =======
+  onTableCellChange(e) {
+    const { row, col } = e.currentTarget.dataset;
+    const rows = [...this.data.tableRows];
+    rows[row][col] = e.detail.value;
+    this.recalcTable(rows);
+  },
+
+  addTableRow() {
+    const cols = this.data.tableSection ? this.data.tableSection.columns.length : 6;
+    const newRow = new Array(cols).fill('0');
+    newRow[0] = ''; newRow[1] = ''; newRow[2] = '';
+    const rows = [...this.data.tableRows, newRow];
+    this.recalcTable(rows);
+  },
+
+  deleteTableRow(e) {
+    const index = e.currentTarget.dataset.index;
+    if (this.data.tableRows.length <= 1) return;
+    const rows = this.data.tableRows.filter((_, i) => i !== index);
+    this.recalcTable(rows);
+  },
+
+  recalcTable(rows) {
+    const result = calcTableTotal(rows);
+    this.setData({
+      tableRows: result.rows,
+      totalAmount: String(result.totalAmount),
+      totalAmountCn: result.totalAmountCn
+    });
+  },
+
+  // ======= 提交 =======
   async onSubmit() {
-    const { templateIndex, templates, contractName, startDate, endDate, amount, terms, counterpartyName } = this.data;
-    if (!contractName.trim()) { wx.showToast({ title: '请输入合同名称', icon: 'none' }); return; }
-    if (!startDate) { wx.showToast({ title: '请选择开始日期', icon: 'none' }); return; }
-    if (!endDate) { wx.showToast({ title: '请选择结束日期', icon: 'none' }); return; }
-    if (!amount.trim()) { wx.showToast({ title: '请输入合同金额', icon: 'none' }); return; }
+    const { templates, templateIndex, fields, tableSection, tableRows, totalAmount, clauses, counterpartyName, myCompanyName } = this.data;
+    if (templateIndex < 0) { wx.showToast({ title: '请选择合同模板', icon: 'none' }); return; }
+
+    const total = parseFloat(totalAmount) || 0;
+
+    // 构建完整合同 JSON 存入 terms
+    const contractContent = JSON.stringify({
+      title: '购销合同',
+      fields: fields.map(f => ({ ...f })),
+      sections: [
+        ...(tableSection ? [{
+          title: tableSection.title,
+          type: 'table',
+          columns: [...tableSection.columns],
+          rows: tableRows.map(r => [r[0] || '', r[1] || '', r[2] || '', r[3] || '0', r[4] || '0', r[5] || '0']),
+          summary: { totalAmount: totalAmount, totalAmountCn: this.data.totalAmountCn }
+        }] : []),
+        ...clauses.map(c => ({ title: c.title, type: 'clause', content: c.content }))
+      ]
+    });
 
     const res = await new Promise(r => {
       wx.showModal({
         title: '确认签订',
-        content: `即将与 ${counterpartyName} 签订合同"${contractName}"\n金额：¥${amount}\n模板：${templates[templateIndex]}\n\n发起后需对方公司审批通过方可生效`,
+        content: `即将与 ${counterpartyName} 签订合同\n金额：¥${totalAmount}\n模板：${templates[templateIndex].name}\n\n发起后需对方公司审批通过方可生效`,
         success: r
       });
     });
@@ -70,12 +184,12 @@ Page({
         method: 'POST',
         data: {
           counterpartyName,
-          name: contractName.trim(),
-          templateName: templates[templateIndex],
-          amount: parseFloat(amount),
-          startDate,
-          endDate,
-          terms: terms || ''
+          name: '购销合同',
+          templateName: templates[templateIndex].name,
+          amount: total,
+          startDate: (fields.find(f => f.key === 'signDate') || {}).value || '',
+          endDate: '',
+          terms: contractContent
         }
       });
       wx.hideLoading();

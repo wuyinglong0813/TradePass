@@ -14,54 +14,119 @@
     </view>
   </view>
 
-  <!-- 表单 -->
-  <view class="form">
-    <!-- 模板选择 -->
+  <!-- 模板选择 -->
+  <view class="card">
     <view class="form-group">
       <view class="form-label">合同模板</view>
-      <picker mode="selector" range="{{templates}}" value="{{templateIndex}}" bindchange="onTemplateChange">
-        <view class="form-picker">{{templates[templateIndex]}} ▾</view>
+      <picker mode="selector" range="{{templates}}" range-key="name" value="{{templateIndex}}" bindchange="onTemplateChange">
+        <view class="form-picker">{{templates[templateIndex] ? templates[templateIndex].name : '请选择模板'}} ▾</view>
       </picker>
     </view>
+  </view>
 
-    <!-- 合同名称 -->
-    <view class="form-group">
-      <view class="form-label">合同名称</view>
-      <input class="form-input" placeholder="请输入合同名称" value="{{contractName}}" bindinput="onContractNameInput"/>
+  <!-- 合同预览 -->
+  <block wx:if="{{hasTemplate}}">
+    <!-- 合同标题 -->
+    <view class="card contract-title-card">
+      <view class="ct-title">购销合同</view>
+      <view class="ct-no">合同编号：签订时自动生成</view>
     </view>
 
-    <!-- 日期 -->
-    <view class="form-group">
-      <view class="form-label">合同期限</view>
-      <view class="form-row">
-        <picker mode="date" value="{{startDate}}" bindchange="onStartDateChange">
-          <view class="form-date">{{startDate || '开始日期'}}</view>
-        </picker>
-        <view class="form-date-sep">至</view>
-        <picker mode="date" value="{{endDate}}" bindchange="onEndDateChange">
-          <view class="form-date">{{endDate || '结束日期'}}</view>
-        </picker>
+    <!-- 头部字段 -->
+    <view class="card">
+      <view class="section-title">合同信息</view>
+      <view class="field-row" wx:for="{{fields}}" wx:key="key">
+        <view class="field-label">{{item.label}}</view>
+
+        <block wx:if="{{item.type === 'date'}}">
+          <picker mode="date" value="{{item.value}}" data-index="{{index}}" bindchange="onDateFieldChange">
+            <view class="field-value date {{item.value ? '' : 'placeholder'}}">{{item.value || '请选择日期'}}</view>
+          </picker>
+        </block>
+
+        <block wx:elif="{{!item.editable}}">
+          <view class="field-value locked">
+            <text class="locked-icon">🔒</text>
+            <text class="locked-text">{{item.hint || '自动生成'}}</text>
+          </view>
+        </block>
+
+        <block wx:else>
+          <input class="field-input" placeholder="{{item.hint || ''}}" value="{{item.value}}" data-index="{{index}}" bindinput="onFieldChange"/>
+        </block>
       </view>
     </view>
 
-    <!-- 金额 -->
-    <view class="form-group">
-      <view class="form-label">合同金额</view>
-      <view class="form-amount-wrap">
-        <view class="form-currency">¥</view>
-        <input class="form-amount" type="digit" placeholder="请输入金额" value="{{amount}}" bindinput="onAmountInput"/>
+    <!-- 产品表格 -->
+    <view class="card" wx:if="{{tableSection}}">
+      <view class="section-title">{{tableSection.title}}</view>
+      <scroll-view class="table-scroll" scroll-x enable-flex>
+        <view class="table-wrap">
+          <view class="table-row table-header">
+            <view class="th" wx:for="{{tableSection.columns}}" wx:key="*this">
+              <text>{{item}}</text>
+            </view>
+            <view class="th th-del"></view>
+          </view>
+          <view class="table-row" wx:for="{{tableRows}}" wx:key="*this" wx:for-index="ri">
+            <view class="td" wx:for="{{tableSection.columns}}" wx:key="*this" wx:for-index="ci">
+              <block wx:if="{{ci >= 3 && ci < 5}}">
+                <input class="td-input num" type="digit"
+                  value="{{item[ci]}}"
+                  data-row="{{ri}}" data-col="{{ci}}"
+                  bindinput="onTableCellChange"/>
+              </block>
+              <block wx:elif="{{ci === 5}}">
+                <input class="td-input num auto" type="digit" value="{{item[ci]}}" disabled/>
+              </block>
+              <block wx:else>
+                <input class="td-input" type="text"
+                  value="{{item[ci]}}"
+                  data-row="{{ri}}" data-col="{{ci}}"
+                  bindinput="onTableCellChange"/>
+              </block>
+            </view>
+            <view class="td td-del">
+              <view class="del-btn" data-index="{{ri}}" bindtap="deleteTableRow">✕</view>
+            </view>
+          </view>
+        </view>
+      </scroll-view>
+      <view class="table-add" bindtap="addTableRow">＋ 添加产品行</view>
+
+      <view class="table-summary">
+        <view class="sum-row">
+          <text class="sum-label">合计：</text>
+          <text class="sum-amount">¥{{totalAmount}}</text>
+        </view>
+        <view class="sum-row">
+          <text class="sum-label">大写：</text>
+          <text class="sum-chinese">{{totalAmountCn}}</text>
+        </view>
       </view>
     </view>
 
-    <!-- 条款备注 -->
-    <view class="form-group">
-      <view class="form-label">合同条款（选填）</view>
-      <textarea class="form-textarea" placeholder="请输入合同主要条款..." value="{{terms}}" bindinput="onTermsInput" maxlength="500"/>
+    <!-- 条款（只读展示） -->
+    <view class="card" wx:if="{{clauses.length > 0}}">
+      <view class="section-title">合同条款</view>
+      <view class="clause-ro" wx:for="{{clauses}}" wx:key="*this">
+        <view class="clause-ro-title">{{item.title}}</view>
+        <view class="clause-ro-content">{{item.content || '（无内容）'}}</view>
+      </view>
     </view>
+  </block>
+
+  <!-- 空态 -->
+  <view class="card empty-card" wx:if="{{!hasTemplate && templates.length === 0}}">
+    <view class="empty-icon">📋</view>
+    <view class="empty-text">暂无可用合同模板</view>
+    <view class="empty-sub">请先在合同模板库中创建模板</view>
   </view>
 
   <!-- 提交 -->
-  <view class="submit-area">
+  <view class="submit-area" wx:if="{{hasTemplate}}">
     <button class="submit-btn" bindtap="onSubmit">确认签订</button>
   </view>
+
+  <view class="safe-bottom"></view>
 </view>
