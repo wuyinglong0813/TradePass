@@ -24,6 +24,14 @@
     </view>
   </view>
 
+  <!-- 合同名称 -->
+  <view class="card">
+    <view class="form-group">
+      <view class="form-label">合同名称</view>
+      <input class="form-input" placeholder="请输入合同名称" value="{{contractName}}" bindinput="onContractNameInput"/>
+    </view>
+  </view>
+
   <!-- 合同预览 -->
   <block wx:if="{{hasTemplate}}">
     <!-- 合同标题 -->

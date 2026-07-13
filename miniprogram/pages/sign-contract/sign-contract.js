@@ -4,6 +4,8 @@ Page({
   data: {
     counterpartyName: '',
     myCompanyName: '',
+    // 合同名称
+    contractName: '',
     // 模板
     templates: [],
     templateIndex: -1,
@@ -85,6 +87,7 @@ Page({
 
     this.setData({
       templateIndex: idx,
+      contractName: this.data.contractName || (content.title || '购销合同'),
       fields,
       tableSection: tableSection ? { title: tableSection.title, columns: [...tableSection.columns] } : null,
       tableRows: result.rows,
@@ -94,6 +97,8 @@ Page({
       hasTemplate: true
     });
   },
+
+  onContractNameInput(e) { this.setData({ contractName: e.detail.value }); },
 
   onTemplateChange(e) {
     const idx = parseInt(e.detail.value);
@@ -147,8 +152,9 @@ Page({
 
   // ======= 提交 =======
   async onSubmit() {
-    const { templates, templateIndex, fields, tableSection, tableRows, totalAmount, clauses, counterpartyName, myCompanyName } = this.data;
+    const { templates, templateIndex, contractName, fields, tableSection, tableRows, totalAmount, clauses, counterpartyName, myCompanyName } = this.data;
     if (templateIndex < 0) { wx.showToast({ title: '请选择合同模板', icon: 'none' }); return; }
+    if (!contractName.trim()) { wx.showToast({ title: '请输入合同名称', icon: 'none' }); return; }
 
     const total = parseFloat(totalAmount) || 0;
 
@@ -185,7 +191,7 @@ Page({
         method: 'POST',
         data: {
           counterpartyName,
-          name: '购销合同',
+          name: contractName.trim(),
           templateName: templates[templateIndex].name,
           amount: total,
           startDate: (fields.find(f => f.key === 'signDate') || {}).value || null,
@@ -199,7 +205,7 @@ Page({
       // 签订成功后跳转到合同预览页查看完整合同
       setTimeout(() => {
         wx.redirectTo({
-          url: `/pages/contract-preview/contract-preview?contractId=${contractId}&contractName=${encodeURIComponent('购销合同')}&counterpartyName=${encodeURIComponent(counterpartyName)}`
+          url: `/pages/contract-preview/contract-preview?contractId=${contractId}&contractName=${encodeURIComponent(contractName.trim())}&counterpartyName=${encodeURIComponent(counterpartyName)}`
         });
       }, 1500);
     } catch (e) {
