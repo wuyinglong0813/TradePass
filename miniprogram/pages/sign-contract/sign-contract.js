@@ -194,8 +194,14 @@ Page({
         }
       });
       wx.hideLoading();
-      wx.showToast({ title: '合同已发起，等待对方审批', icon: 'success' });
-      setTimeout(() => wx.navigateBack(), 1500);
+      const contractId = String(result.id);
+      wx.showToast({ title: '合同已发起，等待对方审批', icon: 'success', duration: 1500 });
+      // 签订成功后跳转到合同预览页查看完整合同
+      setTimeout(() => {
+        wx.redirectTo({
+          url: `/pages/contract-preview/contract-preview?contractId=${contractId}&contractName=${encodeURIComponent('购销合同')}&counterpartyName=${encodeURIComponent(counterpartyName)}`
+        });
+      }, 1500);
     } catch (e) {
       wx.hideLoading();
       wx.showToast({ title: e.message, icon: 'none' });

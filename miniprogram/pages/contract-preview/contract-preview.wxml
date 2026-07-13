@@ -7,99 +7,150 @@
 
   <!-- Tab 切换 -->
   <view class="tabs">
-    <view
-      class="tab-item {{activeTab === item.key ? 'active' : ''}}"
-      wx:for="{{tabs}}"
-      wx:key="key"
-      data-tab="{{item.key}}"
-      bindtap="switchTab">{{item.label}}</view>
+    <view class="tab-item {{activeTab === item.key ? 'active' : ''}}"
+      wx:for="{{tabs}}" wx:key="key"
+      data-tab="{{item.key}}" bindtap="switchTab">{{item.label}}</view>
   </view>
 
-  <!-- 销售单 -->
+  <!-- ====== 合同详情 Tab ====== -->
+  <block wx:if="{{activeTab === 'detail'}}">
+    <view class="detail-loading" wx:if="{{!contract}}">
+      <view class="loading-text">加载中...</view>
+    </view>
+
+    <block wx:else>
+      <!-- 结构化合同 -->
+      <block wx:if="{{hasStructured}}">
+        <!-- 合同标题 -->
+        <view class="card s-title-card">
+          <view class="s-ct-title">{{sData.title || '购销合同'}}</view>
+          <view class="s-ct-no">合同编号：{{contract.id}}</view>
+          <view class="s-status status-{{contract.status === 'ACTIVE' ? 'active' : contract.status === 'PENDING' ? 'pending' : contract.status === 'REJECTED' ? 'rejected' : 'done'}}">{{contract.statusText}}</view>
+        </view>
+
+        <!-- 合同信息 -->
+        <view class="card" wx:if="{{sData.fields && sData.fields.length > 0}}">
+          <view class="section-title">合同信息</view>
+          <view class="s-row" wx:for="{{sData.fields}}" wx:key="key">
+            <view class="s-label">{{item.label}}</view>
+            <view class="s-value">{{item.value || '（未填写）'}}</view>
+          </view>
+        </view>
+
+        <!-- 产品表格 -->
+        <view class="card" wx:if="{{sData.sections}}">
+          <block wx:for="{{sData.sections}}" wx:for-item="sec" wx:key="title">
+            <block wx:if="{{sec.type === 'table'}}">
+              <view class="section-title">{{sec.title}}</view>
+              <scroll-view class="table-scroll" scroll-x enable-flex>
+                <view class="table-wrap">
+                  <view class="table-row table-header">
+                    <view class="th" wx:for="{{sec.columns}}" wx:for-item="col" wx:key="*this">{{col}}</view>
+                  </view>
+                  <view class="table-row" wx:for="{{sec.rows}}" wx:for-item="row" wx:key="*this">
+                    <view class="td" wx:for="{{sec.columns}}" wx:for-item="col" wx:for-index="ci" wx:key="ci">
+                      <text class="td-text">{{row[ci] || '-'}}</text>
+                    </view>
+                  </view>
+                </view>
+              </scroll-view>
+              <view class="table-summary" wx:if="{{sec.summary}}">
+                <view class="sum-row"><text class="sum-label">合计：</text><text class="sum-amount">¥{{sec.summary.totalAmount || '0'}}</text></view>
+                <view class="sum-row"><text class="sum-label">大写：</text><text class="sum-chinese">{{sec.summary.totalAmountCn || '零元整'}}</text></view>
+              </view>
+            </block>
+            <block wx:elif="{{sec.type === 'clause'}}">
+              <view class="clause-block">
+                <view class="clause-title">{{sec.title}}</view>
+                <view class="clause-text">{{sec.content || '（无）'}}</view>
+              </view>
+            </block>
+          </block>
+        </view>
+      </block>
+
+      <!-- 旧版简单合同 -->
+      <block wx:else>
+        <view class="card detail-card">
+          <view class="d-header">
+            <view class="d-name">{{contract.name}}</view>
+            <view class="d-status status-{{contract.status === 'ACTIVE' ? 'active' : contract.status === 'PENDING' ? 'pending' : contract.status === 'REJECTED' ? 'rejected' : 'done'}}">{{contract.statusText}}</view>
+          </view>
+          <view class="d-row"><view class="d-label">合作方</view><view class="d-value">{{contract.counterpartyName}}</view></view>
+          <view class="d-row"><view class="d-label">合同模板</view><view class="d-value">{{contract.templateName || '未指定'}}</view></view>
+          <view class="d-row"><view class="d-label">合同金额</view><view class="d-value d-amount">¥{{contract.amount}}</view></view>
+          <view class="d-row"><view class="d-label">合同期限</view><view class="d-value">{{contract.startDate || '-'}} ~ {{contract.endDate || '-'}}</view></view>
+          <view class="d-row"><view class="d-label">创建时间</view><view class="d-value d-date">{{contract.createdAt || '-'}}</view></view>
+          <view class="d-terms" wx:if="{{contract.terms}}">
+            <view class="d-terms-title">合同条款</view>
+            <view class="d-terms-content">{{contract.terms}}</view>
+          </view>
+          <view class="d-terms-empty" wx:else>
+            <view class="empty-icon">📝</view><view class="empty-text">未填写合同条款</view>
+          </view>
+        </view>
+      </block>
+    </block>
+  </block>
+
+  <!-- 销售单 / 物流单 / 发票浏览 -->
   <block wx:if="{{activeTab === 'sales'}}">
     <view class="list-empty" wx:if="{{salesList.length === 0}}">
-      <view class="empty-icon">📦</view>
-      <view class="empty-text">暂无销售单</view>
+      <view class="empty-icon">📦</view><view class="empty-text">暂无销售单</view>
     </view>
     <view class="list" wx:else>
-      <view class="order-card"
-        wx:for="{{salesList}}"
-        wx:key="id"
-        data-type="销售单"
-        data-id="{{item.id}}"
-        bindtap="onItemTap">
-        <view class="oc-top">
-          <view class="oc-no">{{item.orderNo}}</view>
-          <view class="oc-status {{item.status === '已签收' ? 'done' : item.status === '已发货' ? 'shipped' : 'pending'}}">{{item.status}}</view>
-        </view>
-        <view class="oc-body">
-          <view class="oc-product">{{item.product}}</view>
-          <view class="oc-qty">×{{item.qty}}</view>
-        </view>
-        <view class="oc-bottom">
-          <view class="oc-date">{{item.date}}</view>
-          <view class="oc-amount">¥{{item.amount}}</view>
-        </view>
+      <view class="order-card" wx:for="{{salesList}}" wx:key="id" data-type="销售单" data-item="{{item}}" bindtap="onItemTap">
+        <view class="oc-top"><view class="oc-no">{{item.orderNo}}</view><view class="oc-status {{item.status === '已确认' ? 'done' : 'pending'}}">{{item.status}}</view></view>
+        <view class="oc-body"><view class="oc-product">{{item.product}}</view><view class="oc-qty">×{{item.qty}}</view></view>
+        <view class="oc-bottom"><view class="oc-date">{{item.date}}</view><view class="oc-amount">¥{{item.amount}}</view></view>
       </view>
     </view>
   </block>
 
-  <!-- 物流单 -->
   <block wx:if="{{activeTab === 'logistics'}}">
     <view class="list-empty" wx:if="{{logisticsList.length === 0}}">
-      <view class="empty-icon">🚚</view>
-      <view class="empty-text">暂无物流单</view>
+      <view class="empty-icon">🚚</view><view class="empty-text">暂无物流单</view>
     </view>
     <view class="list" wx:else>
-      <view class="order-card"
-        wx:for="{{logisticsList}}"
-        wx:key="id"
-        data-type="物流单"
-        data-id="{{item.id}}"
-        bindtap="onItemTap">
-        <view class="oc-top">
-          <view class="oc-no">{{item.trackingNo}}</view>
-          <view class="oc-status {{item.status === '已签收' ? 'done' : 'shipped'}}">{{item.status}}</view>
-        </view>
-        <view class="oc-body">
-          <view class="oc-product">{{item.carrier}}</view>
-          <view class="oc-qty">{{item.weight}}</view>
-        </view>
-        <view class="oc-bottom">
-          <view class="oc-date">{{item.date}}</view>
-        </view>
+      <view class="order-card" wx:for="{{logisticsList}}" wx:key="id" data-type="物流单" data-item="{{item}}" bindtap="onItemTap">
+        <view class="oc-top"><view class="oc-no">{{item.trackingNo}}</view><view class="oc-status {{item.status === '已签收' ? 'done' : 'shipped'}}">{{item.status}}</view></view>
+        <view class="oc-body"><view class="oc-product">{{item.carrier}}</view><view class="oc-qty">{{item.weight}}</view></view>
+        <view class="oc-bottom"><view class="oc-date">{{item.date}}</view></view>
       </view>
     </view>
   </block>
 
-  <!-- 发票浏览 -->
   <block wx:if="{{activeTab === 'invoice'}}">
     <view class="list-empty" wx:if="{{invoiceList.length === 0}}">
-      <view class="empty-icon">🧾</view>
-      <view class="empty-text">暂无发票</view>
+      <view class="empty-icon">🧾</view><view class="empty-text">暂无发票</view>
     </view>
     <view class="list" wx:else>
-      <view class="order-card"
-        wx:for="{{invoiceList}}"
-        wx:key="id"
-        data-type="发票"
-        data-id="{{item.id}}"
-        bindtap="onItemTap">
-        <view class="oc-top">
-          <view class="oc-no">{{item.invoiceNo}}</view>
-          <view class="oc-status {{item.status === '已开票' ? 'done' : 'pending'}}">{{item.status}}</view>
-        </view>
-        <view class="oc-body">
-          <view class="oc-product">{{item.type}}</view>
-          <view class="oc-qty">税率{{item.taxRate}}</view>
-        </view>
-        <view class="oc-bottom">
-          <view class="oc-date">{{item.date}}</view>
-          <view class="oc-amount">¥{{item.amount}}</view>
-        </view>
+      <view class="order-card" wx:for="{{invoiceList}}" wx:key="id" data-type="发票" data-item="{{item}}" bindtap="onItemTap">
+        <view class="oc-top"><view class="oc-no">{{item.invoiceNo}}</view><view class="oc-status {{item.status === '已开票' ? 'done' : 'pending'}}">{{item.status}}</view></view>
+        <view class="oc-body"><view class="oc-product">{{item.type}}</view><view class="oc-qty">税率{{item.taxRate}}</view></view>
+        <view class="oc-bottom"><view class="oc-date">{{item.date}}</view><view class="oc-amount">¥{{item.amount}}</view></view>
       </view>
     </view>
   </block>
 
   <view class="page-end">— 已经到底了 —</view>
+
+  <!-- 详情面板 -->
+  <view class="mask" wx:if="{{showDetail}}" bindtap="closeDetail">
+    <view class="panel" catchtap="noop">
+      <view class="panel-header"><view class="panel-title">{{detailTitle}}</view><view class="panel-close" bindtap="closeDetail">✕</view></view>
+      <view class="timeline" wx:if="{{detailSteps && detailSteps.length > 0}}">
+        <view class="tl-item" wx:for="{{detailSteps}}" wx:key="title">
+          <view class="tl-dot {{item.done ? 'done' : ''}} {{item.active ? 'active' : ''}}"><view class="tl-dot-inner"></view></view>
+          <view class="tl-info"><view class="tl-title {{item.active ? 'active' : ''}}">{{item.title}}</view><view class="tl-time" wx:if="{{item.time}}">{{item.time}}</view></view>
+        </view>
+      </view>
+      <view class="panel-fields">
+        <view class="pf-row" wx:for="{{detailFields}}" wx:key="label">
+          <view class="pf-label">{{item.label}}</view><view class="pf-value {{item.highlight ? 'hl' : ''}} {{item.amount ? 'amount' : ''}}">{{item.value}}</view>
+        </view>
+      </view>
+      <view class="panel-btn-wrap"><button class="panel-btn" bindtap="closeDetail">关闭</button></view>
+    </view>
+  </view>
 </view>
