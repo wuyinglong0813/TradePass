@@ -147,7 +147,7 @@ public class TradeController {
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String category) {
         long companyId = AuthContext.requireCompanyId();
-        StringBuilder sql = new StringBuilder("SELECT id, name, category, content, created_at, updated_at FROM contract_template WHERE company_id = ?");
+        StringBuilder sql = new StringBuilder("SELECT t.id, t.name, t.category, t.content, t.created_by, t.updated_by, t.created_at, t.updated_at, u1.nickname AS created_by_name, u2.nickname AS updated_by_name FROM contract_template t LEFT JOIN sys_user u1 ON t.created_by = u1.id LEFT JOIN sys_user u2 ON t.updated_by = u2.id WHERE t.company_id = ?");
         List<Object> params = new java.util.ArrayList<>();
         params.add(companyId);
         if (keyword != null && !keyword.isBlank()) {
@@ -164,7 +164,7 @@ public class TradeController {
 
     @GetMapping("/contract-templates/{id}")
     public ApiResponse<Map<String, Object>> getTemplate(@PathVariable Long id) {
-        var rows = db.queryForList("SELECT id, name, category, content, created_at, updated_at FROM contract_template WHERE id = ?", id);
+        var rows = db.queryForList("SELECT t.id, t.name, t.category, t.content, t.created_by, t.updated_by, t.created_at, t.updated_at, u1.nickname AS created_by_name, u2.nickname AS updated_by_name FROM contract_template t LEFT JOIN sys_user u1 ON t.created_by = u1.id LEFT JOIN sys_user u2 ON t.updated_by = u2.id WHERE t.id = ?", id);
         if (rows.isEmpty()) throw new BusinessException("模板不存在");
         return ApiResponse.ok(rows.get(0));
     }
@@ -176,10 +176,11 @@ public class TradeController {
         String category = (String) body.getOrDefault("category", "");
         String content = (String) body.getOrDefault("content", "");
         if (name.isBlank()) throw new BusinessException("模板名称不能为空");
-        db.update("INSERT INTO contract_template (company_id, name, category, content) VALUES (?,?,?,?)",
-                companyId, name, category, content);
+        long userId = AuthContext.userId();
+        db.update("INSERT INTO contract_template (company_id, name, category, content, created_by) VALUES (?,?,?,?,?)",
+                companyId, name, category, content, userId);
         long id = db.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
-        return ApiResponse.ok(db.queryForList("SELECT id, name, category, content, created_at, updated_at FROM contract_template WHERE id = ?", id).get(0));
+        return ApiResponse.ok(db.queryForList("SELECT id, name, category, content, created_by, updated_by, created_at, updated_at FROM contract_template WHERE id = ?", id).get(0));
     }
 
     @PostMapping("/contract-templates/{id}")
@@ -188,8 +189,9 @@ public class TradeController {
         String category = (String) body.getOrDefault("category", "");
         String content = (String) body.getOrDefault("content", "");
         if (name.isBlank()) throw new BusinessException("模板名称不能为空");
-        db.update("UPDATE contract_template SET name = ?, category = ?, content = ? WHERE id = ?", name, category, content, id);
-        return ApiResponse.ok(db.queryForList("SELECT id, name, category, content, created_at, updated_at FROM contract_template WHERE id = ?", id).get(0));
+        long userId = AuthContext.userId();
+        db.update("UPDATE contract_template SET name = ?, category = ?, content = ?, updated_by = ? WHERE id = ?", name, category, content, userId, id);
+        return ApiResponse.ok(db.queryForList("SELECT id, name, category, content, created_by, updated_by, created_at, updated_at FROM contract_template WHERE id = ?", id).get(0));
     }
 
     @PostMapping("/contract-templates/{id}/delete")
@@ -199,6 +201,26 @@ public class TradeController {
     }
 
     // ---- 合同 ----
+
+    @GetMapping("/contracts/{id:\\d+}")
+    public ApiResponse<ContractPayload> getContract(@PathVariable Long id) {
+        var rows = db.queryForList("SELECT * FROM trade_contract WHERE id = ?", id);
+        if (rows.isEmpty()) throw new BusinessException("合同不存在");
+        var r = rows.get(0);
+        return ApiResponse.ok(new ContractPayload(
+                String.valueOf((Long) r.get("id")),
+                (String) r.get("counterparty_name"),
+                (String) r.get("name"),
+                (String) r.get("template_name"),
+                (java.math.BigDecimal) r.get("amount"),
+                r.get("start_date") != null ? r.get("start_date").toString() : null,
+                r.get("end_date") != null ? r.get("end_date").toString() : null,
+                (String) r.get("terms"),
+                (String) r.get("status"),
+                String.valueOf((Long) r.get("initiated_by")),
+                r.get("created_at") != null ? r.get("created_at").toString() : null
+        ));
+    }
 
     @GetMapping("/contracts")
     public ApiResponse<List<ContractPayload>> listContracts(@RequestParam(required = false) String counterpartyName) {
@@ -259,6 +281,27 @@ public class TradeController {
         if (rows.isEmpty()) throw new BusinessException("合同不存在或状态不是待审批");
         db.update("UPDATE trade_contract SET status = 'REJECTED' WHERE id = ?", id);
         return ApiResponse.ok("合同已拒绝");
+    }
+
+    /** 我发起的合同列表（查看我发起的所有合同进度） */
+    @GetMapping("/contracts/initiated")
+    public ApiResponse<List<ContractPayload>> myInitiatedContracts() {
+        long userId = AuthContext.userId();
+        var rows = db.queryForList("SELECT * FROM trade_contract WHERE initiated_by = ? ORDER BY created_at DESC", userId);
+        List<ContractPayload> list = rows.stream().map(r -> new ContractPayload(
+                String.valueOf((Long) r.get("id")),
+                (String) r.get("counterparty_name"),
+                (String) r.get("name"),
+                (String) r.get("template_name"),
+                (java.math.BigDecimal) r.get("amount"),
+                r.get("start_date") != null ? r.get("start_date").toString() : null,
+                r.get("end_date") != null ? r.get("end_date").toString() : null,
+                (String) r.get("terms"),
+                (String) r.get("status"),
+                String.valueOf((Long) r.get("initiated_by")),
+                r.get("created_at") != null ? r.get("created_at").toString() : null
+        )).toList();
+        return ApiResponse.ok(list);
     }
 
     /** 待审批的合同列表（我是对方公司，看别人发给我的合同） */

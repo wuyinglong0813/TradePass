@@ -44,7 +44,12 @@
         </view>
         <view class="arrow">›</view>
       </view>
-      <view class="tpl-footer">更新于 {{item.updatedAt}}</view>
+      <view class="tpl-footer">
+        <text wx:if="{{item.createdBy}}">{{item.createdBy}} 创建</text>
+        <text wx:else>系统 创建</text>
+        <text class="tpl-divider" wx:if="{{item.updatedAt}}">·</text>
+        <text wx:if="{{item.updatedAt}}">更新于 {{item.updatedAt}}</text>
+      </view>
     </view>
   </view>
 

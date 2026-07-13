@@ -39,6 +39,7 @@ Page({
         id: parseInt(t.id),
         name: t.name,
         category: t.category || '通用',
+        createdBy: t.created_by_name || '',
         updatedAt: (t.updated_at || t.created_at || '').substring(0, 10)
       }));
       this.setData({ templates });

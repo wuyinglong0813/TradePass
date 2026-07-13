@@ -206,11 +206,16 @@ public class AuthController {
                 name VARCHAR(256) NOT NULL,
                 category VARCHAR(64),
                 content TEXT,
+                created_by BIGINT,
+                updated_by BIGINT,
                 created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 INDEX idx_company (company_id)
             )
         """);
+        // 兼容旧表
+        try { db.execute("ALTER TABLE contract_template ADD COLUMN created_by BIGINT"); } catch (Exception ignored) {}
+        try { db.execute("ALTER TABLE contract_template ADD COLUMN updated_by BIGINT"); } catch (Exception ignored) {}
         // 种子模板
         // 模板分类表
         db.execute("""

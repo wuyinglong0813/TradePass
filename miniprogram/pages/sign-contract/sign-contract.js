@@ -188,8 +188,8 @@ Page({
           name: '购销合同',
           templateName: templates[templateIndex].name,
           amount: total,
-          startDate: (fields.find(f => f.key === 'signDate') || {}).value || '',
-          endDate: '',
+          startDate: (fields.find(f => f.key === 'signDate') || {}).value || null,
+          endDate: null,
           terms: contractContent
         }
       });
