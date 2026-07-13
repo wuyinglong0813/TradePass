@@ -87,7 +87,7 @@ const DEFAULT_TEMPLATE = {
   ],
   sections: [
     {
-      title: '一、产品名称、规格、数量、单价、金额',
+      title: '产品名称、规格、数量、单价、金额',
       type: 'table',
       columns: ['产品名称', '规格型号', '单位', '数量', '单价(元)', '金额(元)'],
       rows: [['', '', '', '0', '0', '0']]
@@ -145,13 +145,13 @@ function toChineseNum(n) {
  */
 function reorderClauses(clauses) {
   return (clauses || []).map((c, i) => {
-    // 去除标题中可能已有的中文数字前缀（如 "二、xxx" → "xxx"）
+    // 去除标题中可能已有的中文数字前缀（如 "一、xxx" → "xxx"）
     const title = (c.title || '').replace(/^[一二三四五六七八九十]+、\s*/, '');
     return {
       title,
       content: c.content || '',
-      _num: toChineseNum(i + 2),
-      _label: toChineseNum(i + 2) + '、'
+      _num: toChineseNum(i + 1),
+      _label: toChineseNum(i + 1) + '、'
     };
   });
 }
