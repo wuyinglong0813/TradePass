@@ -25,7 +25,8 @@ Page({
     currentCompanyId: '',
     todos: [],
     showJoinModal: false,
-    joinCode: ''
+    joinCode: '',
+    showInventoryModal: false
   },
 
   onShow() {
@@ -111,6 +112,10 @@ Page({
   goAuthManage() { wx.navigateTo({ url: '/pages/auth-manage/auth-manage' }); },
   goRoleManage() { wx.navigateTo({ url: '/pages/role-manage/role-manage' }); },
   goContractTemplate() { wx.navigateTo({ url: '/pages/contract-template/contract-template' }); },
+  goInventory() {
+    this.setData({ showInventoryModal: true });
+  },
+  closeInventoryModal() { this.setData({ showInventoryModal: false }); },
 
   openJoin() { this.setData({ showJoinModal: true, joinCode: '' }); },
   closeJoin() { this.setData({ showJoinModal: false }); },

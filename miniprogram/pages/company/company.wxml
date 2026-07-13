@@ -100,6 +100,14 @@
           </view>
           <view class="arrow">›</view>
         </view>
+        <view class="menu-row" bindtap="goInventory">
+          <view class="menu-icon">📦</view>
+          <view class="menu-main">
+            <view class="menu-label">库存情况</view>
+            <view class="menu-desc">查看商品库存 · 预警与补货提醒</view>
+          </view>
+          <view class="arrow">›</view>
+        </view>
       </view>
 
       <!-- 我的企业列表 -->
@@ -127,6 +135,15 @@
       <view class="page-end">— 已经到底了 —</view>
     </block>
   </block>
+
+  <!-- 库存情况弹窗 -->
+  <view class="mask" wx:if="{{showInventoryModal}}" bindtap="closeInventoryModal">
+    <view class="modal" catchtap="noop">
+      <view class="modal-title">库存情况</view>
+      <view class="modal-body">查看企业的商品库存\n支持库存预警与补货提醒</view>
+      <button class="modal-btn" bindtap="closeInventoryModal">我知道了</button>
+    </view>
+  </view>
 
   <!-- 加入企业弹层 -->
   <view class="mask" wx:if="{{showJoinModal}}" bindtap="closeJoin">

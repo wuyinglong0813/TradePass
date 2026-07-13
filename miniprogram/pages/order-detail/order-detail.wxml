@@ -44,17 +44,13 @@
         <view class="qa-icon">💰</view>
         <view class="qa-label">对账情况</view>
       </view>
-      <view class="qa-btn" wx:if="{{canInventory}}" data-key="inventory" bindtap="onAction">
-        <view class="qa-icon">📦</view>
-        <view class="qa-label">库存情况</view>
-      </view>
     </view>
   </view>
 
   <!-- 已签合同列表 -->
   <view class="card">
     <view class="section-title">
-      已签合同
+      合同列表
       <text class="title-count" wx:if="{{contracts.length > 0}}">{{contracts.length}}份</text>
     </view>
 

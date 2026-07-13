@@ -15,7 +15,6 @@ Page({
     // 快捷操作（带权限控制）
     canSignContract: false,
     canReconciliation: false,
-    canInventory: false,
     // 合同列表（我方与该公司签订的所有合同）
     contracts: [],
     // 月销售趋势
@@ -36,14 +35,20 @@ Page({
       counterpartyName: name,
       myCompanyName: (cur && cur.companyName) || '我的企业',
       canSignContract: hasPerm('contract_sign'),
-      canReconciliation: hasPerm('reconciliation'),
-      canInventory: hasPerm('inventory_view')
+      canReconciliation: hasPerm('reconciliation')
     });
     // 异步加载
     setTimeout(() => {
       this.loadContracts(name);
       this.generateMonthlySales();
     }, 100);
+  },
+
+  onShow() {
+    // 每次回到页面时刷新合同列表（例如从签订合同页返回）
+    if (this.data.counterpartyName) {
+      this.loadContracts(this.data.counterpartyName);
+    }
   },
 
   /* 加载合同列表 */
@@ -100,9 +105,6 @@ Page({
         wx.navigateTo({
           url: `/pages/reconciliation/reconciliation?counterpartyName=${encodeURIComponent(name)}`
         });
-        break;
-      case 'inventory':
-        this.setData({ showModal: true, modalTitle: '库存情况', modalContent: '查看与该公司的商品库存\n支持库存预警与补货提醒' });
         break;
     }
   },
