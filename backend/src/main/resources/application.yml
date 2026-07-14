@@ -17,3 +17,7 @@ spring:
     username: ${DB_USERNAME:tradepass}
     password: ${DB_PASSWORD:tradepass_pwd}
     driver-class-name: com.mysql.cj.jdbc.Driver
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true

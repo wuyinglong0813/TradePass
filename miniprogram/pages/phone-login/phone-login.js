@@ -56,26 +56,40 @@ Page({
       return;
     }
     wx.showLoading({ title: '登录中...' });
+
+    const loginWithCode = (code) => {
+      wx.request({
+        url: `${app.globalData.baseUrl}/auth/wechat-login`,
+        method: 'POST',
+        data: { code, phone: this.data.phoneNumber },
+        success: ({ data }) => {
+          wx.hideLoading();
+          console.log('登录接口返回:', JSON.stringify(data));
+          if (data && data.code === 0 && data.data && data.data.token) {
+            app.globalData.token = data.data.token;
+            wx.setStorageSync('tradepass_token', data.data.token);
+            wx.showToast({ title: '登录成功', icon: 'none' });
+            app.loadMe().then(() => setTimeout(() => wx.switchTab({ url: '/pages/index/index' }), 800));
+          } else {
+            wx.showToast({ title: '登录失败：' + (data && data.message || '未知'), icon: 'none' });
+          }
+        },
+        fail: (err) => {
+          wx.hideLoading();
+          console.error('手机号登录请求失败:', JSON.stringify(err));
+          wx.showToast({ title: (err && err.errMsg) || '网络错误', icon: 'none' });
+        }
+      });
+    };
+
+    if (app.globalData.isLocalDevelopment) {
+      loginWithCode(`dev-phone-${this.data.phoneNumber.slice(-4)}`);
+      return;
+    }
+
     wx.login({
       success: ({ code }) => {
-        wx.request({
-          url: `${app.globalData.baseUrl}/auth/wechat-login`,
-          method: 'POST',
-          data: { code, phone: this.data.phoneNumber },
-          success: ({ data }) => {
-            wx.hideLoading();
-            console.log('登录接口返回:', JSON.stringify(data));
-            if (data && data.code === 0 && data.data && data.data.token) {
-              app.globalData.token = data.data.token;
-              wx.setStorageSync('tradepass_token', data.data.token);
-              wx.showToast({ title: '登录成功', icon: 'none' });
-              app.loadMe().then(() => setTimeout(() => wx.switchTab({ url: '/pages/index/index' }), 800));
-            } else {
-              wx.showToast({ title: '登录失败：' + (data && data.message || '未知'), icon: 'none' });
-            }
-          },
-          fail: () => { wx.hideLoading(); wx.showToast({ title: '网络错误', icon: 'none' }); }
-        });
+        loginWithCode(code);
       },
       fail: () => { wx.hideLoading(); wx.showToast({ title: '微信登录失败', icon: 'none' }); }
     });

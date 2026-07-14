@@ -45,7 +45,11 @@ Page({
           wx.showToast({ title: '登录失败：' + (data && data.message || '未知'), icon: 'none' });
         }
       },
-      fail: () => { wx.hideLoading(); wx.showToast({ title: '网络错误', icon: 'none' }); }
+      fail: (err) => {
+        wx.hideLoading();
+        console.error('手机号快捷登录请求失败:', JSON.stringify(err));
+        wx.showToast({ title: (err && err.errMsg) || '网络错误', icon: 'none' });
+      }
     });
   },
 
@@ -84,7 +88,11 @@ Page({
               wx.showToast({ title: '登录失败：' + (data && data.message || '未知'), icon: 'none' });
             }
           },
-          fail: () => { wx.hideLoading(); wx.showToast({ title: '网络错误', icon: 'none' }); }
+          fail: (err) => {
+            wx.hideLoading();
+            console.error('微信手机号登录请求失败:', JSON.stringify(err));
+            wx.showToast({ title: (err && err.errMsg) || '网络错误', icon: 'none' });
+          }
         });
       },
       fail: () => { wx.hideLoading(); wx.showToast({ title: '微信登录失败', icon: 'none' }); }

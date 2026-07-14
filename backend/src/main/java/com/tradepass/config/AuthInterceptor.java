@@ -3,9 +3,13 @@ package com.tradepass.config;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tradepass.common.ApiResponse;
 import com.tradepass.common.AuthContext;
+import com.tradepass.entity.CompanyMember;
+import com.tradepass.entity.SysUser;
+import com.tradepass.mapper.CompanyMemberMapper;
+import com.tradepass.mapper.SysUserMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.jdbc.core.JdbcTemplate;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
@@ -21,11 +25,13 @@ public class AuthInterceptor implements HandlerInterceptor {
 
     private static final String TOKEN_PREFIX = "mvp-token-";
 
-    private final JdbcTemplate db;
+    private final SysUserMapper sysUserMapper;
+    private final CompanyMemberMapper companyMemberMapper;
     private final ObjectMapper mapper = new ObjectMapper();
 
-    public AuthInterceptor(JdbcTemplate db) {
-        this.db = db;
+    public AuthInterceptor(SysUserMapper sysUserMapper, CompanyMemberMapper companyMemberMapper) {
+        this.sysUserMapper = sysUserMapper;
+        this.companyMemberMapper = companyMemberMapper;
     }
 
     @Override
@@ -56,9 +62,7 @@ public class AuthInterceptor implements HandlerInterceptor {
         }
         try {
             long uid = Long.parseLong(token.substring(TOKEN_PREFIX.length()));
-            // 校验用户确实存在
-            Integer cnt = db.queryForObject("SELECT COUNT(1) FROM sys_user WHERE id = ?", Integer.class, uid);
-            return (cnt != null && cnt > 0) ? uid : null;
+            return sysUserMapper.selectCount(new LambdaQueryWrapper<SysUser>().eq(SysUser::getId, uid)) > 0 ? uid : null;
         } catch (Exception e) {
             return null;
         }
@@ -69,10 +73,11 @@ public class AuthInterceptor implements HandlerInterceptor {
         if (headerCompanyId != null && !headerCompanyId.isBlank()) {
             try {
                 long cid = Long.parseLong(headerCompanyId);
-                List<?> rows = db.queryForList(
-                        "SELECT id FROM company_member WHERE company_id = ? AND user_id = ? AND status = 'ACTIVE'",
-                        cid, userId);
-                if (!rows.isEmpty()) {
+                boolean exists = companyMemberMapper.selectCount(new LambdaQueryWrapper<CompanyMember>()
+                        .eq(CompanyMember::getCompanyId, cid)
+                        .eq(CompanyMember::getUserId, userId)
+                        .eq(CompanyMember::getStatus, "ACTIVE")) > 0;
+                if (exists) {
                     return cid;
                 }
             } catch (NumberFormatException ignored) {
@@ -80,10 +85,12 @@ public class AuthInterceptor implements HandlerInterceptor {
         }
         // 2) 回退：用户第一家 ACTIVE 企业
         try {
-            List<Long> ids = db.query(
-                    "SELECT company_id FROM company_member WHERE user_id = ? AND status = 'ACTIVE' ORDER BY company_id LIMIT 1",
-                    (rs, n) -> rs.getLong("company_id"), userId);
-            return ids.isEmpty() ? null : ids.get(0);
+            List<CompanyMember> members = companyMemberMapper.selectList(new LambdaQueryWrapper<CompanyMember>()
+                    .eq(CompanyMember::getUserId, userId)
+                    .eq(CompanyMember::getStatus, "ACTIVE")
+                    .orderByAsc(CompanyMember::getCompanyId)
+                    .last("LIMIT 1"));
+            return members.isEmpty() ? null : members.get(0).getCompanyId();
         } catch (Exception e) {
             return null;
         }

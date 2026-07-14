@@ -1,19 +1,27 @@
 // 本地后端地址（开发者工具模拟器用）
-const LOCAL_API = 'http://localhost:9999/api';
+const LOCAL_API = 'http://127.0.0.1:9999/api';
 // 云托管公网访问地址（真机/体验版/正式版用），请替换成你云托管的实际域名
 const CLOUD_API = 'https://tradepass-274155-4-1446724178.sh.run.tcloudbase.com/api';
 
-// 模拟器 → 本地；真机及线上 → 云托管
-function resolveBaseUrl() {
+// 开发者工具和开发版均优先使用本地后端。
+function isLocalDevelopment() {
   try {
-    if (wx.getSystemInfoSync().platform === 'devtools') return LOCAL_API;
+    if (wx.getSystemInfoSync().platform === 'devtools') return true;
   } catch (e) {}
-  return CLOUD_API;
+  try {
+    const account = wx.getAccountInfoSync();
+    return account && account.miniProgram && account.miniProgram.envVersion === 'develop';
+  } catch (e) {
+    return false;
+  }
 }
+
+const localDevelopment = isLocalDevelopment();
 
 App({
   globalData: {
-    baseUrl: resolveBaseUrl(),
+    baseUrl: localDevelopment ? LOCAL_API : CLOUD_API,
+    isLocalDevelopment: localDevelopment,
     token: '',
     currentCompanyId: '',   // 当前操作企业，随请求头 X-Company-Id 上送
     userInfo: null,
@@ -23,6 +31,7 @@ App({
   },
 
   onLaunch() {
+    console.info('TradePass API:', this.globalData.baseUrl);
     // 已同意隐私协议则直接进首页，否则由隐私页做 reLaunch
     if (wx.getStorageSync('privacy_agreed')) {
       // 清除隐私页的历史栈，直接用首页替换
