@@ -28,6 +28,7 @@ import com.tradepass.mapper.SysUserMapper;
 import com.tradepass.mapper.TradeContractMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.beans.factory.annotation.Value;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -42,6 +43,8 @@ public class AuthService {
     private final TradeContractMapper tradeContractMapper;
     private final WechatService wechatService;
     private final RolePermissionService rolePermissionService;
+    private final AuthSessionService authSessionService;
+    private final boolean devEnabled;
 
     public AuthService(SysUserMapper sysUserMapper,
                        CompanyMapper companyMapper,
@@ -49,7 +52,9 @@ public class AuthService {
                        PermDefMapper permDefMapper,
                        TradeContractMapper tradeContractMapper,
                        WechatService wechatService,
-                       RolePermissionService rolePermissionService) {
+                       RolePermissionService rolePermissionService,
+                       AuthSessionService authSessionService,
+                       @Value("${tradepass.dev.enabled:false}") boolean devEnabled) {
         this.sysUserMapper = sysUserMapper;
         this.companyMapper = companyMapper;
         this.companyMemberMapper = companyMemberMapper;
@@ -57,14 +62,19 @@ public class AuthService {
         this.tradeContractMapper = tradeContractMapper;
         this.wechatService = wechatService;
         this.rolePermissionService = rolePermissionService;
+        this.authSessionService = authSessionService;
+        this.devEnabled = devEnabled;
     }
 
     @Transactional
     public LoginSession wechatLogin(WechatLoginRequest request) {
         String openid = wechatService.resolveOpenid(request.code());
+        if (!devEnabled && request.phone() != null && !request.phone().isBlank()) {
+            throw new BusinessException("生产环境不接受未经验证的手机号");
+        }
         String phone = request.phoneCode() != null && !request.phoneCode().isBlank()
                 ? wechatService.resolvePhoneByCode(request.phoneCode())
-                : request.phone();
+                : (devEnabled ? request.phone() : null);
 
         SysUser user;
         if (openid.startsWith("dev-phone-") && phone != null && !phone.isBlank()) {
@@ -105,6 +115,9 @@ public class AuthService {
     }
 
     public UserProfile bindPhone(BindPhoneRequest request) {
+        if (!devEnabled) {
+            throw new BusinessException("请使用微信手机号验证完成绑定");
+        }
         long userId = AuthContext.userId();
         Long companyId = AuthContext.companyId();
         sysUserMapper.update(new LambdaUpdateWrapper<SysUser>().eq(SysUser::getId, userId).set(SysUser::getPhone, request.phone()));
@@ -184,35 +197,39 @@ public class AuthService {
         long companyId = parseId(request.id());
         Company company = companyMapper.selectById(companyId);
         if (company == null) {
-            company = new Company();
-            company.setId(companyId);
-            company.setName(request.name());
-            company.setCreditCode(request.creditCode());
-            company.setLegalPersonName(request.legalPersonName());
-            company.setCertificationStatus("PENDING");
-            company.setRealNameStatus("NOT_STARTED");
-            company.setFaceStatus("NOT_STARTED");
-            company.setSealStatus("NOT_UPLOADED");
-            companyMapper.insert(company);
-        } else {
-            company.setName(request.name());
-            company.setCreditCode(request.creditCode());
-            company.setLegalPersonName(request.legalPersonName());
-            companyMapper.updateById(company);
+            throw new BusinessException("企业不存在，请先提交企业资料");
         }
-        if (companyMemberMapper.selectCount(new LambdaQueryWrapper<CompanyMember>()
+        if (!company.getName().equals(request.name())
+                || !company.getCreditCode().equals(request.creditCode())
+                || !company.getLegalPersonName().equals(request.legalPersonName())) {
+            throw new BusinessException("企业资料与已提交记录不一致");
+        }
+
+        CompanyMember existing = companyMemberMapper.selectOne(new LambdaQueryWrapper<CompanyMember>()
                 .eq(CompanyMember::getCompanyId, companyId)
-                .eq(CompanyMember::getUserId, userId)) == 0) {
-            CompanyMember member = new CompanyMember();
-            member.setCompanyId(companyId);
-            member.setUserId(userId);
-            member.setRoleCode("LEGAL");
-            member.setIsLegalPerson(true);
-            member.setIsAdministrator(false);
-            member.setStatus("ACTIVE");
-            companyMemberMapper.insert(member);
+                .eq(CompanyMember::getUserId, userId)
+                .last("LIMIT 1"));
+        if (existing != null) {
+            return buildMe(userId, companyId);
         }
+
+        if (company.getCreatedBy() == null || company.getCreatedBy() != userId) {
+            throw new BusinessException("该企业已存在，请通过企业邀请码加入或提交人工认领申请");
+        }
+
+        CompanyMember member = new CompanyMember();
+        member.setCompanyId(companyId);
+        member.setUserId(userId);
+        member.setRoleCode("LEGAL_CANDIDATE");
+        member.setIsLegalPerson(false);
+        member.setIsAdministrator(false);
+        member.setStatus("PENDING");
+        companyMemberMapper.insert(member);
         return buildMe(userId, companyId);
+    }
+
+    public void logout(String authorization) {
+        authSessionService.revoke(authorization);
     }
 
     public List<DevUser> listDevUsers() {
@@ -304,14 +321,14 @@ public class AuthService {
     }
 
     private String tokenFor(long userId) {
-        return "mvp-token-" + userId;
+        return authSessionService.issue(userId);
     }
 
     private long parseId(String id) {
         try {
             return Long.parseLong(id);
         } catch (NumberFormatException e) {
-            return 0;
+            throw new BusinessException("ID 格式不正确");
         }
     }
 

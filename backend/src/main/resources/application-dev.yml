@@ -1,0 +1,7 @@
+tradepass:
+  dev:
+    enabled: true
+  demo-data:
+    enabled: true
+  verification:
+    auto-approve: true

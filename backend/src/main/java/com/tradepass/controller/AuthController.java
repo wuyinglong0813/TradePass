@@ -13,6 +13,7 @@ import com.tradepass.dto.request.WechatLoginRequest;
 import com.tradepass.dto.response.TodoItem;
 import com.tradepass.service.AuthService;
 import jakarta.validation.Valid;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -39,6 +40,12 @@ public class AuthController {
     @PostMapping("/auth/bind-phone")
     public ApiResponse<UserProfile> bindPhone(@Valid @RequestBody BindPhoneRequest request) {
         return ApiResponse.ok(authService.bindPhone(request));
+    }
+
+    @PostMapping("/auth/logout")
+    public ApiResponse<Void> logout(HttpServletRequest request) {
+        authService.logout(request.getHeader("Authorization"));
+        return ApiResponse.ok(null);
     }
 
     @GetMapping("/me")

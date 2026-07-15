@@ -7,7 +7,13 @@ wechat:
 
 tradepass:
   dev:
-    enabled: ${TRADEPASS_DEV_ENABLED:true}
+    enabled: ${TRADEPASS_DEV_ENABLED:false}
+  demo-data:
+    enabled: ${TRADEPASS_DEMO_DATA_ENABLED:false}
+  auth:
+    session-hours: ${TRADEPASS_SESSION_HOURS:168}
+  verification:
+    auto-approve: ${TRADEPASS_VERIFICATION_AUTO_APPROVE:false}
 
 spring:
   application:
@@ -17,6 +23,10 @@ spring:
     username: ${DB_USERNAME:tradepass}
     password: ${DB_PASSWORD:tradepass_pwd}
     driver-class-name: com.mysql.cj.jdbc.Driver
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 0
 
 mybatis-plus:
   configuration:

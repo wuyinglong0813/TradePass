@@ -11,6 +11,7 @@ public class CounterpartyRelationEntity {
     @TableId(type = IdType.AUTO)
     private Long id;
     private Long companyId;
+    private Long counterpartyCompanyId;
     private String counterpartyCompanyName;
     private String relationType;
     private String status;
@@ -20,6 +21,8 @@ public class CounterpartyRelationEntity {
     public void setId(Long id) { this.id = id; }
     public Long getCompanyId() { return companyId; }
     public void setCompanyId(Long companyId) { this.companyId = companyId; }
+    public Long getCounterpartyCompanyId() { return counterpartyCompanyId; }
+    public void setCounterpartyCompanyId(Long counterpartyCompanyId) { this.counterpartyCompanyId = counterpartyCompanyId; }
     public String getCounterpartyCompanyName() { return counterpartyCompanyName; }
     public void setCounterpartyCompanyName(String counterpartyCompanyName) { this.counterpartyCompanyName = counterpartyCompanyName; }
     public String getRelationType() { return relationType; }

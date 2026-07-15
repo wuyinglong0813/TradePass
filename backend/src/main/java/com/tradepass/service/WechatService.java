@@ -10,16 +10,27 @@ import java.util.Map;
 @Service
 public class WechatService {
     private final ObjectMapper mapper = new ObjectMapper();
+    private final String wechatAppId;
+    private final String wechatAppSecret;
+    private final boolean devEnabled;
 
-    @Value("${wechat.app-id}")
-    private String wechatAppId;
-
-    @Value("${wechat.app-secret}")
-    private String wechatAppSecret;
+    public WechatService(@Value("${wechat.app-id}") String wechatAppId,
+                         @Value("${wechat.app-secret}") String wechatAppSecret,
+                         @Value("${tradepass.dev.enabled:false}") boolean devEnabled) {
+        this.wechatAppId = wechatAppId;
+        this.wechatAppSecret = wechatAppSecret;
+        this.devEnabled = devEnabled;
+    }
 
     public String resolveOpenid(String code) {
         if (code.startsWith("dev-")) {
+            if (!devEnabled) {
+                throw new BusinessException("开发登录凭证在当前环境不可用");
+            }
             return code;
+        }
+        if (wechatAppSecret == null || wechatAppSecret.isBlank()) {
+            throw new BusinessException("未配置 WECHAT_APP_SECRET，无法完成微信登录");
         }
         try {
             String url = String.format(

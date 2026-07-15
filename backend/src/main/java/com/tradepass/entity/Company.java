@@ -13,6 +13,7 @@ public class Company {
     private String name;
     private String creditCode;
     private String legalPersonName;
+    private Long createdBy;
     private String certificationStatus;
     private String realNameStatus;
     private String faceStatus;
@@ -28,6 +29,8 @@ public class Company {
     public void setCreditCode(String creditCode) { this.creditCode = creditCode; }
     public String getLegalPersonName() { return legalPersonName; }
     public void setLegalPersonName(String legalPersonName) { this.legalPersonName = legalPersonName; }
+    public Long getCreatedBy() { return createdBy; }
+    public void setCreatedBy(Long createdBy) { this.createdBy = createdBy; }
     public String getCertificationStatus() { return certificationStatus; }
     public void setCertificationStatus(String certificationStatus) { this.certificationStatus = certificationStatus; }
     public String getRealNameStatus() { return realNameStatus; }

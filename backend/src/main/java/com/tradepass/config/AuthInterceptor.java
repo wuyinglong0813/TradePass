@@ -4,9 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tradepass.common.ApiResponse;
 import com.tradepass.common.AuthContext;
 import com.tradepass.entity.CompanyMember;
-import com.tradepass.entity.SysUser;
 import com.tradepass.mapper.CompanyMemberMapper;
-import com.tradepass.mapper.SysUserMapper;
+import com.tradepass.service.AuthSessionService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -16,27 +15,25 @@ import org.springframework.web.servlet.HandlerInterceptor;
 import java.util.List;
 
 /**
- * 鉴权拦截器：解析 token（mvp-token-{userId}）→ 写入请求级 AuthContext。
+ * 鉴权拦截器：校验随机会话 token → 写入请求级 AuthContext。
  * 当前操作企业优先取请求头 X-Company-Id，否则回退到用户第一家 ACTIVE 企业。
  * 未携带合法 token 时对受保护接口返回 401。
  */
 @Component
 public class AuthInterceptor implements HandlerInterceptor {
 
-    private static final String TOKEN_PREFIX = "mvp-token-";
-
-    private final SysUserMapper sysUserMapper;
+    private final AuthSessionService authSessionService;
     private final CompanyMemberMapper companyMemberMapper;
     private final ObjectMapper mapper = new ObjectMapper();
 
-    public AuthInterceptor(SysUserMapper sysUserMapper, CompanyMemberMapper companyMemberMapper) {
-        this.sysUserMapper = sysUserMapper;
+    public AuthInterceptor(AuthSessionService authSessionService, CompanyMemberMapper companyMemberMapper) {
+        this.authSessionService = authSessionService;
         this.companyMemberMapper = companyMemberMapper;
     }
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
-        Long userId = parseUserId(request.getHeader("Authorization"));
+        Long userId = authSessionService.resolveUserId(request.getHeader("Authorization"));
         if (userId == null) {
             writeUnauthorized(response);
             return false;
@@ -50,22 +47,6 @@ public class AuthInterceptor implements HandlerInterceptor {
     @Override
     public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) {
         AuthContext.clear();
-    }
-
-    private Long parseUserId(String authorization) {
-        if (authorization == null || authorization.isBlank()) {
-            return null;
-        }
-        String token = authorization.startsWith("Bearer ") ? authorization.substring(7) : authorization;
-        if (!token.startsWith(TOKEN_PREFIX)) {
-            return null;
-        }
-        try {
-            long uid = Long.parseLong(token.substring(TOKEN_PREFIX.length()));
-            return sysUserMapper.selectCount(new LambdaQueryWrapper<SysUser>().eq(SysUser::getId, uid)) > 0 ? uid : null;
-        } catch (Exception e) {
-            return null;
-        }
     }
 
     private Long resolveCompanyId(long userId, String headerCompanyId) {
