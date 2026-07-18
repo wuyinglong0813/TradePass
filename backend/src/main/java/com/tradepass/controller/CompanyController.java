@@ -13,6 +13,7 @@ import com.tradepass.dto.request.SealRequest;
 import com.tradepass.dto.request.VerificationRequest;
 import com.tradepass.dto.response.InviteResult;
 import com.tradepass.dto.response.JoinResult;
+import com.tradepass.dto.response.PagePayload;
 import com.tradepass.service.CompanyService;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -88,31 +89,34 @@ public class CompanyController {
     }
 
     @GetMapping("/authorizations")
-    public ApiResponse<List<AuthorizationRecord>> listMembers(@RequestParam(defaultValue = "1") String companyId) {
-        return ApiResponse.ok(companyService.listMembers(companyId));
+    public ApiResponse<PagePayload<AuthorizationRecord>> listMembers(@RequestParam String companyId,
+                                                                     @RequestParam(required = false) String status,
+                                                                     @RequestParam(defaultValue = "1") int page,
+                                                                     @RequestParam(defaultValue = "20") int size) {
+        return ApiResponse.ok(companyService.pageMembers(companyId, status, page, size));
     }
 
     @PostMapping("/authorizations/{id}/approve")
     public ApiResponse<AuthorizationRecord> approveMember(@PathVariable String id,
                                                           @Valid @RequestBody ApproveRequest request,
-                                                          @RequestParam(defaultValue = "1") String companyId) {
+                                                          @RequestParam String companyId) {
         return ApiResponse.ok(companyService.approveMember(id, request, companyId));
     }
 
     @PostMapping("/authorizations/{id}/reject")
-    public ApiResponse<Void> rejectMember(@PathVariable String id, @RequestParam(defaultValue = "1") String companyId) {
+    public ApiResponse<Void> rejectMember(@PathVariable String id, @RequestParam String companyId) {
         companyService.rejectMember(id, companyId);
         return ApiResponse.ok(null);
     }
 
     @DeleteMapping("/authorizations/{id}")
-    public ApiResponse<Void> removeMember(@PathVariable String id, @RequestParam(defaultValue = "1") String companyId) {
+    public ApiResponse<Void> removeMember(@PathVariable String id, @RequestParam String companyId) {
         companyService.removeMember(id, companyId);
         return ApiResponse.ok(null);
     }
 
     @GetMapping("/roles")
-    public ApiResponse<List<Map<String, Object>>> listRoles(@RequestParam(defaultValue = "1") String companyId) {
+    public ApiResponse<List<Map<String, Object>>> listRoles(@RequestParam String companyId) {
         return ApiResponse.ok(companyService.listRoles(companyId));
     }
 

@@ -22,7 +22,10 @@ Page({
     rankingTitle: '客户销售业绩排名',
     loading: false,
     counterparties: [],
+    relationCounterparties: [],
+    partnerCompanies: [],
     showJoinForm: false,
+    showHomeGuide: false,
     joinCompanyId: '',
     companies: [],
     isLegalPerson: false,
@@ -30,13 +33,6 @@ Page({
     counterpartyEmptyBtn: '',
     isLoggedIn: false,
     userName: '',
-
-    // Banner 轮播（模拟数据）
-    banners: [
-      { id: 1, bg: 'linear-gradient(135deg, #0f766e, #14b8a6)', title: '商签通', desc: '安全合规的企业贸易管理平台' },
-      { id: 2, bg: 'linear-gradient(135deg, #6366f1, #8b5cf6)', title: '企业认证', desc: '完成企业认证解锁全部功能' },
-      { id: 3, bg: 'linear-gradient(135deg, #f59e0b, #f97316)', title: '交易排行', desc: '查看你的客户销售业绩排名' }
-    ],
 
     // 数据统计
     stats: { totalAmount: 0, totalOrders: 0, counterpartyCount: 0 },
@@ -59,8 +55,9 @@ Page({
     }
   },
 
-  onShow() {
-    const loggedIn = !!(app.globalData.token || wx.getStorageSync('tradepass_token'));
+  async onShow() {
+    await app.ensureSessionReady();
+    const loggedIn = !!app.globalData.token;
     const user = app.globalData.userInfo;
     this.setData({
       isLoggedIn: loggedIn,
@@ -70,6 +67,9 @@ Page({
     if (!loggedIn) return;
     this.checkMemberStatus();
     this.initRoleFromMember();
+    this.setData({
+      showHomeGuide: !this.data.showJoinForm && !wx.getStorageSync('tradepass_home_guide_done')
+    });
 
     if (!this.data.showJoinForm && app.globalData.pendingInvite) {
       const invite = app.globalData.pendingInvite;
@@ -78,7 +78,7 @@ Page({
         if (!member || member.roleCode !== 'LEGAL') {
           wx.showModal({
             title: '需要法人身份',
-            content: '接受供方邀请需要您是公司的法人。请先在"我的"页面完成企业认证。',
+            content: '接受企业合作邀请需要您是公司的法人。请先在“企业”页面完成企业认证。',
             showCancel: false
           });
           app.globalData.pendingInvite = null;
@@ -117,8 +117,8 @@ Page({
       });
       wx.showToast({ title: result.message || '加入成功', icon: 'success' });
       app.globalData.pendingInvite = null;
-      app.loadMe();
-      setTimeout(() => this.onShow(), 500);
+      await app.loadMe();
+      await this.onShow();
     } catch (e) {
       wx.showToast({ title: e.message, icon: 'none' });
       app.globalData.pendingInvite = null;
@@ -141,6 +141,7 @@ Page({
             companies: meData.companies || [],
             role: meData.member && meData.member.roleCode === 'PURCHASER' ? 'buyer' : 'supplier'
           });
+          this.initRoleFromMember();
           this.loadHome();
           this.loadCounterparties();
         } catch (e) {
@@ -155,6 +156,8 @@ Page({
     const role = e.currentTarget.dataset.role;
     if (role === this.data.role) return;
     this.setData({ role, period: 'total' });
+    const companyId = app.getCurrentCompanyId() || 'unbound';
+    wx.setStorageSync(`tradepass_role_${companyId}`, role);
     this.loadHome();
     this.loadCounterparties();
   },
@@ -197,14 +200,20 @@ Page({
         data: { code: companyId }
       });
       wx.showToast({ title: result.message, icon: 'success' });
-      app.loadMe();
-      setTimeout(() => this.onShow(), 500);
+      await app.loadMe();
+      await this.onShow();
     } catch (e) {
       wx.showToast({ title: e.message, icon: 'none' });
     }
   },
 
   initRoleFromMember() {
+    const companyId = app.getCurrentCompanyId() || 'unbound';
+    const savedRole = wx.getStorageSync(`tradepass_role_${companyId}`);
+    if (savedRole === 'supplier' || savedRole === 'buyer') {
+      this.setData({ role: savedRole });
+      return;
+    }
     const member = app.globalData.memberInfo;
     if (!member) return;
     if (member.roleCode === 'SALES') this.setData({ role: 'supplier' });
@@ -214,7 +223,8 @@ Page({
   async loadHome() {
     this.setData({ loading: true });
     try {
-      const currentCompanyId = (app.globalData.userInfo && app.globalData.userInfo.currentCompanyId) || '1';
+      const currentCompanyId = app.getCurrentCompanyId();
+      if (!currentCompanyId) return;
       const payload = await request({
         url: `/home/${this.data.role}?period=${this.data.period}&companyId=${currentCompanyId}`
       });
@@ -233,6 +243,7 @@ Page({
           counterpartyCount: ranking.length
         }
       });
+      this.refreshPartnerCompanies();
     } catch (error) {
       wx.showToast({ title: error.message, icon: 'none' });
     } finally {
@@ -241,12 +252,40 @@ Page({
   },
 
   async loadCounterparties() {
-    if (this.data.role !== 'supplier') { this.setData({ counterparties: [] }); return; }
     try {
-      const companyId = (app.globalData.userInfo && app.globalData.userInfo.currentCompanyId) || '1';
-      const list = await request({ url: `/counterparties?companyId=${companyId}` });
-      this.setData({ counterparties: list || [] });
-    } catch (error) { /* 静默 */ }
+      const companyId = app.getCurrentCompanyId();
+      if (!companyId) return;
+      const list = await request({ url: `/counterparties?companyId=${companyId}&role=${this.data.role}` });
+      this.setData({ counterparties: list || [], relationCounterparties: list || [] });
+      this.refreshPartnerCompanies();
+    } catch (error) {
+      this.setData({ counterparties: [], relationCounterparties: [] });
+      this.refreshPartnerCompanies();
+    }
+  },
+
+  refreshPartnerCompanies() {
+    const role = this.data.role;
+    const ranking = this.data.ranking || [];
+    const relations = this.data.relationCounterparties || [];
+    const source = role === 'supplier' ? relations.concat(ranking) : ranking.concat(relations);
+    const seen = new Set();
+    const partnerCompanies = [];
+    source.forEach((item, index) => {
+      const name = item.counterpartyName;
+      if (!name || seen.has(name)) return;
+      seen.add(name);
+      const rankItem = ranking.find(rank => rank.counterpartyName === name) || {};
+      partnerCompanies.push({
+        id: item.id || `${role}-${index}`,
+        counterpartyName: name,
+        initial: name.substring(0, 1),
+        status: item.status || 'ACTIVE',
+        orderCount: rankItem.orderCount || 0,
+        amount: rankItem.amount || 0
+      });
+    });
+    this.setData({ partnerCompanies });
   },
 
   goLogin() {
@@ -256,21 +295,46 @@ Page({
   openCounterparty(e) {
     const name = e.currentTarget.dataset.name;
     wx.navigateTo({
-      url: `/pages/order-detail/order-detail?counterpartyName=${encodeURIComponent(name)}`
+      url: `/pages/order-detail/order-detail?counterpartyName=${encodeURIComponent(name)}&role=${this.data.role}`
     });
+  },
+
+  openWorkbench(e) {
+    const key = e.currentTarget.dataset.key;
+    const routes = {
+      approval: '/pages/contract-approval/contract-approval',
+      signature: '/pages/contract-center/contract-center?mode=signature',
+      contracts: '/pages/contract-center/contract-center',
+      reconciliation: '/pages/reconciliation/reconciliation'
+    };
+    if (routes[key]) wx.navigateTo({ url: routes[key] });
+  },
+
+  completeHomeGuide() {
+    wx.setStorageSync('tradepass_home_guide_done', true);
+    this.setData({ showHomeGuide: false });
+    wx.pageScrollTo({ selector: '#partner-section', duration: 260 });
+  },
+
+  goCreateCompany() {
+    wx.navigateTo({ url: '/pages/company-bind/company-bind' });
   },
 
   addCounterparty() {
     const member = app.globalData.memberInfo;
     if (!member || member.roleCode !== 'LEGAL') {
-      wx.showToast({ title: '仅法人可添加供方公司', icon: 'none' });
+      wx.showToast({ title: '仅法人可邀请合作企业', icon: 'none' });
       return;
     }
-    const cid = (app.globalData.userInfo && app.globalData.userInfo.currentCompanyId) || '1';
+    const cid = app.getCurrentCompanyId();
+    if (!cid) {
+      wx.showToast({ title: '请先选择企业', icon: 'none' });
+      return;
+    }
     request({
       url: '/companies/counterparty-invite',
       method: 'POST',
-      data: { companyId: cid }
+      data: { companyId: cid, relationRole: this.data.role }
     }).then(result => {
       this.setData({ counterpartyInviteCode: result.code });
       wx.showShareMenu({ withShareTicket: true });
@@ -307,12 +371,13 @@ Page({
   closePrivacyDetail() {
     this.setData({ showPrivacyDetail: false });
   },
+  noop() {},
 
   onShareAppMessage() {
     const code = this.data.counterpartyInviteCode;
     if (!code) return { title: '商签通', path: '/pages/index/index' };
     return {
-      title: '邀请你成为供方合作伙伴',
+      title: '邀请你在商签通建立企业合作关系',
       path: `/pages/index/index?inviteCode=${code}&type=counterparty`
     };
   }

@@ -23,10 +23,12 @@ Page({
     smsCode: '',
     smsText: '获取验证码',
     smsCounting: false,
-    submitting: false
+    submitting: false,
+    isDev: false
   },
 
   onLoad(options) {
+    this.setData({ isDev: !!app.globalData.isLocalDevelopment });
     if (options.name) {
       // 从搜索页跳来，新企业流程
       this.setData({
@@ -77,10 +79,18 @@ Page({
 
   openAgreement(e) {
     const type = e.currentTarget.dataset.type;
-    wx.showToast({ title: '协议页面（开发中）', icon: 'none' });
+    if (type === 'privacy') {
+      wx.navigateTo({ url: '/pages/privacy/privacy' });
+      return;
+    }
+    wx.showToast({ title: '该协议内容待法务审核后开放', icon: 'none' });
   },
 
   goAgreeNext() {
+    if (!this.data.agreed) {
+      wx.showToast({ title: '请先阅读并同意相关协议', icon: 'none' });
+      return;
+    }
     this.setData({ step: 'auth' });
   },
 
@@ -98,8 +108,11 @@ Page({
       wx.showToast({ title: '请先输入手机号', icon: 'none' });
       return;
     }
-    // mock 发送验证码
-    wx.showToast({ title: '验证码已发送', icon: 'success' });
+    if (!this.data.isDev) {
+      wx.showToast({ title: '短信认证服务暂未接入', icon: 'none' });
+      return;
+    }
+    wx.showToast({ title: '开发环境验证码已发送', icon: 'none' });
     this.setData({ smsCounting: true, smsText: '60s' });
     let sec = 60;
     const timer = setInterval(() => {
@@ -116,6 +129,14 @@ Page({
   // 提交认证
   async submitAuth() {
     const { companyName, creditCode, legalPersonName, authMethod, phone, smsCode } = this.data;
+    if (!this.data.isDev) {
+      wx.showModal({
+        title: '认证服务尚未接入',
+        content: '生产环境不会模拟实名认证结果。请先配置实名或人脸认证服务商后再提交。',
+        showCancel: false
+      });
+      return;
+    }
     if (authMethod === 'phone' && (!phone || !smsCode)) {
       wx.showToast({ title: '请填写手机号和验证码', icon: 'none' });
       return;
@@ -173,12 +194,24 @@ Page({
   // ===== 已有企业：点击其他认证步骤 =====
   async handleAction(e) {
     const key = e.currentTarget.dataset.key;
-    const companyId = (app.globalData.userInfo && app.globalData.userInfo.currentCompanyId) || '1';
+    if (!this.data.isDev) {
+      wx.showModal({
+        title: '能力尚未接入',
+        content: '生产环境已关闭模拟认证和模拟文件上传，请配置对应服务商后再操作。',
+        showCancel: false
+      });
+      return;
+    }
+    const companyId = app.getCurrentCompanyId();
+    if (!companyId) {
+      wx.showToast({ title: '请先选择企业', icon: 'none' });
+      return;
+    }
     try {
       if (key === 'face') {
         await request({ url: '/verifications/face', method: 'POST', data: { companyId } });
       } else if (key === 'seal') {
-        await request({ url: '/seals', method: 'POST', data: { companyId, fileUrl: 'https://storage.example.com/demo-seal.png', usage: '合同签署' } });
+        await request({ url: '/seals', method: 'POST', data: { companyId, fileUrl: 'dev://demo-seal.png', usage: '合同签署' } });
       } else {
         await request({ url: `/companies/${companyId}/certifications`, method: 'POST', data: {} });
       }

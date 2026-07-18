@@ -1,4 +1,5 @@
 const app = getApp();
+const { request } = require('../../utils/request');
 
 Page({
   data: {
@@ -27,7 +28,10 @@ Page({
       wx.showToast({ title: '请输入正确的手机号', icon: 'none' });
       return;
     }
-    // TODO: 接入真实短信服务后，调用后端发送验证码接口
+    if (!app.globalData.isLocalDevelopment) {
+      wx.showToast({ title: '短信服务暂未开放，请使用微信手机号登录', icon: 'none' });
+      return;
+    }
     this.setData({ codeSending: true, countdown: 60 });
     this._countdownTimer = setInterval(() => {
       const t = this.data.countdown - 1;
@@ -38,7 +42,7 @@ Page({
         this.setData({ countdown: t });
       }
     }, 1000);
-    wx.showToast({ title: '验证码已发送（模拟）', icon: 'none' });
+    wx.showToast({ title: '开发环境验证码已发送', icon: 'none' });
   },
 
   /* 登录 */
@@ -55,31 +59,25 @@ Page({
       wx.showToast({ title: '请输入验证码', icon: 'none' });
       return;
     }
+    if (!app.globalData.isLocalDevelopment) {
+      wx.showToast({ title: '短信服务暂未开放', icon: 'none' });
+      return;
+    }
     wx.showLoading({ title: '登录中...' });
 
     const loginWithCode = (code) => {
-      wx.request({
-        url: `${app.globalData.baseUrl}/auth/wechat-login`,
+      request({
+        url: '/auth/wechat-login',
         method: 'POST',
         data: { code, phone: this.data.phoneNumber },
-        success: ({ data }) => {
-          wx.hideLoading();
-          console.log('登录接口返回:', JSON.stringify(data));
-          if (data && data.code === 0 && data.data && data.data.token) {
-            app.globalData.token = data.data.token;
-            wx.setStorageSync('tradepass_token', data.data.token);
-            wx.showToast({ title: '登录成功', icon: 'none' });
-            app.loadMe().then(() => setTimeout(() => wx.switchTab({ url: '/pages/index/index' }), 800));
-          } else {
-            wx.showToast({ title: '登录失败：' + (data && data.message || '未知'), icon: 'none' });
-          }
-        },
-        fail: (err) => {
-          wx.hideLoading();
-          console.error('手机号登录请求失败:', JSON.stringify(err));
-          wx.showToast({ title: (err && err.errMsg) || '网络错误', icon: 'none' });
-        }
-      });
+        auth: false,
+        withCompany: false
+      }).then(session => app.establishSession(session)).then(() => {
+        wx.showToast({ title: '登录成功', icon: 'success' });
+        wx.switchTab({ url: '/pages/index/index' });
+      }).catch(error => {
+        wx.showToast({ title: error.message || '登录失败', icon: 'none' });
+      }).finally(() => wx.hideLoading());
     };
 
     if (app.globalData.isLocalDevelopment) {
@@ -93,6 +91,10 @@ Page({
       },
       fail: () => { wx.hideLoading(); wx.showToast({ title: '微信登录失败', icon: 'none' }); }
     });
+  },
+
+  onUnload() {
+    if (this._countdownTimer) clearInterval(this._countdownTimer);
   },
 
   /* 协议弹窗 */

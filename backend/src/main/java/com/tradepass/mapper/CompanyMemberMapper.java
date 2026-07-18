@@ -47,6 +47,20 @@ public interface CompanyMemberMapper extends BaseMapper<CompanyMember> {
     List<Map<String, Object>> selectAuthorizationRecords(@Param("companyId") Long companyId);
 
     @Select("""
+        SELECT m.id, m.user_id AS userId, m.role_code AS roleCode, m.status, u.nickname, u.phone
+        FROM company_member m
+        JOIN sys_user u ON m.user_id = u.id
+        WHERE m.company_id = #{companyId}
+          AND (#{status} IS NULL OR #{status} = '' OR m.status = #{status})
+        ORDER BY m.status, m.id
+        LIMIT #{limit} OFFSET #{offset}
+        """)
+    List<Map<String, Object>> selectAuthorizationPageRecords(@Param("companyId") Long companyId,
+                                                             @Param("status") String status,
+                                                             @Param("limit") int limit,
+                                                             @Param("offset") long offset);
+
+    @Select("""
         SELECT u.id, u.nickname, u.phone,
                COALESCE(
                    MAX(CASE WHEN m.role_code = 'LEGAL' THEN 'LEGAL' END),

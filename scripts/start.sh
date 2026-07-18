@@ -6,6 +6,7 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 PID_FILE="$ROOT_DIR/.runtime/tradepass.pid"
 LOG_FILE="$ROOT_DIR/.runtime/tradepass.log"
 JAR="$ROOT_DIR/backend/target/tradepass-server-0.1.0-SNAPSHOT.jar"
+SPRING_PROFILE="${SPRING_PROFILES_ACTIVE:-dev}"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; NC='\033[0m'
 log_info() { echo -e "${GREEN}[INFO]${NC} $*"; }
@@ -13,7 +14,7 @@ log_err()  { echo -e "${RED}[ERROR]${NC} $*"; }
 
 # ---------- infra ----------
 start_infra() {
-  log_info "启动 Docker 基础设施 (MySQL + Redis)..."
+  log_info "启动 Docker 基础设施 (MySQL)..."
   if ! docker info >/dev/null 2>&1; then
     log_err "Docker 未运行"
     return 1
@@ -35,13 +36,13 @@ start_app() {
     rm -f "$PID_FILE"
   fi
 
-  if [[ ! -f "$JAR" ]]; then
-    log_info "JAR 不存在，执行 mvn package..."
+  if [[ ! -f "$JAR" ]] || [[ -n "$(find "$ROOT_DIR/backend/src" -type f -newer "$JAR" -print -quit)" ]]; then
+    log_info "后端源码有更新，执行 mvn package..."
     cd "$ROOT_DIR/backend" && mvn -q -DskipTests package && cd "$ROOT_DIR"
   fi
 
-  log_info "启动 tradepass → $JAR"
-  nohup java -Xms256m -Xmx512m -jar "$JAR" > "$LOG_FILE" 2>&1 &
+  log_info "启动 tradepass ($SPRING_PROFILE) → $JAR"
+  nohup java -Xms256m -Xmx512m -jar "$JAR" --spring.profiles.active="$SPRING_PROFILE" > "$LOG_FILE" 2>&1 &
   echo "$!" > "$PID_FILE"
 
   local i=0

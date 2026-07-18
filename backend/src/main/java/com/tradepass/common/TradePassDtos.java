@@ -15,11 +15,20 @@ public final class TradePassDtos {
             String name,
             String creditCode,
             String legalPersonName,
+            String registeredAddress,
+            String contactPhone,
+            String bankName,
+            String bankAccount,
             String certificationStatus,
             String realNameStatus,
             String faceStatus,
             String sealStatus
     ) {
+        public CompanyProfile(String id, String name, String creditCode, String legalPersonName,
+                              String certificationStatus, String realNameStatus, String faceStatus, String sealStatus) {
+            this(id, name, creditCode, legalPersonName, null, null, null, null,
+                    certificationStatus, realNameStatus, faceStatus, sealStatus);
+        }
     }
 
     /** 公司成员信息（角色 + 权限点 + 状态） */

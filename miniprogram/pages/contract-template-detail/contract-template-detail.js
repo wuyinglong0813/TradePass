@@ -42,7 +42,7 @@ Page({
   initFromTemplate(tpl) {
     const tableSection = (tpl.sections || []).find(s => s.type === 'table');
     const rawClauses = (tpl.sections || []).filter(s => s.type === 'clause');
-    const rows = (tableSection && tableSection.rows) ? tableSection.rows.map(r => [...r]) : [['', '', '', '0', '0', '0']];
+    const rows = (tableSection && tableSection.rows) ? tableSection.rows.map(r => [...r]) : [['', '', '', '0', '0', '0', '']];
     const result = calcTableTotal(rows);
     const clauses = reorderClauses(rawClauses);
 
@@ -80,8 +80,8 @@ Page({
 
   addTableRow() {
     const cols = this.data.tableSection ? this.data.tableSection.columns.length : 6;
-    const newRow = new Array(cols).fill('0');
-    newRow[0] = ''; newRow[1] = ''; newRow[2] = '';
+    const newRow = new Array(cols).fill('');
+    newRow[3] = '0'; newRow[4] = '0'; newRow[5] = '0';
     this.recalcTable([...this.data.tableRows, newRow]);
   },
 
@@ -124,7 +124,7 @@ Page({
     const { templateId, name, category, title, fields, tableSection, tableRows, clauses } = this.data;
     if (!name.trim()) { wx.showToast({ title: '请输入模板名称', icon: 'none' }); return; }
 
-    const saveRows = tableRows.map(r => [r[0] || '', r[1] || '', r[2] || '', r[3] || '0', r[4] || '0', r[5] || '0']);
+    const saveRows = tableRows.map(r => r.map((value, index) => value || (index >= 3 && index <= 5 ? '0' : '')));
 
     const content = JSON.stringify({
       title: title || name,

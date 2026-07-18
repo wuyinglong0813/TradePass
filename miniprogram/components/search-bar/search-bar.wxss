@@ -6,6 +6,6 @@
   height: 72rpx;
   padding: 0 24rpx;
 }
-.sb-icon { color: #9ca3af; font-size: 26rpx; margin-right: 12rpx; }
-.sb-input { color: #111827; flex: 1; font-size: 28rpx; }
+.sb-icon { height: 44rpx; margin-right: 12rpx; width: 44rpx; }
+.sb-input { color: #162336; flex: 1; font-size: 28rpx; }
 .sb-clear { color: #9ca3af; font-size: 26rpx; padding: 0 8rpx; }

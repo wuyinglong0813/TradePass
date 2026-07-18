@@ -7,6 +7,10 @@ Page({
     keyword: '',
     activeCategory: 'all',
     categories: [],
+    loading: false,
+    page: 1,
+    size: 20,
+    hasMore: false,
     // 分类管理弹窗
     showCatModal: false,
     newCatName: '',
@@ -17,8 +21,12 @@ Page({
   },
 
   onShow() {
-    this.loadTemplates();
+    this.loadTemplates(true);
     this.loadCategories();
+  },
+
+  onReachBottom() {
+    if (this.data.hasMore && !this.data.loading) this.loadTemplates(false);
   },
 
   async loadCategories() {
@@ -28,35 +36,47 @@ Page({
     } catch (e) { /* 静默 */ }
   },
 
-  async loadTemplates() {
+  async loadTemplates(reset = true) {
+    if (this.data.loading) return;
+    this.setData({ loading: true });
     try {
       const { keyword, activeCategory } = this.data;
-      let url = '/contract-templates?';
+      const page = reset ? 1 : this.data.page + 1;
+      let url = `/contract-templates?page=${page}&size=${this.data.size}&`;
       if (keyword) url += `keyword=${encodeURIComponent(keyword)}&`;
       if (activeCategory !== 'all') url += `category=${encodeURIComponent(activeCategory)}&`;
-      const list = await request({ url });
+      const payload = await request({ url });
+      const list = Array.isArray(payload) ? payload : (payload.items || []);
       const templates = (list || []).map(t => ({
         id: parseInt(t.id),
         name: t.name,
         category: t.category || '通用',
-        createdBy: t.created_by_name || '',
-        updatedAt: (t.updated_at || t.created_at || '').substring(0, 10)
+        createdBy: t.createdByName || '',
+        updatedAt: String(t.updatedAt || t.createdAt || '').substring(0, 10)
       }));
-      this.setData({ templates });
-    } catch (e) { /* 静默 */ }
+      this.setData({
+        templates: reset ? templates : this.data.templates.concat(templates),
+        page,
+        hasMore: !!payload.hasMore
+      });
+    } catch (e) {
+      wx.showToast({ title: e.message || '模板加载失败', icon: 'none' });
+    } finally {
+      this.setData({ loading: false });
+    }
   },
 
   onSearchInput(e) { this.setData({ keyword: e.detail.value }); },
 
-  onSearch() { this.loadTemplates(); },
+  onSearch() { this.loadTemplates(true); },
 
-  clearSearch() { this.setData({ keyword: '' }); this.loadTemplates(); },
+  clearSearch() { this.setData({ keyword: '' }); this.loadTemplates(true); },
 
   filterCategory(e) {
     const cat = e.currentTarget.dataset.cat;
     if (cat === this.data.activeCategory) return;
     this.setData({ activeCategory: cat });
-    this.loadTemplates();
+    this.loadTemplates(true);
   },
 
   /* 分类管理 */
@@ -79,16 +99,16 @@ Page({
     const cat = e.currentTarget.dataset.cat;
     // 通过名称找到ID
     const list = await request({ url: '/contract-template-categories' });
-    const found = (list || []).find(c => c.name === cat.name);
+    const found = (list || []).find(c => c.name === cat);
     if (!found) return;
-    const res = await new Promise(r => wx.showModal({ title: '删除分类', content: `确定删除"${cat.name}"？`, success: r }));
+    const res = await new Promise(r => wx.showModal({ title: '删除分类', content: `确定删除"${cat}"？`, success: r }));
     if (!res.confirm) return;
     try {
       await request({ url: `/contract-template-categories/${found.id}/delete`, method: 'POST' });
       wx.showToast({ title: '已删除', icon: 'success' });
-      if (this.data.activeCategory === cat.name) this.setData({ activeCategory: 'all' });
+      if (this.data.activeCategory === cat) this.setData({ activeCategory: 'all' });
       this.loadCategories();
-      this.loadTemplates();
+      this.loadTemplates(true);
     } catch (e) { wx.showToast({ title: e.message, icon: 'none' }); }
   },
 
@@ -108,5 +128,6 @@ Page({
   },
   onCategoryTap(e) {
     this.setData({ newCategory: e.currentTarget.dataset.cat });
-  }
+  },
+  noop() {}
 });

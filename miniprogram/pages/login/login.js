@@ -1,4 +1,5 @@
 const app = getApp();
+const { request } = require('../../utils/request');
 
 Page({
   data: {
@@ -10,10 +11,13 @@ Page({
     quickPhoneEnabled: false
   },
 
-  onShow() {
-    if (wx.getStorageSync('tradepass_token')) {
-      setTimeout(() => wx.switchTab({ url: '/pages/index/index' }), 300);
-    }
+  onLoad() {
+    this.setData({ quickPhoneEnabled: !app.globalData.isLocalDevelopment });
+  },
+
+  async onShow() {
+    await app.ensureSessionReady();
+    if (app.globalData.token) wx.switchTab({ url: '/pages/index/index' });
   },
 
   toggleAgree() { this.setData({ agreed: !this.data.agreed }); },
@@ -29,32 +33,15 @@ Page({
       wx.showToast({ title: '请先阅读并同意协议', icon: 'none' });
       return;
     }
-    wx.showLoading({ title: '登录中...' });
-    wx.request({
-      url: `${app.globalData.baseUrl}/auth/wechat-login`,
-      method: 'POST',
-      data: { code: 'dev-openid-001', nickName: '满帅', phone: '18800000001' },
-      success: ({ data }) => {
-        wx.hideLoading();
-        if (data && data.code === 0 && data.data && data.data.token) {
-          app.globalData.token = data.data.token;
-          wx.setStorageSync('tradepass_token', data.data.token);
-          wx.showToast({ title: '登录成功', icon: 'none' });
-          app.loadMe().then(() => setTimeout(() => wx.switchTab({ url: '/pages/index/index' }), 800));
-        } else {
-          wx.showToast({ title: '登录失败：' + (data && data.message || '未知'), icon: 'none' });
-        }
-      },
-      fail: (err) => {
-        wx.hideLoading();
-        console.error('手机号快捷登录请求失败:', JSON.stringify(err));
-        wx.showToast({ title: (err && err.errMsg) || '网络错误', icon: 'none' });
-      }
-    });
+    this.loginWithPayload({ code: 'dev-openid-001', nickName: '满帅', phone: '18800000001' });
   },
 
   /* 跳转输入手机号登录页 */
   goPhoneLogin() {
+    if (!app.globalData.isLocalDevelopment) {
+      wx.showToast({ title: '短信登录服务暂未开放', icon: 'none' });
+      return;
+    }
     wx.navigateTo({ url: '/pages/phone-login/phone-login' });
   },
 
@@ -64,39 +51,36 @@ Page({
       wx.showToast({ title: '请先阅读并同意协议', icon: 'none' });
       return;
     }
-    console.log('getPhoneNumber 回调:', JSON.stringify(e.detail));
     if (e.detail.errMsg !== 'getPhoneNumber:ok') {
       wx.showToast({ title: '获取手机号失败', icon: 'none' });
       return;
     }
-    wx.showLoading({ title: '登录中...' });
     wx.login({
       success: ({ code }) => {
-        wx.request({
-          url: `${app.globalData.baseUrl}/auth/wechat-login`,
-          method: 'POST',
-          data: { code, phoneCode: e.detail.code },
-          success: ({ data }) => {
-            wx.hideLoading();
-            console.log('登录接口返回:', JSON.stringify(data));
-            if (data && data.code === 0 && data.data && data.data.token) {
-              app.globalData.token = data.data.token;
-              wx.setStorageSync('tradepass_token', data.data.token);
-              wx.showToast({ title: '登录成功', icon: 'none' });
-              app.loadMe().then(() => setTimeout(() => wx.switchTab({ url: '/pages/index/index' }), 800));
-            } else {
-              wx.showToast({ title: '登录失败：' + (data && data.message || '未知'), icon: 'none' });
-            }
-          },
-          fail: (err) => {
-            wx.hideLoading();
-            console.error('微信手机号登录请求失败:', JSON.stringify(err));
-            wx.showToast({ title: (err && err.errMsg) || '网络错误', icon: 'none' });
-          }
-        });
+        this.loginWithPayload({ code, phoneCode: e.detail.code });
       },
-      fail: () => { wx.hideLoading(); wx.showToast({ title: '微信登录失败', icon: 'none' }); }
+      fail: () => wx.showToast({ title: '微信登录失败', icon: 'none' })
     });
+  },
+
+  async loginWithPayload(payload) {
+    wx.showLoading({ title: '登录中...' });
+    try {
+      const session = await request({
+        url: '/auth/wechat-login',
+        method: 'POST',
+        data: payload,
+        auth: false,
+        withCompany: false
+      });
+      await app.establishSession(session);
+      wx.showToast({ title: '登录成功', icon: 'success' });
+      wx.switchTab({ url: '/pages/index/index' });
+    } catch (error) {
+      wx.showToast({ title: error.message || '登录失败', icon: 'none' });
+    } finally {
+      wx.hideLoading();
+    }
   },
 
   /* 协议弹窗 */

@@ -18,14 +18,5 @@ services:
       timeout: 5s
       retries: 10
 
-  redis:
-    image: redis:7.4-alpine
-    container_name: tradepass-redis
-    ports:
-      - "1119:6379"
-    volumes:
-      - tradepass-redis-data:/data
-
 volumes:
   tradepass-mysql-data:
-  tradepass-redis-data:

@@ -10,17 +10,33 @@ function hasPerm(perm) {
   return perms.includes(perm);
 }
 
+function companyAbbr(name) {
+  const clean = (name || '企业').replace(/有限公司|有限责任公司|股份有限公司/g, '');
+  return clean.slice(0, 2) || '企业';
+}
+
+function maskCreditCode(code) {
+  const value = code || '';
+  if (!value) return '暂未录入';
+  if (value.length <= 8) return value;
+  return `${value.slice(0, 4)}••••${value.slice(-4)}`;
+}
+
 Page({
   data: {
     isLoggedIn: false,
     hasCompany: false,
     company: {},
-    companyNameFirst: '',
+    companyAbbr: '企业',
+    maskedCreditCode: '暂未录入',
     certBadge: { text: '', color: '' },
-    certProgress: 0,
+    certCompleted: false,
     member: {},
     canManage: false,
     canContractTemplate: false,
+    memberCount: 0,
+    roleCount: 0,
+    templateCount: 0,
     companies: [],
     currentCompanyId: '',
     todos: [],
@@ -48,37 +64,59 @@ Page({
       const companies = payload.companies || [];
       const hasCompany = !!(member && member.roleCode && member.roleCode !== 'GUEST') && companies.length > 0;
       const canManage = member.roleCode === 'LEGAL' || member.roleCode === 'ADMIN';
-
-      // 认证进度
       const certStatus = company.certificationStatus || '';
-      let certProgress = 0;
-      if (certStatus === 'CERTIFIED') certProgress = 100;
-      else if (certStatus === 'IN_PROGRESS') certProgress = 60;
-      else if (certStatus === 'PENDING') certProgress = 20;
-      else certProgress = 0;
+      const permissions = member.permissions || [];
+      const canContractTemplate = canManage && (permissions.includes('all') || permissions.includes('contract_template') || hasPerm('contract_template'));
+      const currentCompanyId = (payload.user && payload.user.currentCompanyId) || '';
+      const companyItems = companies.map(item => ({ ...item, initial: companyAbbr(item.companyName) }));
 
       this.setData({
         hasCompany,
         company,
-        companyNameFirst: (company.name || '企')[0],
-        canContractTemplate: canManage && hasPerm('contract_template'),
+        companyAbbr: companyAbbr(company.name),
+        maskedCreditCode: maskCreditCode(company.creditCode),
+        canContractTemplate,
         certBadge: dict.certification(certStatus),
-        certProgress,
+        certCompleted: certStatus === 'VERIFIED',
         member,
         canManage,
-        companies,
-        currentCompanyId: (payload.user && payload.user.currentCompanyId) || ''
+        companies: companyItems,
+        currentCompanyId
       });
-      this.loadTodos();
+      await Promise.all([
+        this.loadTodos(),
+        this.loadEnterpriseMetrics(currentCompanyId || company.id, canManage, canContractTemplate)
+      ]);
     } catch (e) {}
+  },
+
+  async loadEnterpriseMetrics(companyId, canManage, canContractTemplate) {
+    if (!companyId || !canManage) {
+      this.setData({ memberCount: 0, roleCount: 0, templateCount: 0 });
+      return;
+    }
+    const safe = (promise, fallback) => promise.catch(() => fallback);
+    const [members, roles, templates] = await Promise.all([
+      safe(request({ url: `/authorizations?companyId=${companyId}&status=ACTIVE&page=1&size=1` }), { total: 0 }),
+      safe(request({ url: `/roles?companyId=${companyId}` }), []),
+      canContractTemplate ? safe(request({ url: '/contract-templates?page=1&size=1' }), { total: 0 }) : Promise.resolve({ total: 0 })
+    ]);
+    this.setData({
+      memberCount: Number(members.total || 0),
+      roleCount: (roles || []).length,
+      templateCount: Number(templates.total || 0)
+    });
   },
 
   async loadTodos() {
     try {
       const todos = await request({ url: '/me/todos' });
-      // 给每种待办加上图标
-      const iconMap = { APPROVAL: '👤', CERT: '🏅', CONTRACT: '📋' };
-      const enhanced = (todos || []).map(t => ({ ...t, icon: iconMap[t.type] || '📋' }));
+      const iconMap = {
+        APPROVAL: '/images/icons/team.svg',
+        CERT: '/images/icons/company.svg',
+        CONTRACT: '/images/icons/approval.svg'
+      };
+      const enhanced = (todos || []).map(t => ({ ...t, iconPath: iconMap[t.type] || '/images/icons/contracts.svg' }));
       this.setData({ todos: enhanced });
     } catch (e) { this.setData({ todos: [] }); }
   },
@@ -101,10 +139,22 @@ Page({
       success: async (res) => {
         try {
           await app.switchCompany(companies[res.tapIndex].companyId);
-          this.loadData();
+          await this.loadData();
         } catch (e) { wx.showToast({ title: '切换失败', icon: 'none' }); }
       }
     });
+  },
+
+  async switchCompanyFromRow(e) {
+    const companyId = e.currentTarget.dataset.companyId;
+    if (!companyId || companyId === this.data.currentCompanyId) return;
+    try {
+      await app.switchCompany(companyId);
+      wx.showToast({ title: '企业已切换', icon: 'success' });
+      await this.loadData();
+    } catch (error) {
+      wx.showToast({ title: '切换失败', icon: 'none' });
+    }
   },
 
   goCreateCompany() { wx.navigateTo({ url: '/pages/company-bind/company-bind' }); },
@@ -112,6 +162,7 @@ Page({
   goAuthManage() { wx.navigateTo({ url: '/pages/auth-manage/auth-manage' }); },
   goRoleManage() { wx.navigateTo({ url: '/pages/role-manage/role-manage' }); },
   goContractTemplate() { wx.navigateTo({ url: '/pages/contract-template/contract-template' }); },
+  goDocumentTemplate() { wx.navigateTo({ url: '/pages/document-template/document-template' }); },
   goInventory() {
     this.setData({ showInventoryModal: true });
   },

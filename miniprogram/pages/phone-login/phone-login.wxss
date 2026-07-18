@@ -23,7 +23,7 @@ page { background: #fff; }
 }
 
 .app-name {
-  color: #1a1a1a;
+  color: #162336;
   font-size: 46rpx;
   font-weight: 700;
   margin-top: 24rpx;
@@ -68,7 +68,7 @@ page { background: #fff; }
 }
 
 .code-btn {
-  color: #0f766e;
+  color: #3498ff;
   flex-shrink: 0;
   font-size: 26rpx;
   margin-left: 16rpx;
@@ -81,7 +81,7 @@ page { background: #fff; }
 
 .btn-submit {
   align-items: center;
-  background: linear-gradient(90deg, #0f766e, #14b8a6);
+  background: linear-gradient(90deg, #3498ff, #45a8ff);
   border: none;
   border-radius: 48rpx;
   color: #fff;
@@ -120,8 +120,8 @@ page { background: #fff; }
 }
 
 .agree-check.on {
-  background: #0f766e;
-  border-color: #0f766e;
+  background: #3498ff;
+  border-color: #3498ff;
 }
 
 .agree-label {
@@ -131,7 +131,7 @@ page { background: #fff; }
 }
 
 .agree-link {
-  color: #0f766e;
+  color: #3498ff;
 }
 
 .agree-hint {
@@ -156,12 +156,15 @@ page { background: #fff; }
 .modal {
   background: #fff;
   border-radius: 24rpx;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   margin: 80rpx 48rpx;
   max-height: 75vh;
+  max-width: calc(100% - 96rpx);
+  overflow: hidden;
   padding: 40rpx;
-  width: 100%;
+  width: calc(100% - 96rpx);
 }
 
 .modal-title {
@@ -171,8 +174,12 @@ page { background: #fff; }
 }
 
 .modal-body {
+  box-sizing: border-box;
   flex: 1;
   max-height: 45vh;
+  max-width: 100%;
+  overflow-x: hidden;
+  width: 100%;
 }
 
 .h2 {
@@ -188,7 +195,7 @@ page { background: #fff; }
 }
 
 .modal-btn {
-  background: #0f766e;
+  background: #3498ff;
   border-radius: 12rpx;
   color: #fff;
   font-size: 28rpx;

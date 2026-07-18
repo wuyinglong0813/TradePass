@@ -1,75 +1,27 @@
-page { background: #f5f6f8; }
-
-.page { padding-bottom: calc(24rpx + env(safe-area-inset-bottom)); }
-
-.header-bar {
-  background: linear-gradient(160deg, #f59e0b, #f97316);
-  padding: 32rpx 40rpx 36rpx;
-}
-
-.h-title { color: #fff; font-size: 36rpx; font-weight: 700; }
-.h-desc { color: rgba(255,255,255,0.85); font-size: 24rpx; margin-top: 8rpx; }
-
-.list { padding: 24rpx; }
-
-.loading-hint { color: #999; font-size: 26rpx; padding: 80rpx 0; text-align: center; }
-
+page { background: #f4f8fd; }
+.page { padding: 0 0 calc(36rpx + env(safe-area-inset-bottom)); }
+.header-bar { background: linear-gradient(138deg,#45a8ff,#2478df 76%,#1557a8); color: #fff; overflow: hidden; padding: 36rpx 32rpx 42rpx; position: relative; }
+.header-mark { height: 220rpx; opacity: .08; position: absolute; right: -30rpx; top: -42rpx; width: 220rpx; }
+.h-title { font-size: 36rpx; font-weight: 700; position: relative; }
+.h-desc { color: rgba(255,255,255,.7); font-size: 23rpx; margin-top: 8rpx; position: relative; }
+.list { padding: 22rpx 24rpx; }
+.loading-hint { color: #8b9794; font-size: 25rpx; padding: 80rpx 0; text-align: center; }
 .empty-hint { align-items: center; display: flex; flex-direction: column; padding: 80rpx 0; }
-.empty-icon { font-size: 64rpx; margin-bottom: 16rpx; }
-.empty-text { color: #999; font-size: 28rpx; }
-
-.contract-card {
-  background: #fff;
-  border-left: 8rpx solid #f59e0b;
-  border-radius: 16rpx;
-  margin-bottom: 20rpx;
-  padding: 28rpx;
-  box-shadow: 0 2rpx 8rpx rgba(0,0,0,0.04);
-}
-
+.empty-icon { height: 110rpx; margin-bottom: 16rpx; width: 110rpx; }
+.empty-text { color: #71807c; font-size: 27rpx; }
+.contract-card { background: #fff; border: 1rpx solid #e3ebf5; border-radius: 26rpx; box-shadow: 0 10rpx 30rpx rgba(22, 49, 85,.05); margin-bottom: 18rpx; padding: 28rpx; }
 .cc-top { align-items: center; display: flex; justify-content: space-between; }
-
-.cc-name { color: #1a1a1a; font-size: 30rpx; font-weight: 700; flex: 1; }
-
-.cc-status {
-  border-radius: 6rpx;
-  font-size: 22rpx;
-  font-weight: 500;
-  padding: 4rpx 14rpx;
-}
-
-.cc-status.pending { background: #fef3c7; color: #92400e; }
-
-.cc-party { color: #666; font-size: 26rpx; margin-top: 12rpx; }
-.cc-dates { color: #999; font-size: 24rpx; margin-top: 6rpx; }
-.cc-amount { color: #555; font-size: 26rpx; margin-top: 10rpx; }
-.cc-amount-value { color: #0f766e; font-size: 32rpx; font-weight: 700; margin-left: 8rpx; }
-.cc-template { color: #999; font-size: 24rpx; margin-top: 6rpx; }
-.cc-terms { color: #777; font-size: 24rpx; margin-top: 10rpx; line-height: 1.6; }
-.cc-created { color: #bbb; font-size: 22rpx; margin-top: 12rpx; }
-
-.cc-actions { display: flex; gap: 16rpx; margin-top: 24rpx; }
-
-.cc-btn {
-  border: none;
-  border-radius: 12rpx;
-  flex: 1;
-  font-size: 28rpx;
-  font-weight: 600;
-  height: 80rpx;
-  line-height: 80rpx;
-  padding: 0;
-  text-align: center;
-}
-
+.cc-name { color: #162336; flex: 1; font-size: 30rpx; font-weight: 700; }
+.cc-status { border-radius: 15rpx; font-size: 21rpx; padding: 5rpx 11rpx; }
+.cc-status.pending { background: #fff3d6; color: #9a6511; }
+.cc-party { color: #45534f; font-size: 25rpx; margin-top: 12rpx; }
+.cc-dates,.cc-template { color: #8b9794; font-size: 23rpx; margin-top: 7rpx; }
+.cc-amount { color: #52615e; font-size: 24rpx; margin-top: 12rpx; }
+.cc-amount-value { color: #2478df; font-size: 31rpx; font-weight: 700; margin-left: 8rpx; }
+.cc-terms { background: #f5f8f7; border-radius: 15rpx; color: #697673; font-size: 23rpx; line-height: 1.65; margin-top: 12rpx; padding: 14rpx; }
+.cc-created { color: #a1aaa8; font-size: 20rpx; margin-top: 12rpx; }
+.cc-actions { display: flex; gap: 14rpx; margin-top: 24rpx; }
+.cc-btn { border: none; border-radius: 18rpx; flex: 1; font-size: 26rpx; font-weight: 600; height: 78rpx; line-height: 78rpx; padding: 0; }
 .cc-btn::after { border: none; }
-
-.cc-btn.approve {
-  background: linear-gradient(90deg, #0f766e, #14b8a6);
-  color: #fff;
-}
-
-.cc-btn.reject {
-  background: #f5f5f5;
-  color: #999;
-}
+.cc-btn.approve { background: linear-gradient(135deg,#45a8ff,#2478df); color: #fff; }
+.cc-btn.reject { background: #f1f5fa; color: #75827e; }

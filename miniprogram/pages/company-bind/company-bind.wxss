@@ -3,7 +3,7 @@
 /* 顶部 Banner */
 .bind-banner {
   position: relative;
-  background: linear-gradient(160deg, #0a6e63 0%, #0f766e 40%, #14b8a6 100%);
+  background: linear-gradient(160deg, #2b83e7 0%, #3498ff 40%, #45a8ff 100%);
   padding: 40rpx 40rpx 44rpx;
   overflow: hidden;
 }
@@ -65,14 +65,15 @@
 }
 
 .search-icon {
-  font-size: 32rpx;
+  height: 50rpx;
   margin-right: 12rpx;
+  width: 50rpx;
 }
 
 .search-input {
   flex: 1;
   font-size: 28rpx;
-  color: #111827;
+  color: #162336;
 }
 
 .search-clear {
@@ -82,7 +83,7 @@
 }
 
 .search-btn {
-  background: linear-gradient(90deg, #0f766e, #14b8a6);
+  background: linear-gradient(90deg, #3498ff, #45a8ff);
   border: none;
   border-radius: 48rpx;
   color: #fff;
@@ -110,8 +111,9 @@
 }
 
 .empty-icon {
-  font-size: 80rpx;
+  height: 112rpx;
   margin-bottom: 24rpx;
+  width: 112rpx;
 }
 
 .empty-text {
@@ -138,7 +140,7 @@
 .result-name {
   font-size: 32rpx;
   font-weight: 700;
-  color: #111827;
+  color: #162336;
   margin-bottom: 16rpx;
   padding-right: 40rpx;
 }
@@ -184,7 +186,7 @@
 
 .confirm-label {
   font-size: 24rpx;
-  color: #0f766e;
+  color: #3498ff;
   font-weight: 600;
   margin-bottom: 12rpx;
 }
@@ -192,7 +194,7 @@
 .confirm-name {
   font-size: 36rpx;
   font-weight: 700;
-  color: #111827;
+  color: #162336;
   margin-bottom: 24rpx;
 }
 
@@ -220,7 +222,7 @@
 }
 
 .confirm-btn {
-  background: linear-gradient(90deg, #0f766e, #14b8a6);
+  background: linear-gradient(90deg, #3498ff, #45a8ff);
   border: none;
   border-radius: 48rpx;
   color: #fff;

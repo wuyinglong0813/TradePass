@@ -274,7 +274,10 @@ public class AuthService {
 
     private MePayload buildMe(long userId, Long companyId) {
         List<CompanyRole> companies = loadUserCompanies(userId);
-        Long effectiveCompanyId = companyId == null && !companies.isEmpty() ? parseId(companies.get(0).companyId()) : companyId;
+        Long effectiveCompanyId = companyId;
+        if (effectiveCompanyId == null && !companies.isEmpty()) {
+            effectiveCompanyId = parseId(companies.get(0).companyId());
+        }
         MemberInfo member = loadMember(userId, effectiveCompanyId == null ? 0L : effectiveCompanyId);
         if (member == null || member.roleCode() == null) {
             SysUser user = sysUserMapper.selectById(userId);
@@ -312,12 +315,14 @@ public class AuthService {
             return null;
         }
         return new CompanyProfile(String.valueOf(company.getId()), company.getName(), company.getCreditCode(),
-                company.getLegalPersonName(), company.getCertificationStatus(), company.getRealNameStatus(),
+                company.getLegalPersonName(), company.getRegisteredAddress(), company.getContactPhone(),
+                company.getBankName(), company.getBankAccount(), company.getCertificationStatus(), company.getRealNameStatus(),
                 company.getFaceStatus(), company.getSealStatus());
     }
 
     private CompanyProfile fallbackCompany() {
-        return new CompanyProfile("1", "未加入企业", "", "", "NOT_SUBMITTED", "NOT_STARTED", "NOT_STARTED", "NOT_UPLOADED");
+        return new CompanyProfile("", "未加入企业", "", "", null, null, null, null,
+                "NOT_SUBMITTED", "NOT_STARTED", "NOT_STARTED", "NOT_UPLOADED");
     }
 
     private String tokenFor(long userId) {

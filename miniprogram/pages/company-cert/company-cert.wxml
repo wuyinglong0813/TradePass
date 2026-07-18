@@ -61,6 +61,9 @@
 
   <!-- ===== 新企业 Step2：认证方式 ===== -->
   <block wx:elif="{{step === 'auth'}}">
+    <view class="auth-card" wx:if="{{!isDev}}">
+      <view class="face-desc">生产环境尚未配置实名、人脸及短信认证服务，当前不会生成模拟认证结果。</view>
+    </view>
     <view class="auth-card">
       <view class="section-title">认证方式</view>
       <view class="auth-type-row">
@@ -72,12 +75,12 @@
       <view class="section-title">法定代表人身份认证方式</view>
       <view class="auth-options">
         <view class="auth-option {{authMethod === 'face' ? 'active' : ''}}" bindtap="selectAuthMethod" data-method="face">
-          <view class="auth-option-icon">📷</view>
+          <image class="auth-option-icon" src="/images/icons/camera.svg" mode="aspectFit"/>
           <view class="auth-option-text">人脸认证</view>
           <view class="auth-option-check" wx:if="{{authMethod === 'face'}}">✓</view>
         </view>
         <view class="auth-option {{authMethod === 'phone' ? 'active' : ''}}" bindtap="selectAuthMethod" data-method="phone">
-          <view class="auth-option-icon">📱</view>
+          <image class="auth-option-icon" src="/images/icons/phone.svg" mode="aspectFit"/>
           <view class="auth-option-text">手机号认证</view>
           <view class="auth-option-check" wx:if="{{authMethod === 'phone'}}">✓</view>
         </view>

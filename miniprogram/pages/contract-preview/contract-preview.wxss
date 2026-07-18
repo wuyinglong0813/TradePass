@@ -1,4 +1,4 @@
-page { background: #f5f6f8; }
+page { background: #f4f8fd; }
 
 .page {
   padding-bottom: calc(24rpx + env(safe-area-inset-bottom));
@@ -6,7 +6,7 @@ page { background: #f5f6f8; }
 
 /* ===== 合同信息头 ===== */
 .contract-header {
-  background: linear-gradient(160deg, #0f766e, #14b8a6);
+  background: linear-gradient(145deg, #45a8ff, #3498ff 52%, #2478df);
   padding: 32rpx 40rpx 36rpx;
 }
 
@@ -33,19 +33,19 @@ page { background: #f5f6f8; }
 .tab-item {
   color: #666;
   flex: 1;
-  font-size: 28rpx;
+  font-size: 24rpx;
   padding: 26rpx 0 20rpx;
   position: relative;
   text-align: center;
 }
 
 .tab-item.active {
-  color: #0f766e;
+  color: #3498ff;
   font-weight: 700;
 }
 
 .tab-item.active::after {
-  background: #0f766e;
+  background: #3498ff;
   bottom: 0;
   content: '';
   height: 6rpx;
@@ -70,6 +70,39 @@ page { background: #f5f6f8; }
 
 .empty-icon { font-size: 64rpx; margin-bottom: 16rpx; }
 .empty-text { color: #999; font-size: 28rpx; }
+.empty-sub { color: #a4aeba; font-size: 21rpx; margin-top: 10rpx; }
+.list-empty.compact { padding: 70rpx 0; }
+
+/* ===== 销售单 / 送货单 PDF ===== */
+.document-bar {
+  align-items: center; background: linear-gradient(145deg,#fff,#f5faff); border: 1rpx solid #dceafb;
+  border-radius: 22rpx; display: flex; justify-content: space-between; margin: 0 24rpx 16rpx; padding: 22rpx;
+}
+.document-title { color: #1d2d40; font-size: 27rpx; font-weight: 700; }
+.document-sub { color: #8d9aab; font-size: 20rpx; margin-top: 6rpx; }
+.document-create {
+  background: linear-gradient(135deg,#45a8ff,#2478df); border: 0; border-radius: 17rpx;
+  color: #fff; flex-shrink: 0; font-size: 22rpx; font-weight: 600; height: 66rpx;
+  line-height: 66rpx; margin: 0; padding: 0 18rpx;
+}
+.document-create::after { border: 0; }
+.document-list { padding: 0 24rpx; }
+.document-card {
+  align-items: center; background: #fff; border: 1rpx solid #e0eaf5; border-radius: 18rpx;
+  box-shadow: 0 6rpx 18rpx rgba(26,67,112,.045); display: flex; margin-bottom: 14rpx; padding: 19rpx;
+}
+.document-badge {
+  align-items: center; background: #e7f3ff; border-radius: 15rpx; color: #3498ff; display: flex;
+  flex-shrink: 0; font-size: 23rpx; font-weight: 700; height: 58rpx; justify-content: center; width: 58rpx;
+}
+.document-badge.delivery { background: #eaf1ff; color: #5c7be7; }
+.document-info { flex: 1; margin-left: 14rpx; min-width: 0; }
+.document-no { color: #223247; font-size: 24rpx; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.document-meta { color: #95a1af; font-size: 19rpx; margin-top: 5rpx; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.document-actions { color: #3498ff; display: flex; flex-shrink: 0; font-size: 21rpx; }
+.document-actions view { padding: 12rpx 8rpx; }
+.document-actions view + view { border-left: 1rpx solid #e6edf5; }
+.list-section-title { color: #8290a2; font-size: 22rpx; margin: 22rpx 28rpx 12rpx; }
 
 /* ===== 订单卡片 ===== */
 .order-card {
@@ -137,7 +170,7 @@ page { background: #f5f6f8; }
 }
 
 .oc-amount {
-  color: #0f766e;
+  color: #3498ff;
   font-size: 30rpx;
   font-weight: 700;
 }
@@ -151,6 +184,189 @@ page { background: #f5f6f8; }
 }
 
 .loading-text { color: #999; font-size: 28rpx; }
+
+/* ===== PDF 合同详情 ===== */
+.pdf-viewer {
+  background: #e8e8e8;
+  padding: 18rpx 20rpx 32rpx;
+}
+
+.pdf-state {
+  align-items: center;
+  color: #666;
+  display: flex;
+  font-size: 22rpx;
+  justify-content: center;
+  margin-bottom: 16rpx;
+}
+
+.pdf-state-dot {
+  background: #aab0b6;
+  border-radius: 50%;
+  height: 12rpx;
+  margin-right: 10rpx;
+  width: 12rpx;
+}
+
+.pdf-state-dot.ready { background: #16a46d; }
+
+.pdf-paper {
+  background: #fff;
+  box-shadow: 0 5rpx 18rpx rgba(0, 0, 0, .16);
+  box-sizing: border-box;
+  color: #111;
+  margin: 0 auto;
+  min-height: 1004rpx;
+  padding: 84rpx 72rpx 62rpx;
+  position: relative;
+  width: 100%;
+}
+
+.pdf-paper:active { opacity: .96; }
+
+.pdf-paper-title {
+  font-family: serif;
+  font-size: 34rpx;
+  font-weight: 700;
+  letter-spacing: 18rpx;
+  margin-bottom: 22rpx;
+  padding-left: 18rpx;
+  text-align: center;
+}
+
+.pdf-paper-head {
+  display: flex;
+  font-family: serif;
+  font-size: 16rpx;
+  justify-content: space-between;
+  line-height: 1.45;
+}
+
+.pdf-paper-head > view:first-child {
+  max-width: 58%;
+}
+
+.pdf-section-line {
+  font-family: serif;
+  font-size: 16rpx;
+  line-height: 1.4;
+  margin-top: 5rpx;
+}
+
+.pdf-mini-table {
+  border-left: 1rpx solid #222;
+  border-top: 1rpx solid #222;
+}
+
+.pdf-mini-row {
+  display: grid;
+  grid-template-columns: 1.05fr 1.45fr .65fr .75fr .85fr 1fr .8fr;
+  min-height: 28rpx;
+}
+
+.pdf-mini-row > view {
+  border-bottom: 1rpx solid #222;
+  border-right: 1rpx solid #222;
+  box-sizing: border-box;
+  color: #222;
+  font-family: serif;
+  font-size: 13rpx;
+  min-width: 0;
+  padding: 3rpx 2rpx;
+  text-align: center;
+}
+
+.pdf-mini-header { background: #f5f5f5; }
+
+.pdf-clause-lines {
+  padding-top: 14rpx;
+}
+
+.pdf-clause-lines > view {
+  border-bottom: 2rpx solid #333;
+  height: 22rpx;
+  opacity: .72;
+}
+
+.pdf-sign-table {
+  border-left: 1rpx solid #222;
+  border-top: 1rpx solid #222;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  margin-top: 18rpx;
+}
+
+.pdf-sign-table > view {
+  border-bottom: 1rpx solid #222;
+  border-right: 1rpx solid #222;
+  display: flex;
+  flex-direction: column;
+}
+
+.pdf-sign-table text {
+  border-bottom: 1rpx solid #222;
+  font-family: serif;
+  font-size: 13rpx;
+  min-height: 22rpx;
+  padding: 2rpx 4rpx;
+}
+
+.pdf-sign-table text:first-child {
+  font-size: 22rpx;
+  font-weight: 700;
+  text-align: center;
+}
+
+.pdf-sign-table text:last-child { border-bottom: 0; }
+
+.pdf-open-hint {
+  bottom: 20rpx;
+  color: #777;
+  font-size: 20rpx;
+  left: 0;
+  position: absolute;
+  right: 0;
+  text-align: center;
+}
+
+.pdf-actions {
+  display: grid;
+  gap: 18rpx;
+  grid-template-columns: 1fr 1fr;
+  margin-top: 24rpx;
+}
+
+.pdf-button {
+  border-radius: 12rpx;
+  font-size: 28rpx;
+  font-weight: 600;
+  line-height: 82rpx;
+  margin: 0;
+  padding: 0;
+}
+
+.pdf-button::after { border: 0; }
+
+.pdf-button.primary {
+  background: #3498ff;
+  color: #fff;
+}
+
+.pdf-button.secondary {
+  background: #fff;
+  border: 1rpx solid #3498ff;
+  color: #3498ff;
+}
+
+.pdf-button[disabled] { opacity: .58; }
+
+.pdf-tip {
+  color: #6d7378;
+  font-size: 22rpx;
+  line-height: 1.6;
+  padding: 18rpx 8rpx 0;
+  text-align: center;
+}
 
 .detail-card {
   background: #fff;
@@ -216,7 +432,7 @@ page { background: #f5f6f8; }
 }
 
 .d-amount {
-  color: #0f766e;
+  color: #3498ff;
   font-size: 32rpx;
   font-weight: 700;
 }
@@ -356,7 +572,7 @@ page { background: #f5f6f8; }
 }
 
 .pf-value.amount {
-  color: #0f766e;
+  color: #3498ff;
   font-size: 32rpx;
   font-weight: 700;
 }
@@ -409,20 +625,20 @@ page { background: #f5f6f8; }
 }
 
 .tl-dot.done {
-  border-color: #0f766e;
+  border-color: #3498ff;
 }
 
 .tl-dot.done .tl-dot-inner {
-  background: #0f766e;
+  background: #3498ff;
 }
 
 .tl-dot.active {
-  border-color: #14b8a6;
-  box-shadow: 0 0 0 6rpx rgba(20,184,166,0.15);
+  border-color: #45a8ff;
+  box-shadow: 0 0 0 6rpx rgba(52,152,255,0.15);
 }
 
 .tl-dot.active .tl-dot-inner {
-  background: #14b8a6;
+  background: #45a8ff;
 }
 
 /* 时间线竖线 */
@@ -452,7 +668,7 @@ page { background: #f5f6f8; }
 }
 
 .tl-title.active {
-  color: #0f766e;
+  color: #3498ff;
   font-weight: 600;
 }
 
@@ -474,7 +690,7 @@ page { background: #f5f6f8; }
 }
 .section-title {
   font-size: 28rpx; font-weight: 600; color: #333; margin-bottom: 16rpx;
-  padding-left: 12rpx; border-left: 6rpx solid #0f766e;
+  padding-left: 12rpx; border-left: 6rpx solid #3498ff;
 }
 
 .s-title-card { text-align: center; padding: 36rpx 28rpx; }
@@ -495,8 +711,8 @@ page { background: #f5f6f8; }
 .table-scroll { width: 100%; }
 .table-wrap { min-width: 900rpx; }
 .table-row { display: flex; }
-.table-header { background: #f0fdf4; border-radius: 8rpx 8rpx 0 0; }
-.th { flex: 1; min-width: 130rpx; padding: 14rpx 6rpx; font-size: 24rpx; color: #0f766e; font-weight: 600; text-align: center; }
+.table-header { background: #edf6ff; border-radius: 8rpx 8rpx 0 0; }
+.th { flex: 1; min-width: 130rpx; padding: 14rpx 6rpx; font-size: 24rpx; color: #3498ff; font-weight: 600; text-align: center; }
 .td { flex: 1; min-width: 130rpx; padding: 10rpx 6rpx; text-align: center; }
 .td-text { font-size: 24rpx; color: #333; }
 .table-summary { margin-top: 12rpx; padding: 16rpx 20rpx; background: #fafafa; border-radius: 10rpx; }
@@ -504,10 +720,10 @@ page { background: #f5f6f8; }
 .sum-row:last-child { margin-bottom: 0; }
 .sum-label { font-size: 26rpx; color: #666; width: 100rpx; }
 .sum-amount { font-size: 28rpx; color: #e53e3e; font-weight: 700; }
-.sum-chinese { font-size: 26rpx; color: #0f766e; font-weight: 600; }
+.sum-chinese { font-size: 26rpx; color: #3498ff; font-weight: 600; }
 
 /* 条款 */
 .clause-block { margin-bottom: 16rpx; padding-bottom: 16rpx; border-bottom: 1rpx solid #f5f5f5; }
 .clause-block:last-child { border-bottom: none; padding-bottom: 0; }
-.clause-title { font-size: 26rpx; font-weight: 600; color: #0f766e; margin-bottom: 8rpx; }
+.clause-title { font-size: 26rpx; font-weight: 600; color: #3498ff; margin-bottom: 8rpx; }
 .clause-text { font-size: 26rpx; color: #555; line-height: 1.8; }

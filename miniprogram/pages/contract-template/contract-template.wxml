@@ -7,7 +7,7 @@
   <!-- 搜索 + 分类 -->
   <view class="filter-bar">
     <view class="search-box">
-      <view class="search-icon">🔍</view>
+      <image class="search-icon" src="/images/icons/search.svg" mode="aspectFit"/>
       <input class="search-input" placeholder="搜索模板名称" value="{{keyword}}" bindinput="onSearchInput" confirm-type="search" bindconfirm="onSearch"/>
       <view class="search-clear" wx:if="{{keyword}}" bindtap="clearSearch">✕</view>
     </view>
@@ -20,13 +20,13 @@
           data-cat="{{item}}"
           bindtap="filterCategory">{{item}}</view>
       </scroll-view>
-      <view class="cat-mgr-btn" bindtap="showCatManager">⚙</view>
+      <view class="cat-mgr-btn" bindtap="showCatManager">管理</view>
     </view>
   </view>
 
   <view class="list">
     <view class="empty-hint" wx:if="{{templates.length === 0}}">
-      <view class="empty-icon">📋</view>
+      <image class="empty-icon" src="/images/icons/template.svg" mode="aspectFit"/>
       <view class="empty-text">暂无合同模板</view>
       <view class="empty-sub">点击右下角 ＋ 创建模板</view>
     </view>
@@ -37,7 +37,7 @@
       data-template="{{item}}"
       bindtap="onTemplateTap">
       <view class="tpl-top">
-        <view class="tpl-icon">📄</view>
+        <image class="tpl-icon" src="/images/icons/template.svg" mode="aspectFit"/>
         <view class="tpl-info">
           <view class="tpl-name">{{item.name}}</view>
           <view class="tpl-meta">{{item.category}}</view>
@@ -75,23 +75,4 @@
     </view>
   </view>
 
-  <!-- 新增弹窗 -->
-  <view class="mask" wx:if="{{showAdd}}" bindtap="hideAddForm">
-    <view class="modal" catchtap="noop">
-      <view class="modal-title">新建模板</view>
-      <input class="modal-input" placeholder="请输入模板名称" value="{{newName}}" bindinput="onNameInput"/>
-      <view class="cat-label">模板分类</view>
-      <view class="cat-list">
-        <view class="cat-item {{newCategory === item ? 'active' : ''}}"
-          wx:for="{{categories}}"
-          wx:key="*this"
-          data-cat="{{item}}"
-          bindtap="onCategoryTap">{{item}}</view>
-      </view>
-      <view class="modal-actions">
-        <button class="modal-cancel" bindtap="hideAddForm">取消</button>
-        <button class="modal-confirm" bindtap="addTemplate">创建</button>
-      </view>
-    </view>
-  </view>
 </view>

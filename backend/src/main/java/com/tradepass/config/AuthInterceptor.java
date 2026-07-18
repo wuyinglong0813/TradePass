@@ -39,7 +39,17 @@ public class AuthInterceptor implements HandlerInterceptor {
             return false;
         }
 
-        Long companyId = resolveCompanyId(userId, request.getHeader("X-Company-Id"));
+        String requestedCompanyId = request.getHeader("X-Company-Id");
+        Long companyId;
+        if (requestedCompanyId != null && !requestedCompanyId.isBlank()) {
+            companyId = resolveRequestedCompanyId(userId, requestedCompanyId);
+            if (companyId == null) {
+                writeForbidden(response);
+                return false;
+            }
+        } else {
+            companyId = resolveDefaultCompanyId(userId);
+        }
         AuthContext.set(userId, companyId);
         return true;
     }
@@ -49,22 +59,20 @@ public class AuthInterceptor implements HandlerInterceptor {
         AuthContext.clear();
     }
 
-    private Long resolveCompanyId(long userId, String headerCompanyId) {
-        // 1) 请求头指定且用户确为该企业成员 → 用它
-        if (headerCompanyId != null && !headerCompanyId.isBlank()) {
-            try {
-                long cid = Long.parseLong(headerCompanyId);
-                boolean exists = companyMemberMapper.selectCount(new LambdaQueryWrapper<CompanyMember>()
-                        .eq(CompanyMember::getCompanyId, cid)
-                        .eq(CompanyMember::getUserId, userId)
-                        .eq(CompanyMember::getStatus, "ACTIVE")) > 0;
-                if (exists) {
-                    return cid;
-                }
-            } catch (NumberFormatException ignored) {
-            }
+    private Long resolveRequestedCompanyId(long userId, String headerCompanyId) {
+        try {
+            long companyId = Long.parseLong(headerCompanyId);
+            boolean exists = companyMemberMapper.selectCount(new LambdaQueryWrapper<CompanyMember>()
+                    .eq(CompanyMember::getCompanyId, companyId)
+                    .eq(CompanyMember::getUserId, userId)
+                    .eq(CompanyMember::getStatus, "ACTIVE")) > 0;
+            return exists ? companyId : null;
+        } catch (NumberFormatException ignored) {
+            return null;
         }
-        // 2) 回退：用户第一家 ACTIVE 企业
+    }
+
+    private Long resolveDefaultCompanyId(long userId) {
         try {
             List<CompanyMember> members = companyMemberMapper.selectList(new LambdaQueryWrapper<CompanyMember>()
                     .eq(CompanyMember::getUserId, userId)
@@ -81,6 +89,13 @@ public class AuthInterceptor implements HandlerInterceptor {
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
         response.setContentType("application/json;charset=UTF-8");
         ApiResponse<Void> body = new ApiResponse<>(401, "未登录或登录已失效", null);
+        response.getWriter().write(mapper.writeValueAsString(body));
+    }
+
+    private void writeForbidden(HttpServletResponse response) throws Exception {
+        response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+        response.setContentType("application/json;charset=UTF-8");
+        ApiResponse<Void> body = new ApiResponse<>(403, "无权访问指定企业", null);
         response.getWriter().write(mapper.writeValueAsString(body));
     }
 }

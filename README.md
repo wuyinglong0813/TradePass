@@ -6,7 +6,7 @@
 
 - **后端**：Java 17 · Spring Boot 3.3.6 · Spring Web · MyBatis-Plus · MySQL 8.4
 - **小程序**：原生微信小程序 · WXML/WXSS/JS
-- **基础设施**：Docker Compose（MySQL + Redis）
+- **基础设施**：Docker Compose（MySQL）
 
 ## 项目结构
 
@@ -24,7 +24,7 @@ scripts/        启动/关闭脚本
 ## 快速开始
 
 ```bash
-# 一键启动（MySQL + Redis + 应用）
+# 一键启动（MySQL + 应用）
 ./scripts/start.sh
 
 # 关闭
@@ -41,6 +41,18 @@ API 地址：`http://localhost:9999/api`
 cd backend
 mvn -DskipTests package
 ```
+
+## 测试与覆盖率
+
+```bash
+# 后端单元测试、HTTP 契约测试、打包及 JaCoCo 覆盖率门禁
+mvn verify
+
+# 小程序工具、请求封装、共享组件与应用会话测试
+npm test
+```
+
+后端覆盖率报告生成在 `backend/target/site/jacoco/index.html`。构建要求后端整体行覆盖率不低于 60%，分支覆盖率不低于 55%。
 
 ## 小程序
 
@@ -64,7 +76,7 @@ Tab：
 
 - 微信登录、手机号绑定、开发环境用户切换
 - 多企业、多角色、细粒度权限点
-- 企业认证：工商信息、实名、人脸、电子章
+- 企业认证流程：工商信息、实名、人脸、电子章；正式环境需接入认证与存储供应商
 - 邀请码加入企业、供方公司邀请绑定
 - 授权审批、自定义角色、权限勾选
 - 供方/需方首页排行，支持总、年、月维度
@@ -76,7 +88,7 @@ Tab：
 - `CompanyController`：企业查询/提交/认证、邀请码、成员授权、自定义角色
 - `TradeController`：订单、供方关系、合同模板分类、合同模板、合同发起与审批
 - `RankingController`：供方/需方首页、销售/采购排行
-- `FileController`：上传凭证 mock
+- `FileController`：开发环境上传凭证占位接口；生产环境未配置对象存储时拒绝请求
 
 后端按常规分层组织：
 
@@ -91,14 +103,14 @@ Tab：
 ```json
 {
   "code": 0,
-  "message": "success",
+  "message": "ok",
   "data": {}
 }
 ```
 
 请求认证：
 
-- 登录成功后使用 token：`mvp-token-{userId}`
+- 登录成功后签发高熵随机 token；数据库仅保存 token 的 SHA-256 摘要，并支持服务端注销
 - 受保护接口通过 `Authorization` 请求头传 token
 - 当前操作企业通过 `X-Company-Id` 请求头传递
 
@@ -121,7 +133,8 @@ Tab：
 | `DB_PASSWORD` | `tradepass_pwd` | 数据库密码 |
 | `WECHAT_APP_ID` | `wxd6d1e93a3868253e` | 小程序 AppID |
 | `WECHAT_APP_SECRET` | 空 | 小程序密钥 |
-| `TRADEPASS_DEV_ENABLED` | `true` | 是否启用 `/api/dev/**` 开发接口 |
+| `TRADEPASS_DEV_ENABLED` | `false` | 是否启用 `/api/dev/**` 和开发占位能力；`dev` profile 会开启 |
+| `TRADEPASS_VERIFICATION_AUTO_APPROVE` | `false` | 是否允许开发环境模拟认证结果，生产环境应保持关闭 |
 
 ## 开发说明
 

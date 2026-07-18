@@ -13,6 +13,7 @@ public class CompanyInvite {
     private Long companyId;
     private String code;
     private String type;
+    private String relationRole;
     private Boolean used;
     private Long usedBy;
     private LocalDateTime expiresAt;
@@ -26,6 +27,8 @@ public class CompanyInvite {
     public void setCode(String code) { this.code = code; }
     public String getType() { return type; }
     public void setType(String type) { this.type = type; }
+    public String getRelationRole() { return relationRole; }
+    public void setRelationRole(String relationRole) { this.relationRole = relationRole; }
     public Boolean getUsed() { return used; }
     public void setUsed(Boolean used) { this.used = used; }
     public Long getUsedBy() { return usedBy; }

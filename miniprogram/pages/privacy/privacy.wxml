@@ -1,3 +1,5 @@
+<import src="../../templates/privacy-content.wxml"/>
+
 <view class="page">
   <!-- 顶部 logo 区 -->
   <view class="top-logo">
@@ -12,7 +14,7 @@
       <text class="ac-bold">【商签通】</text>
       <text>服务之前，请仔细阅读</text>
       <text class="ac-link" bindtap="showAgreement">《商签通小程序隐私保护指引》</text>
-      <text>。如你同意《商签通小程序隐私保护指引》，请点击"同意"开始使用</text>
+      <text>。如你同意《商签通小程序隐私保护指引》，请点击“同意”开始使用</text>
       <text class="ac-bold">【商签通】</text>
     </view>
   </view>
@@ -36,23 +38,8 @@
       <view class="as-close" bindtap="closeAgreement">✕</view>
     </view>
     <scroll-view class="as-body" scroll-y>
-      <view class="as-text">
-        <view class="p">欢迎使用商签通（以下简称"本小程序"）。我们深知个人信息对您的重要性，并会尽全力保护您的个人信息安全可靠。</view>
-        <view class="h3">一、我们收集的信息</view>
-        <view class="p">1. 您在注册账户时提供的个人信息，包括但不限于：手机号码、微信昵称、头像等。</view>
-        <view class="p">2. 您在使用企业认证功能时提供的企业信息，包括但不限于：企业名称、统一社会信用代码、法定代表人姓名、身份证号等。</view>
-        <view class="p">3. 您在使用人脸识别功能时，我们需要获取您的面部生物识别信息。该信息仅用于实名认证，不会用于其他用途。</view>
-        <view class="h3">二、信息的使用</view>
-        <view class="p">1. 我们使用收集的信息来提供、维护和改善我们的服务。</view>
-        <view class="p">2. 我们使用信息来与您沟通，包括向您发送服务相关通知。</view>
-        <view class="p">3. 我们使用信息来保障服务的安全性和完整性，包括身份验证、安全检测和欺诈防范。</view>
-        <view class="h3">三、信息的分享</view>
-        <view class="p">1. 未经您的明确同意，我们不会与第三方分享您的个人信息。</view>
-        <view class="p">2. 在法律法规要求或政府机关依法提出要求的情况下，我们可能会披露您的个人信息。</view>
-        <view class="h3">四、信息安全</view>
-        <view class="p">我们采用业界通行的安全技术和组织措施来保护您的个人信息，防止未经授权的访问、使用或泄露。</view>
-        <view class="h3">五、您的权利</view>
-        <view class="p">您有权访问、更正、删除您的个人信息，以及撤回同意。您可以通过小程序内的设置或联系我们来行使这些权利。</view>
+      <view class="privacy-scroll-content">
+        <template is="privacyContent"/>
       </view>
     </scroll-view>
   </view>

@@ -4,6 +4,8 @@ Page({
   data: {
     counterpartyName: '',
     myCompanyName: '',
+    role: 'supplier',
+    contractActionText: '发起销售合同',
     // 合同名称
     contractName: '',
     // 模板
@@ -26,13 +28,16 @@ Page({
 
   onLoad(options) {
     const name = decodeURIComponent(options.counterpartyName || '');
+    const role = options.role === 'buyer' ? 'buyer' : 'supplier';
     const app = getApp();
     const companies = app.globalData.companies || [];
     const cid = (app.globalData.userInfo && app.globalData.userInfo.currentCompanyId) || '';
     const cur = companies.find(c => c.companyId === cid);
     this.setData({
       counterpartyName: name,
-      myCompanyName: (cur && cur.companyName) || '我的企业'
+      myCompanyName: (cur && cur.companyName) || '我的企业',
+      role,
+      contractActionText: role === 'supplier' ? '发起销售合同' : '发起采购合同'
     });
     this.loadTemplates();
   },
@@ -40,7 +45,8 @@ Page({
   async loadTemplates() {
     const { request } = require('../../utils/request');
     try {
-      const list = await request({ url: '/contract-templates' });
+      const payload = await request({ url: '/contract-templates?page=1&size=100' });
+      const list = Array.isArray(payload) ? payload : (payload.items || []);
       const templates = (list || []).map(t => ({ id: t.id, name: t.name, content: t.content }));
       this.setData({ templates });
       // 默认选中第一个模板
@@ -69,12 +75,13 @@ Page({
 
     const myName = this.data.myCompanyName;
     const cpName = this.data.counterpartyName;
+    const role = this.data.role;
 
     // 自动填充字段
     const fields = (content.fields || []).map(f => {
       let value = f.value || '';
-      if (f.key === 'supplier') value = cpName;   // 供方=对方公司
-      else if (f.key === 'buyer') value = myName;  // 需方=我司
+      if (f.key === 'supplier') value = role === 'supplier' ? myName : cpName;
+      else if (f.key === 'buyer') value = role === 'supplier' ? cpName : myName;
       else if (f.key === 'signDate') value = new Date().toISOString().slice(0, 10);
       return { ...f, value };
     });
@@ -128,8 +135,8 @@ Page({
 
   addTableRow() {
     const cols = this.data.tableSection ? this.data.tableSection.columns.length : 6;
-    const newRow = new Array(cols).fill('0');
-    newRow[0] = ''; newRow[1] = ''; newRow[2] = '';
+    const newRow = new Array(cols).fill('');
+    newRow[3] = '0'; newRow[4] = '0'; newRow[5] = '0';
     const rows = [...this.data.tableRows, newRow];
     this.recalcTable(rows);
   },
@@ -157,7 +164,6 @@ Page({
     if (!contractName.trim()) { wx.showToast({ title: '请输入合同名称', icon: 'none' }); return; }
 
     const total = parseFloat(totalAmount) || 0;
-
     // 构建完整合同 JSON 存入 terms
     const contractContent = JSON.stringify({
       title: '购销合同',
@@ -186,7 +192,7 @@ Page({
     const { request } = require('../../utils/request');
     try {
       wx.showLoading({ title: '发起中...' });
-      await request({
+      const result = await request({
         url: '/contracts',
         method: 'POST',
         data: {

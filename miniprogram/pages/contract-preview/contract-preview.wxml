@@ -18,84 +18,66 @@
       <view class="loading-text">加载中...</view>
     </view>
 
-    <block wx:else>
-      <!-- 结构化合同 -->
-      <block wx:if="{{hasStructured}}">
-        <!-- 合同标题 -->
-        <view class="card s-title-card">
-          <view class="s-ct-title">{{sData.title || '购销合同'}}</view>
-          <view class="s-ct-no">合同编号：{{contract.id}}</view>
-          <view class="s-status status-{{contract.status === 'ACTIVE' ? 'active' : contract.status === 'PENDING' ? 'pending' : contract.status === 'REJECTED' ? 'rejected' : 'done'}}">{{contract.statusText}}</view>
-        </view>
+    <view class="pdf-viewer" wx:else>
+      <view class="pdf-state">
+        <view class="pdf-state-dot {{pdfReady ? 'ready' : ''}}"></view>
+        <text>{{pdfLoading ? '正在生成标准 PDF...' : (pdfReady ? 'PDF 已就绪' : 'A4 标准 PDF')}}</text>
+      </view>
 
-        <!-- 合同信息 -->
-        <view class="card" wx:if="{{sData.fields && sData.fields.length > 0}}">
-          <view class="section-title">合同信息</view>
-          <view class="s-row" wx:for="{{sData.fields}}" wx:key="key">
-            <view class="s-label">{{item.label}}</view>
-            <view class="s-value">{{item.value || '（未填写）'}}</view>
+      <view class="pdf-paper" bindtap="openContractPdf">
+        <view class="pdf-paper-title">{{pdfTitle}}</view>
+        <view class="pdf-paper-head">
+          <view>
+            <view>供方：{{pdfSupplier}}</view>
+            <view>需方：{{pdfBuyer}}</view>
+          </view>
+          <view>
+            <view>合同编号：{{contract.contractNo || contract.id}}</view>
+            <view>日期：{{pdfDate}}</view>
           </view>
         </view>
+        <view class="pdf-section-line">一、产品名称、规格、数量、单价、金额、供货时间及数量</view>
+        <view class="pdf-mini-table">
+          <view class="pdf-mini-row pdf-mini-header">
+            <view>名称</view><view>规格型号</view><view>单位</view><view>数量</view><view>单价</view><view>金额</view><view>备注</view>
+          </view>
+          <view class="pdf-mini-row" wx:for="{{[1, 2, 3, 4, 5]}}" wx:key="*this">
+            <view></view><view></view><view></view><view></view><view></view><view></view><view></view>
+          </view>
+        </view>
+        <view class="pdf-clause-lines">
+          <view></view><view></view><view></view><view></view><view></view><view></view>
+        </view>
+        <view class="pdf-sign-table">
+          <view><text>供方</text><text>单位名称（章）</text><text>法定代表人</text><text>开户银行及账号</text></view>
+          <view><text>需方</text><text>单位名称（章）</text><text>法定代表人</text><text>开户银行及账号</text></view>
+        </view>
+        <view class="pdf-open-hint">点击查看完整 PDF</view>
+      </view>
 
-        <!-- 产品表格 -->
-        <view class="card" wx:if="{{sData.sections}}">
-          <block wx:for="{{sData.sections}}" wx:for-item="sec" wx:key="title">
-            <block wx:if="{{sec.type === 'table'}}">
-              <view class="section-title">{{sec.title}}</view>
-              <scroll-view class="table-scroll" scroll-x enable-flex>
-                <view class="table-wrap">
-                  <view class="table-row table-header">
-                    <view class="th" wx:for="{{sec.columns}}" wx:for-item="col" wx:key="*this">{{col}}</view>
-                  </view>
-                  <view class="table-row" wx:for="{{sec.rows}}" wx:for-item="row" wx:key="*this">
-                    <view class="td" wx:for="{{sec.columns}}" wx:for-item="col" wx:for-index="ci" wx:key="ci">
-                      <text class="td-text">{{row[ci] || '-'}}</text>
-                    </view>
-                  </view>
-                </view>
-              </scroll-view>
-              <view class="table-summary" wx:if="{{sec.summary}}">
-                <view class="sum-row"><text class="sum-label">合计：</text><text class="sum-amount">¥{{sec.summary.totalAmount || '0'}}</text></view>
-                <view class="sum-row"><text class="sum-label">大写：</text><text class="sum-chinese">{{sec.summary.totalAmountCn || '零元整'}}</text></view>
-              </view>
-            </block>
-            <block wx:elif="{{sec.type === 'clause'}}">
-              <view class="clause-block">
-                <view class="clause-title">{{sec.title}}</view>
-                <view class="clause-text">{{sec.content || '（无）'}}</view>
-              </view>
-            </block>
-          </block>
-        </view>
-      </block>
-
-      <!-- 旧版简单合同 -->
-      <block wx:else>
-        <view class="card detail-card">
-          <view class="d-header">
-            <view class="d-name">{{contract.name}}</view>
-            <view class="d-status status-{{contract.status === 'ACTIVE' ? 'active' : contract.status === 'PENDING' ? 'pending' : contract.status === 'REJECTED' ? 'rejected' : 'done'}}">{{contract.statusText}}</view>
-          </view>
-          <view class="d-row"><view class="d-label">合作方</view><view class="d-value">{{contract.counterpartyName}}</view></view>
-          <view class="d-row"><view class="d-label">合同模板</view><view class="d-value">{{contract.templateName || '未指定'}}</view></view>
-          <view class="d-row"><view class="d-label">合同金额</view><view class="d-value d-amount">¥{{contract.amount}}</view></view>
-          <view class="d-row"><view class="d-label">合同期限</view><view class="d-value">{{contract.startDate || '-'}} ~ {{contract.endDate || '-'}}</view></view>
-          <view class="d-row"><view class="d-label">创建时间</view><view class="d-value d-date">{{contract.createdAt || '-'}}</view></view>
-          <view class="d-terms" wx:if="{{contract.terms}}">
-            <view class="d-terms-title">合同条款</view>
-            <view class="d-terms-content">{{contract.terms}}</view>
-          </view>
-          <view class="d-terms-empty" wx:else>
-            <view class="empty-icon">📝</view><view class="empty-text">未填写合同条款</view>
-          </view>
-        </view>
-      </block>
-    </block>
+      <view class="pdf-actions">
+        <button class="pdf-button primary" loading="{{pdfLoading}}" disabled="{{pdfLoading}}" bindtap="openContractPdf">查看 PDF</button>
+        <button class="pdf-button secondary" loading="{{pdfLoading}}" disabled="{{pdfLoading}}" bindtap="downloadContractPdf">下载 PDF</button>
+      </view>
+      <view class="pdf-tip">PDF 按 A4 固定版式生成，手机端会整页等比例缩放；打开后可通过右上角菜单保存或转发。</view>
+    </view>
   </block>
 
-  <!-- 销售单 / 物流单 / 发票浏览 -->
+  <!-- 销售单 / 物流单 / 送货单 / 发票浏览 -->
   <block wx:if="{{activeTab === 'sales'}}">
-    <view class="list-empty" wx:if="{{salesList.length === 0}}">
+    <view class="document-bar">
+      <view><view class="document-title">销售单 PDF</view><view class="document-sub">按企业销售单模板生成</view></view>
+      <button class="document-create" data-type="SALES_ORDER" bindtap="createBusinessDocument">＋ 创建销售单</button>
+    </view>
+    <view class="document-list" wx:if="{{salesDocuments.length > 0}}">
+      <view class="document-card" wx:for="{{salesDocuments}}" wx:key="id">
+        <view class="document-badge">销</view>
+        <view class="document-info"><view class="document-no">{{item.documentNo}}</view><view class="document-meta">{{item.templateName}} · {{item.dateText}}</view></view>
+        <view class="document-actions"><view data-document="{{item}}" bindtap="viewBusinessDocument">查看</view><view data-document="{{item}}" bindtap="downloadBusinessDocument">下载</view></view>
+      </view>
+    </view>
+    <view class="list-section-title" wx:if="{{salesList.length > 0}}">关联销售订单</view>
+    <view class="list-empty compact" wx:if="{{salesList.length === 0 && salesDocuments.length === 0}}">
       <view class="empty-icon">📦</view><view class="empty-text">暂无销售单</view>
     </view>
     <view class="list" wx:else>
@@ -120,6 +102,24 @@
     </view>
   </block>
 
+  <block wx:if="{{activeTab === 'delivery'}}">
+    <view class="document-bar">
+      <view><view class="document-title">送货单 PDF</view><view class="document-sub">按企业送货单模板生成</view></view>
+      <button class="document-create" data-type="DELIVERY_NOTE" bindtap="createBusinessDocument">＋ 创建送货单</button>
+    </view>
+    <view class="document-list" wx:if="{{deliveryDocuments.length > 0}}">
+      <view class="document-card" wx:for="{{deliveryDocuments}}" wx:key="id">
+        <view class="document-badge delivery">送</view>
+        <view class="document-info"><view class="document-no">{{item.documentNo}}</view><view class="document-meta">{{item.templateName}} · {{item.dateText}}</view></view>
+        <view class="document-actions"><view data-document="{{item}}" bindtap="viewBusinessDocument">查看</view><view data-document="{{item}}" bindtap="downloadBusinessDocument">下载</view></view>
+      </view>
+    </view>
+    <view class="list-empty compact" wx:if="{{deliveryDocuments.length === 0}}">
+      <view class="empty-icon">📄</view><view class="empty-text">暂无送货单</view>
+      <view class="empty-sub">点击上方按钮，选择送货单模板生成</view>
+    </view>
+  </block>
+
   <block wx:if="{{activeTab === 'invoice'}}">
     <view class="list-empty" wx:if="{{invoiceList.length === 0}}">
       <view class="empty-icon">🧾</view><view class="empty-text">暂无发票</view>
@@ -133,7 +133,7 @@
     </view>
   </block>
 
-  <view class="page-end">— 已经到底了 —</view>
+  <view class="page-end" wx:if="{{activeTab !== 'detail'}}">— 已经到底了 —</view>
 
   <!-- 详情面板 -->
   <view class="mask" wx:if="{{showDetail}}" bindtap="closeDetail">

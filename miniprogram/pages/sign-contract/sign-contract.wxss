@@ -1,11 +1,11 @@
-page { background: #f5f6f8; }
+page { background: #f4f8fd; }
 
 .page { padding: 24rpx; padding-bottom: calc(160rpx + env(safe-area-inset-bottom)); }
 
 /* 双方信息 */
 .party-bar {
   align-items: center;
-  background: linear-gradient(160deg, #0f766e, #14b8a6);
+  background: linear-gradient(160deg, #3498ff, #45a8ff);
   display: flex; justify-content: center;
   padding: 36rpx 40rpx; gap: 32rpx;
   border-radius: 16rpx; margin-bottom: 20rpx;
@@ -27,7 +27,7 @@ page { background: #f5f6f8; }
   background: rgba(255,255,255,0.22); border-radius: 6rpx;
   color: #fff; font-size: 20rpx; margin-top: 6rpx; padding: 2rpx 16rpx;
 }
-.party-vs { font-size: 40rpx; }
+.party-vs image { border: 2rpx solid rgba(255,255,255,.22); border-radius: 50%; height: 76rpx; width: 76rpx; }
 
 /* CARD */
 .card {
@@ -36,17 +36,17 @@ page { background: #f5f6f8; }
 }
 .section-title {
   font-size: 28rpx; font-weight: 600; color: #333; margin-bottom: 16rpx;
-  padding-left: 12rpx; border-left: 6rpx solid #0f766e;
+  padding-left: 12rpx; border-left: 6rpx solid #3498ff;
 }
 
 /* 表单 */
 .form-group { margin-bottom: 0; }
 .form-label { color: #999; font-size: 24rpx; margin-bottom: 12rpx; }
-.form-picker { color: #0f766e; font-size: 30rpx; font-weight: 600; }
+.form-picker { color: #3498ff; font-size: 30rpx; font-weight: 600; }
 
 /* 合同标题 */
 .contract-title-card { text-align: center; padding: 40rpx 28rpx; }
-.ct-title { font-size: 40rpx; font-weight: 700; color: #1a1a1a; letter-spacing: 8rpx; margin-bottom: 12rpx; }
+.ct-title { font-size: 40rpx; font-weight: 700; color: #162336; letter-spacing: 8rpx; margin-bottom: 12rpx; }
 .ct-no { font-size: 24rpx; color: #999; }
 
 /* 字段 */
@@ -60,19 +60,19 @@ page { background: #f5f6f8; }
 .field-input::placeholder { color: #ccc; }
 .field-value { flex: 1; font-size: 28rpx; color: #222; }
 .field-value.placeholder { color: #ccc; }
-.field-value.date { color: #0f766e; }
+.field-value.date { color: #3498ff; }
 .field-value.locked { display: flex; align-items: center; gap: 8rpx; color: #999; }
-.locked-icon { font-size: 24rpx; }
+.locked-icon { height: 36rpx; width: 36rpx; }
 .locked-text { font-size: 24rpx; color: #999; }
 
 /* 产品表格 */
 .table-scroll { width: 100%; }
 .table-wrap { min-width: 900rpx; }
 .table-row { display: flex; align-items: center; }
-.table-header { background: #f0fdf4; border-radius: 8rpx 8rpx 0 0; }
+.table-header { background: #eaf4ff; border-radius: 8rpx 8rpx 0 0; }
 .th {
   flex: 1; min-width: 130rpx; padding: 16rpx 6rpx;
-  font-size: 24rpx; color: #0f766e; font-weight: 600; text-align: center;
+  font-size: 24rpx; color: #3498ff; font-weight: 600; text-align: center;
 }
 .th-del { flex: 0 0 56rpx; min-width: 56rpx; }
 .td { flex: 1; min-width: 130rpx; padding: 6rpx 3rpx; }
@@ -82,15 +82,15 @@ page { background: #f5f6f8; }
   background: #fafafa; border-radius: 6rpx; text-align: center; padding: 0 4rpx; box-sizing: border-box;
 }
 .td-input.num { text-align: right; }
-.td-input.auto { background: #f0fdf4; color: #0f766e; font-weight: 600; }
+.td-input.auto { background: #eaf4ff; color: #3498ff; font-weight: 600; }
 .del-btn {
   width: 40rpx; height: 40rpx; display: flex; align-items: center; justify-content: center;
   font-size: 20rpx; color: #e53e3e; background: #fff5f5; border-radius: 50%;
 }
 .table-add {
   margin-top: 16rpx; padding: 14rpx; text-align: center;
-  font-size: 26rpx; color: #0f766e; background: #f0fdf4; border-radius: 10rpx;
-  border: 1rpx dashed #0f766e;
+  font-size: 26rpx; color: #3498ff; background: #eaf4ff; border-radius: 10rpx;
+  border: 1rpx dashed #3498ff;
 }
 .table-summary {
   margin-top: 16rpx; padding: 20rpx; background: #fafafa; border-radius: 10rpx;
@@ -99,7 +99,7 @@ page { background: #f5f6f8; }
 .sum-row:last-child { margin-bottom: 0; }
 .sum-label { font-size: 26rpx; color: #666; width: 100rpx; flex-shrink: 0; }
 .sum-amount { font-size: 30rpx; color: #e53e3e; font-weight: 700; }
-.sum-chinese { font-size: 26rpx; color: #0f766e; font-weight: 600; }
+.sum-chinese { font-size: 26rpx; color: #3498ff; font-weight: 600; }
 
 /* 条款（只读） */
 .clause-ro { margin-bottom: 16rpx; padding-bottom: 16rpx; border-bottom: 1rpx solid #f5f5f5; }
@@ -109,7 +109,7 @@ page { background: #f5f6f8; }
 
 /* 空态 */
 .empty-card { text-align: center; padding: 80rpx 28rpx; }
-.empty-icon { font-size: 64rpx; margin-bottom: 16rpx; }
+.empty-icon { height: 108rpx; margin-bottom: 16rpx; width: 108rpx; }
 .empty-text { font-size: 28rpx; color: #999; margin-bottom: 8rpx; }
 .empty-sub { font-size: 24rpx; color: #ccc; }
 
@@ -120,7 +120,7 @@ page { background: #f5f6f8; }
   position: fixed; box-sizing: border-box; z-index: 10;
 }
 .submit-btn {
-  background: linear-gradient(90deg, #0f766e, #14b8a6); border: none;
+  background: linear-gradient(90deg, #3498ff, #45a8ff); border: none;
   border-radius: 48rpx; color: #fff; font-size: 32rpx; font-weight: 600;
   height: 96rpx; line-height: 96rpx; width: 100%;
 }

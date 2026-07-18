@@ -7,7 +7,7 @@
 .es-img { height: 180rpx; opacity: 0.9; width: 180rpx; }
 .es-text { color: #9aa3a1; font-size: 26rpx; margin-top: 28rpx; text-align: center; }
 .es-btn {
-  background: linear-gradient(90deg, #0f766e, #14b8a6);
+  background: linear-gradient(90deg, #3498ff, #45a8ff);
   border: none;
   border-radius: 40rpx;
   color: #fff;

@@ -26,7 +26,7 @@
 }
 .lg-btn {
   align-items: center;
-  background: linear-gradient(90deg, #0f766e, #14b8a6);
+  background: linear-gradient(90deg, #3498ff, #45a8ff);
   border: none;
   border-radius: 48rpx;
   box-shadow: 0 12rpx 28rpx rgba(15, 118, 110, 0.28);

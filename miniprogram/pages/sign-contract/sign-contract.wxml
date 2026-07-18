@@ -6,11 +6,11 @@
       <view class="pi-name">{{myCompanyName}}</view>
       <view class="pi-tag">我方</view>
     </view>
-    <view class="party-vs">签</view>
+    <view class="party-vs"><image src="/images/logo.png" mode="aspectFit"/></view>
     <view class="party-item">
       <view class="pi-avatar cp">{{counterpartyName[0]}}</view>
       <view class="pi-name">{{counterpartyName}}</view>
-      <view class="pi-tag">对方</view>
+      <view class="pi-tag">{{role === 'supplier' ? '客户企业' : '供应商企业'}}</view>
     </view>
   </view>
 
@@ -54,7 +54,7 @@
 
         <block wx:elif="{{!item.editable}}">
           <view class="field-value locked">
-            <text class="locked-icon">🔒</text>
+            <image class="locked-icon" src="/images/icons/role.svg" mode="aspectFit"/>
             <text class="locked-text">{{item.hint || '自动生成'}}</text>
           </view>
         </block>
@@ -81,7 +81,7 @@
               <block wx:if="{{ci === 5}}">
                 <input class="td-input num auto" type="digit" value="{{row[ci]}}" disabled/>
               </block>
-              <block wx:elif="{{ci >= 3}}">
+              <block wx:elif="{{ci === 3 || ci === 4}}">
                 <input class="td-input num" type="digit" value="{{row[ci]}}" data-row="{{ri}}" data-col="{{ci}}" bindinput="onTableCellChange"/>
               </block>
               <block wx:else>
@@ -120,14 +120,14 @@
 
   <!-- 空态 -->
   <view class="card empty-card" wx:if="{{!hasTemplate && templates.length === 0}}">
-    <view class="empty-icon">📋</view>
+    <image class="empty-icon" src="/images/icons/contracts.svg" mode="aspectFit"/>
     <view class="empty-text">暂无可用合同模板</view>
     <view class="empty-sub">请先在合同模板库中创建模板</view>
   </view>
 
   <!-- 提交 -->
   <view class="submit-area" wx:if="{{hasTemplate}}">
-    <button class="submit-btn" bindtap="onSubmit">确认签订</button>
+    <button class="submit-btn" bindtap="onSubmit">{{contractActionText}}</button>
   </view>
 
   <view class="safe-bottom"></view>

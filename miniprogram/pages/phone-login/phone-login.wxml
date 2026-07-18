@@ -1,3 +1,5 @@
+<import src="../../templates/privacy-content.wxml"/>
+
 <view class="page">
   <!-- 品牌区 -->
   <view class="branding">
@@ -53,11 +55,9 @@
           <view class="p">3.1 商签通提供企业贸易管理服务：企业认证、授权管理、销售采购排行、电子章管理等。</view>
         </block>
         <block wx:else>
-          <view class="h2">隐私协议</view>
-          <view class="p">一、信息收集</view>
-          <view class="p">1.1 我们收集您的手机号，仅用于账号注册和登录。</view>
-          <view class="p">二、信息使用</view>
-          <view class="p">2.1 您的个人信息仅用于商签通服务，不会出售或分享给第三方。</view>
+          <view class="privacy-scroll-content">
+            <template is="privacyContent"/>
+          </view>
         </block>
       </scroll-view>
       <button class="modal-btn" bindtap="closeAgreement">我知道了</button>

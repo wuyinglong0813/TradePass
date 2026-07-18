@@ -1,15 +1,17 @@
 package com.tradepass.config;
 
 import jakarta.annotation.PostConstruct;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
 
 /**
- * MVP 阶段的本地库初始化。业务读写已经迁到 MyBatis-Plus；这里仅负责启动建表和演示数据。
+ * 仅开发环境启用的本地演示数据初始化。生产环境完全由 Flyway 管理数据库结构。
  */
 @Component
+@ConditionalOnProperty(name = "tradepass.demo-data.enabled", havingValue = "true")
 public class DatabaseInitializer {
     private final JdbcTemplate db;
 
@@ -24,6 +26,7 @@ public class DatabaseInitializer {
         seedPermissions();
         seedTemplateCategories();
         seedContractTemplates();
+        seedBusinessDocumentTemplates();
         seedContracts();
         seedRoles();
         seedCounterparties();
@@ -172,6 +175,36 @@ public class DatabaseInitializer {
             )
         """);
         try { db.execute("ALTER TABLE trade_order ADD COLUMN order_no VARCHAR(64) AFTER counterparty_name"); } catch (Exception ignored) {}
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS business_document_template (
+                id BIGINT PRIMARY KEY AUTO_INCREMENT,
+                company_id BIGINT NOT NULL,
+                document_type VARCHAR(32) NOT NULL,
+                name VARCHAR(256) NOT NULL,
+                content TEXT,
+                source_file_name VARCHAR(256),
+                created_by BIGINT,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                INDEX idx_company_type (company_id, document_type)
+            )
+        """);
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS business_document (
+                id BIGINT PRIMARY KEY AUTO_INCREMENT,
+                company_id BIGINT NOT NULL,
+                contract_id BIGINT NOT NULL,
+                document_type VARCHAR(32) NOT NULL,
+                document_no VARCHAR(64) NOT NULL,
+                template_id BIGINT NOT NULL,
+                template_name VARCHAR(256) NOT NULL,
+                content LONGTEXT,
+                created_by BIGINT,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY uk_document_no (document_no),
+                INDEX idx_contract_type (company_id, contract_id, document_type)
+            )
+        """);
     }
 
     private void seedBaseData() {
@@ -224,37 +257,48 @@ public class DatabaseInitializer {
         seedContractTemplate(1, "物流服务合同模板", "物流");
     }
 
+    private void seedBusinessDocumentTemplates() {
+        seedBusinessDocumentTemplate(1, "SALES_ORDER", "标准销售单模板",
+                "{\"columns\":[\"序号\",\"品名\",\"规格\",\"单位\",\"数量\",\"单价\",\"金额\",\"备注\"],\"blankRows\":8}");
+        seedBusinessDocumentTemplate(1, "DELIVERY_NOTE", "标准送货单模板",
+                "{\"columns\":[\"序号\",\"品名\",\"规格\",\"数量\",\"单位\",\"备注\"],\"blankRows\":10}");
+    }
+
     private void seedContracts() {
+        db.update("""
+                UPDATE trade_contract
+                SET contract_no = CONCAT('HT-LEGACY-', LPAD(id, 8, '0'))
+                WHERE contract_no IS NULL OR contract_no = ''
+                """);
         seedContractIfEmpty(1, "河北通瑞贸易有限公司", "年度采购框架协议", "标准采购合同模板", 500000, "2026-01-01", "2026-12-31", "ACTIVE", 1);
         seedContractIfEmpty(1, "河北通瑞贸易有限公司", "Q2季度供货合同", "供货协议模板", 180000, "2026-04-01", "2026-06-30", "ACTIVE", 1);
         seedContractIfEmpty(1, "河北逸泽昌贸易有限公司", "设备采购补充协议", "单笔交易合同模板", 85000, "2026-05-15", "2026-08-15", "ACTIVE", 1);
         seedContractIfEmpty(2, "上海浦发贸易有限公司", "年度销售代理合同", "标准采购合同模板", 320000, "2026-02-01", "2027-01-31", "PENDING", 2);
-        try {
-            db.update("INSERT IGNORE INTO trade_contract (company_id, counterparty_name, name, template_name, amount, start_date, end_date, status, initiated_by) VALUES (?,?,?,?,?,?,?,?,?)",
-                    2, "河北光广贸易有限公司", "年度物流服务合同", "物流服务合同模板", 150000, "2026-03-01", "2027-02-28", "PENDING", 3);
-        } catch (Exception ignored) {}
+        seedContractIfMissing(2, "DEMO-HT-2-002", "河北光广贸易有限公司", "年度物流服务合同",
+                "物流服务合同模板", 150000, "2026-03-01", "2027-02-28", "PENDING", 3);
     }
 
     private void seedRoles() {
         List.of(1L, 2L).forEach(companyId -> {
             seedRole(companyId, "法人", List.of("all"));
             seedRole(companyId, "管理员", companyId == 1 ? List.of("member_manage", "auth_manage", "company_manage", "seal_manage") : List.of("member_manage", "auth_manage", "company_manage"));
-            seedRole(companyId, "销售员", List.of("supplier_view", "counterparty_manage", "order_view"));
-            seedRole(companyId, "采购员", List.of("buyer_view", "order_create"));
+            seedRole(companyId, "销售员", List.of("supplier_view", "counterparty_manage", "order_view", "order_create",
+                    "contract_sign", "contract_view", "reconciliation"));
+            seedRole(companyId, "采购员", List.of("buyer_view", "order_create", "contract_view", "order_view",
+                    "contract_sign", "reconciliation"));
             seedRole(companyId, "财务", List.of("invoice_view", "reconciliation"));
         });
     }
 
     private void seedCounterparties() {
         Integer count = db.queryForObject("SELECT COUNT(1) FROM counterparty_relation", Integer.class);
-        if (count != null && count > 0) {
-            return;
+        if (count == null || count == 0) {
+            db.update("INSERT INTO counterparty_relation (company_id, counterparty_company_name, relation_type, status) VALUES (1, '河北通瑞贸易有限公司', 'SUPPLIER', 'ACTIVE')");
+            db.update("INSERT INTO counterparty_relation (company_id, counterparty_company_name, relation_type, status) VALUES (1, '河北逸泽昌贸易有限公司', 'SUPPLIER', 'ACTIVE')");
+            db.update("INSERT INTO counterparty_relation (company_id, counterparty_company_name, relation_type, status) VALUES (2, '上海浦发贸易有限公司', 'SUPPLIER', 'ACTIVE')");
+            db.update("INSERT INTO counterparty_relation (company_id, counterparty_company_name, relation_type, status) VALUES (2, '浙江义乌商贸有限公司', 'SUPPLIER', 'ACTIVE')");
+            db.update("INSERT INTO counterparty_relation (company_id, counterparty_company_name, relation_type, status) VALUES (2, '江苏南通纺织品有限公司', 'SUPPLIER', 'ACTIVE')");
         }
-        db.update("INSERT INTO counterparty_relation (company_id, counterparty_company_name, relation_type, status) VALUES (1, '河北通瑞贸易有限公司', 'SUPPLIER', 'ACTIVE')");
-        db.update("INSERT INTO counterparty_relation (company_id, counterparty_company_name, relation_type, status) VALUES (1, '河北逸泽昌贸易有限公司', 'SUPPLIER', 'ACTIVE')");
-        db.update("INSERT INTO counterparty_relation (company_id, counterparty_company_name, relation_type, status) VALUES (2, '上海浦发贸易有限公司', 'SUPPLIER', 'ACTIVE')");
-        db.update("INSERT INTO counterparty_relation (company_id, counterparty_company_name, relation_type, status) VALUES (2, '浙江义乌商贸有限公司', 'SUPPLIER', 'ACTIVE')");
-        db.update("INSERT INTO counterparty_relation (company_id, counterparty_company_name, relation_type, status) VALUES (2, '江苏南通纺织品有限公司', 'SUPPLIER', 'ACTIVE')");
     }
 
     private void seedOrders() {
@@ -293,12 +337,42 @@ public class DatabaseInitializer {
         } catch (Exception ignored) {}
     }
 
+    private void seedBusinessDocumentTemplate(long companyId, String type, String name, String content) {
+        Integer count = db.queryForObject("""
+                SELECT COUNT(1) FROM business_document_template
+                WHERE company_id = ? AND document_type = ? AND name = ?
+                """, Integer.class, companyId, type, name);
+        if (count == null || count == 0) {
+            db.update("""
+                    INSERT INTO business_document_template
+                    (company_id, document_type, name, content, created_by)
+                    VALUES (?, ?, ?, ?, 1)
+                    """, companyId, type, name, content);
+        }
+    }
+
     private void seedContractIfEmpty(long companyId, String counterpartyName, String name, String templateName, double amount, String startDate, String endDate, String status, long initiatedBy) {
         try {
             Integer count = db.queryForObject("SELECT COUNT(1) FROM trade_contract WHERE company_id = ?", Integer.class, companyId);
             if (count == null || count == 0) {
-                db.update("INSERT INTO trade_contract (company_id, counterparty_name, name, template_name, amount, start_date, end_date, status, initiated_by) VALUES (?,?,?,?,?,?,?,?,?)",
-                        companyId, counterpartyName, name, templateName, amount, startDate, endDate, status, initiatedBy);
+                db.update("INSERT INTO trade_contract (contract_no, company_id, counterparty_name, name, template_name, amount, start_date, end_date, status, initiated_by) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                        "DEMO-HT-" + companyId + "-001", companyId, counterpartyName, name, templateName,
+                        amount, startDate, endDate, status, initiatedBy);
+            }
+        } catch (Exception ignored) {}
+    }
+
+    private void seedContractIfMissing(long companyId, String contractNo, String counterpartyName, String name,
+                                       String templateName, double amount, String startDate, String endDate,
+                                       String status, long initiatedBy) {
+        try {
+            Integer count = db.queryForObject(
+                    "SELECT COUNT(1) FROM trade_contract WHERE company_id = ? AND counterparty_name = ? AND name = ?",
+                    Integer.class, companyId, counterpartyName, name);
+            if (count == null || count == 0) {
+                db.update("INSERT INTO trade_contract (contract_no, company_id, counterparty_name, name, template_name, amount, start_date, end_date, status, initiated_by) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                        contractNo, companyId, counterpartyName, name, templateName, amount, startDate, endDate,
+                        status, initiatedBy);
             }
         } catch (Exception ignored) {}
     }
@@ -306,8 +380,19 @@ public class DatabaseInitializer {
     private void seedRole(long companyId, String name, List<String> permissions) {
         try {
             String json = "[\"" + String.join("\",\"", permissions) + "\"]";
-            db.update("INSERT INTO role_def (company_id, name, permissions) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE permissions = VALUES(permissions)",
-                    companyId, name, json);
+            db.update("INSERT INTO role_def (company_id, code, name, permissions) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE code = VALUES(code), permissions = VALUES(permissions)",
+                    companyId, roleCode(name), name, json);
         } catch (Exception ignored) {}
+    }
+
+    private String roleCode(String name) {
+        return switch (name) {
+            case "法人" -> "LEGAL";
+            case "管理员" -> "ADMIN";
+            case "销售员" -> "SALES";
+            case "采购员" -> "PURCHASER";
+            case "财务" -> "FINANCE";
+            default -> "CUSTOM";
+        };
     }
 }

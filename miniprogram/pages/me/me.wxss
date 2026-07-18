@@ -1,226 +1,59 @@
-page { background: #f5f6f8; }
+page { background: #f4f8fd; }
 
-.page {
-  padding-bottom: calc(24rpx + env(safe-area-inset-bottom));
+.me-page {
+  background:
+    radial-gradient(circle at 104% 3%,rgba(69,168,255,.16) 0,rgba(69,168,255,.16) 110rpx,transparent 260rpx),
+    radial-gradient(circle at -8% 54%,rgba(194,225,255,.34) 0,rgba(194,225,255,.34) 105rpx,transparent 310rpx),
+    linear-gradient(160deg,#f7fbff 0%,#f4f8fd 54%,#edf5ff 100%);
+  min-height: 100vh;
+  padding-bottom: calc(38rpx + env(safe-area-inset-bottom));
 }
+.me-shell { padding: 24rpx; }
 
-/* ===== 个人信息卡片 ===== */
-.profile-card {
-  background: linear-gradient(160deg, #0f766e, #14b8a6);
-  border-radius: 0 0 28rpx 28rpx;
-  padding: 40rpx 32rpx 32rpx;
-  position: relative;
-  overflow: hidden;
+.profile-hero {
+  background:
+    radial-gradient(circle at 92% 2%,rgba(255,255,255,.18) 0,rgba(255,255,255,.18) 92rpx,transparent 220rpx),
+    linear-gradient(138deg,#45a8ff 0%,#3498ff 42%,#2478df 78%,#1557a8 100%);
+  border-radius: 34rpx; box-shadow: 0 20rpx 50rpx rgba(36,120,223,.2); color: #fff;
+  overflow: hidden; padding: 35rpx; position: relative;
 }
+.profile-watermark { height: 258rpx; opacity: .075; position: absolute; right: -54rpx; top: -68rpx; width: 258rpx; }
+.profile-main,.section-head,.company-summary,.setting-row,.dev-head { align-items: center; display: flex; }
+.profile-main { position: relative; }
+.profile-avatar { align-items: center; background: rgba(255,255,255,.16); border: 1rpx solid rgba(255,255,255,.24); border-radius: 50%; display: flex; flex-shrink: 0; font-size: 39rpx; font-weight: 700; height: 98rpx; justify-content: center; width: 98rpx; }
+.profile-copy { flex: 1; margin-left: 20rpx; min-width: 0; }
+.profile-name { font-size: 34rpx; font-weight: 700; }
+.profile-phone { color: rgba(255,255,255,.7); font-size: 22rpx; margin-top: 7rpx; }
+.profile-code { align-items: center; background: rgba(255,255,255,.13); border: 1rpx solid rgba(255,255,255,.18); border-radius: 19rpx; display: flex; height: 68rpx; justify-content: center; width: 68rpx; }
+.profile-code image { height: 47rpx; width: 47rpx; }
+.profile-badge { background: rgba(255,255,255,.14); border: 1rpx solid rgba(255,255,255,.18); border-radius: 20rpx; display: inline-block; font-size: 21rpx; margin-top: 25rpx; padding: 7rpx 14rpx; position: relative; }
 
-.profile-bg {
-  position: absolute;
-  top: -60rpx;
-  right: -40rpx;
-  width: 240rpx;
-  height: 240rpx;
-  border-radius: 50%;
-  background: rgba(255,255,255,0.06);
+.section-head { justify-content: space-between; margin: 34rpx 4rpx 15rpx; }
+.section-title { color: #162336; font-size: 30rpx; font-weight: 700; }
+.section-sub { color: #8e9aaa; font-size: 21rpx; margin-top: 5rpx; }
+.section-link { color: #728198; font-size: 21rpx; }
+.service-head { margin-top: 38rpx; }
+
+.company-summary,.settings-list,.dev-card {
+  background: linear-gradient(145deg,#fff 0%,#fff 55%,#f5f9ff 100%); border: 1rpx solid #dfeaf6;
+  border-radius: 28rpx; box-shadow: 0 12rpx 34rpx rgba(22,49,85,.055);
 }
+.company-summary { gap: 15rpx; min-height: 106rpx; padding: 18rpx 22rpx; }
+.company-avatar { align-items: center; background: #e8f3ff; border: 1rpx solid #d6e8fb; border-radius: 21rpx; color: #3498ff; display: flex; flex-shrink: 0; font-size: 24rpx; font-weight: 700; height: 76rpx; justify-content: center; width: 76rpx; }
+.company-copy,.setting-copy { flex: 1; min-width: 0; }
+.company-name,.setting-title { color: #1b2a3c; font-size: 26rpx; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.company-meta,.setting-desc { color: #8e9aaa; font-size: 20rpx; margin-top: 6rpx; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.company-state { background: #e8f3ff; border-radius: 18rpx; color: #3498ff; flex-shrink: 0; font-size: 20rpx; padding: 5rpx 11rpx; }
+.company-state.pending { background: #fff3d6; color: #9a6511; }
+.row-arrow { color: #a9b4c1; flex-shrink: 0; font-size: 36rpx; }
 
-.profile-main {
-  align-items: center;
-  display: flex;
-  gap: 24rpx;
-  position: relative;
-  z-index: 1;
-}
+.settings-list { overflow: hidden; }
+.setting-row { border-bottom: 1rpx solid #eaf0f7; gap: 15rpx; min-height: 104rpx; padding: 13rpx 22rpx; }
+.setting-row:last-child { border-bottom: none; }
+.setting-row image { border-radius: 21rpx; flex-shrink: 0; height: 76rpx; width: 76rpx; }
 
-.profile-avatar {
-  align-items: center;
-  background: rgba(255,255,255,0.22);
-  border-radius: 50%;
-  color: #fff;
-  display: flex;
-  font-size: 44rpx;
-  font-weight: 700;
-  height: 112rpx;
-  justify-content: center;
-  width: 112rpx;
-}
-
-.profile-info {
-  flex: 1;
-}
-
-.profile-name {
-  color: #fff;
-  font-size: 36rpx;
-  font-weight: 700;
-}
-
-.profile-phone {
-  color: rgba(255,255,255,0.75);
-  font-size: 24rpx;
-  margin-top: 6rpx;
-}
-
-.profile-role {
-  background: rgba(255,255,255,0.2);
-  border-radius: 8rpx;
-  color: #fff;
-  display: inline-block;
-  font-size: 24rpx;
-  margin-top: 20rpx;
-  padding: 6rpx 20rpx;
-  position: relative;
-  z-index: 1;
-}
-
-/* ===== 通用卡片 ===== */
-.card {
-  background: #fff;
-  border-radius: 20rpx;
-  margin: 20rpx 24rpx;
-  padding: 28rpx;
-  box-shadow: 0 1rpx 4rpx rgba(0,0,0,0.03);
-}
-
-.section-title {
-  font-size: 30rpx;
-  font-weight: 700;
-  margin-bottom: 16rpx;
-  color: #1a1a1a;
-}
-
-.arrow { color: #ccc; font-size: 40rpx; flex-shrink: 0; }
-
-.page-end {
-  color: #ccc;
-  font-size: 22rpx;
-  padding: 24rpx 0 40rpx;
-  text-align: center;
-}
-
-/* ===== 企业列表 ===== */
-.company-row {
-  align-items: center;
-  border-bottom: 1rpx solid #f5f5f5;
-  display: flex;
-  padding: 18rpx 0;
-}
-
-.company-row:last-child { border-bottom: none; }
-
-.company-row.current {
-  background: #f0fdfa;
-  border-radius: 12rpx;
-  margin: 0 -16rpx;
-  padding: 18rpx 16rpx;
-}
-
-.cr-avatar {
-  align-items: center;
-  background: linear-gradient(135deg, #0f766e, #14b8a6);
-  border-radius: 12rpx;
-  color: #fff;
-  display: flex;
-  font-size: 28rpx;
-  font-weight: 700;
-  height: 68rpx;
-  justify-content: center;
-  margin-right: 18rpx;
-  width: 68rpx;
-}
-
-.cr-info { flex: 1; }
-
-.cr-name {
-  font-size: 28rpx;
-  font-weight: 600;
-  color: #1a1a1a;
-}
-
-.cr-tags {
-  display: flex;
-  gap: 8rpx;
-  margin-top: 6rpx;
-}
-
-.cr-tag {
-  background: #ccfbf1;
-  border-radius: 6rpx;
-  color: #0f766e;
-  font-size: 22rpx;
-  padding: 2rpx 10rpx;
-}
-
-.cr-check {
-  background: #eef2ff;
-  border-radius: 6rpx;
-  color: #4f46e5;
-  font-size: 20rpx;
-  padding: 2rpx 10rpx;
-}
-
-/* ===== 空状态 ===== */
-.empty-hint {
-  align-items: center;
-  display: flex;
-  flex-direction: column;
-  padding: 36rpx 0 24rpx;
-}
-
-.empty-icon { font-size: 56rpx; margin-bottom: 12rpx; }
-
-.empty-text { color: #999; font-size: 26rpx; }
-
-/* ===== 设置菜单 ===== */
-.menu-row {
-  align-items: center;
-  border-bottom: 1rpx solid #f5f5f5;
-  display: flex;
-  padding: 22rpx 0;
-}
-
-.menu-row:last-child { border-bottom: none; }
-
-.menu-icon {
-  width: 72rpx; height: 72rpx; border-radius: 16rpx;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 28rpx; font-weight: 700; color: #fff; margin-right: 20rpx; flex-shrink: 0;
-}
-
-.menu-label {
-  flex: 1;
-  font-size: 28rpx;
-  font-weight: 500;
-  color: #1a1a1a;
-}
-
-/* ===== 开发者工具 ===== */
-.dev-card {
-  opacity: 0.85;
-}
-
-.dev-title {
-  color: #999;
-  cursor: pointer;
-}
-
-.user-picker {
-  background: #f5f5f5;
-  border-radius: 12rpx;
-  color: #374151;
-  font-size: 28rpx;
-  margin-top: 12rpx;
-  padding: 16rpx 24rpx;
-}
-
-/* ===== 退出登录 ===== */
-.logout-btn {
-  background: #fff;
-  border-radius: 20rpx;
-  color: #ef4444;
-  font-size: 30rpx;
-  font-weight: 500;
-  margin: 24rpx 24rpx 0;
-  padding: 28rpx 0;
-  text-align: center;
-  box-shadow: 0 1rpx 4rpx rgba(0,0,0,0.03);
-}
+.dev-card { margin-top: 24rpx; padding: 24rpx; }
+.dev-head { justify-content: space-between; }
+.user-picker { background: #f2f6fb; border: 1rpx solid #e1eaf5; border-radius: 17rpx; color: #52647a; font-size: 24rpx; margin-top: 20rpx; padding: 18rpx 20rpx; }
+.logout-button { color: #c64949; font-size: 26rpx; font-weight: 600; margin-top: 34rpx; padding: 20rpx; text-align: center; }
+.page-end { color: #98a4b2; font-size: 20rpx; padding: 22rpx 0 8rpx; text-align: center; }

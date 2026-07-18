@@ -13,6 +13,10 @@ public class Company {
     private String name;
     private String creditCode;
     private String legalPersonName;
+    private String registeredAddress;
+    private String contactPhone;
+    private String bankName;
+    private String bankAccount;
     private Long createdBy;
     private String certificationStatus;
     private String realNameStatus;
@@ -29,6 +33,14 @@ public class Company {
     public void setCreditCode(String creditCode) { this.creditCode = creditCode; }
     public String getLegalPersonName() { return legalPersonName; }
     public void setLegalPersonName(String legalPersonName) { this.legalPersonName = legalPersonName; }
+    public String getRegisteredAddress() { return registeredAddress; }
+    public void setRegisteredAddress(String registeredAddress) { this.registeredAddress = registeredAddress; }
+    public String getContactPhone() { return contactPhone; }
+    public void setContactPhone(String contactPhone) { this.contactPhone = contactPhone; }
+    public String getBankName() { return bankName; }
+    public void setBankName(String bankName) { this.bankName = bankName; }
+    public String getBankAccount() { return bankAccount; }
+    public void setBankAccount(String bankAccount) { this.bankAccount = bankAccount; }
     public Long getCreatedBy() { return createdBy; }
     public void setCreatedBy(Long createdBy) { this.createdBy = createdBy; }
     public String getCertificationStatus() { return certificationStatus; }

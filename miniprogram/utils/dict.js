@@ -4,7 +4,7 @@ const CERTIFICATION = {
   NOT_SUBMITTED: { text: '未提交', color: '#9ca3af' },
   PENDING: { text: '待完善', color: '#f59e0b' },
   PENDING_REVIEW: { text: '审核中', color: '#f59e0b' },
-  VERIFIED: { text: '已认证', color: '#0f766e' },
+  VERIFIED: { text: '已认证', color: '#2f86e6' },
   REJECTED: { text: '已驳回', color: '#ef4444' }
 };
 
@@ -13,12 +13,12 @@ const STEP = {
   NOT_SUBMITTED: { text: '未提交', color: '#9ca3af' },
   NOT_UPLOADED: { text: '未上传', color: '#9ca3af' },
   PENDING_REVIEW: { text: '审核中', color: '#f59e0b' },
-  VERIFIED: { text: '已完成', color: '#0f766e' },
-  UPLOADED: { text: '已上传', color: '#0f766e' }
+  VERIFIED: { text: '已完成', color: '#2f86e6' },
+  UPLOADED: { text: '已上传', color: '#2f86e6' }
 };
 
 const MEMBER = {
-  ACTIVE: { text: '正常', color: '#0f766e' },
+  ACTIVE: { text: '正常', color: '#2f86e6' },
   PENDING: { text: '待审批', color: '#f59e0b' },
   GUEST: { text: '访客', color: '#9ca3af' }
 };

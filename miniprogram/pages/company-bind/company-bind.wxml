@@ -10,7 +10,7 @@
   <!-- 搜索栏 -->
   <view class="search-bar-wrap">
     <view class="search-bar">
-      <view class="search-icon">🔍</view>
+      <image class="search-icon" src="/images/icons/search.svg" mode="aspectFit"/>
       <input class="search-input" placeholder="请输入企业名称（与营业执照上一致）" value="{{keyword}}" bindinput="onKeywordInput" confirm-type="search" bindconfirm="doSearch" />
       <view class="search-clear" wx:if="{{keyword}}" bindtap="clearKeyword">✕</view>
     </view>
@@ -20,7 +20,7 @@
   <!-- 搜索结果列表（未选中时） -->
   <view class="results-wrap" wx:if="{{!selectedCompany && searched}}">
     <view class="results-empty" wx:if="{{results.length === 0}}">
-      <view class="empty-icon">📭</view>
+      <image class="empty-icon" src="/images/icons/company.svg" mode="aspectFit"/>
       <view class="empty-text">未找到相关企业</view>
       <view class="empty-hint">请尝试更换关键词搜索</view>
     </view>

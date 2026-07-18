@@ -1,6 +1,12 @@
 const { request } = require('../../utils/request');
 const app = getApp();
 
+function currentCompanyId() {
+  const cid = app.getCurrentCompanyId();
+  if (!cid) wx.showToast({ title: '请先选择企业', icon: 'none' });
+  return cid;
+}
+
 Page({
   data: {
     roles: [],
@@ -13,7 +19,8 @@ Page({
   onShow() { this.loadRoles(); },
 
   async loadRoles() {
-    const cid = (app.globalData.userInfo && app.globalData.userInfo.currentCompanyId) || '1';
+    const cid = currentCompanyId();
+    if (!cid) return;
     try {
       const [permDefs, list] = await Promise.all([
         request({ url: '/permissions' }),
@@ -61,6 +68,7 @@ Page({
   },
 
   hideModal() { this.setData({ showModal: false }); },
+  noop() {},
 
   onNameInput(e) { this.setData({ roleName: e.detail.value }); },
 
@@ -76,7 +84,8 @@ Page({
     const name = this.data.roleName.trim();
     if (!name) { wx.showToast({ title: '请输入角色名', icon: 'none' }); return; }
     const perms = this.data.allPerms.filter(p => p.checked).map(p => p.code);
-    const cid = (app.globalData.userInfo && app.globalData.userInfo.currentCompanyId) || '1';
+    const cid = currentCompanyId();
+    if (!cid) return;
     try {
       if (this.data.editRoleId) {
         await request({ url: `/roles/${this.data.editRoleId}`, method: 'PUT', data: { companyId: cid, name, permissions: perms } });

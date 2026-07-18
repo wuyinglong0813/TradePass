@@ -17,6 +17,7 @@ import com.tradepass.dto.request.SealRequest;
 import com.tradepass.dto.request.VerificationRequest;
 import com.tradepass.dto.response.InviteResult;
 import com.tradepass.dto.response.JoinResult;
+import com.tradepass.dto.response.PagePayload;
 import com.tradepass.entity.Company;
 import com.tradepass.entity.CompanyInvite;
 import com.tradepass.entity.CompanyMember;
@@ -29,9 +30,9 @@ import com.tradepass.mapper.CounterpartyRelationMapper;
 import com.tradepass.mapper.RoleDefMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.beans.factory.annotation.Value;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -45,6 +46,7 @@ public class CompanyService {
     private final RoleDefMapper roleDefMapper;
     private final AccessControlService accessControlService;
     private final RolePermissionService rolePermissionService;
+    private final boolean verificationAutoApprove;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public CompanyService(CompanyMapper companyMapper,
@@ -53,7 +55,8 @@ public class CompanyService {
                           CounterpartyRelationMapper counterpartyRelationMapper,
                           RoleDefMapper roleDefMapper,
                           AccessControlService accessControlService,
-                          RolePermissionService rolePermissionService) {
+                          RolePermissionService rolePermissionService,
+                          @Value("${tradepass.verification.auto-approve:false}") boolean verificationAutoApprove) {
         this.companyMapper = companyMapper;
         this.companyMemberMapper = companyMemberMapper;
         this.companyInviteMapper = companyInviteMapper;
@@ -61,38 +64,19 @@ public class CompanyService {
         this.roleDefMapper = roleDefMapper;
         this.accessControlService = accessControlService;
         this.rolePermissionService = rolePermissionService;
+        this.verificationAutoApprove = verificationAutoApprove;
     }
 
     public List<CompanyProfile> searchCompanies(String keyword) {
-        List<CompanyProfile> results = new ArrayList<>();
         String kw = keyword.trim();
         if (kw.isEmpty()) {
-            return results;
+            return List.of();
         }
-        record MockCompany(String name, String creditCode, String legalPerson) {}
-        List<MockCompany> mockDb = List.of(
-                new MockCompany("河北光屿行贸易有限公司", "91130100MA00000001", "满帅"),
-                new MockCompany("河北通瑞贸易有限公司", "91130100MA00000002", "李强"),
-                new MockCompany("河北逸泽昌贸易有限公司", "91130100MA00000003", "赵伟"),
-                new MockCompany("上海远航进出口有限公司", "91310000MA00000002", "王海"),
-                new MockCompany("北京华贸联合科技有限公司", "91110108MA00000004", "张明"),
-                new MockCompany("深圳前海创新投资有限公司", "91440300MA00000005", "陈磊"),
-                new MockCompany("广州亿通物流有限公司", "91440100MA00000006", "刘洋"),
-                new MockCompany("杭州智云数据科技有限公司", "91330100MA00000007", "周涛"),
-                new MockCompany("成都锦程商贸有限公司", "91510100MA00000008", "孙丽"),
-                new MockCompany("武汉长江贸易有限公司", "91420100MA00000009", "吴刚")
-        );
-        for (MockCompany company : mockDb) {
-            if (company.name().contains(kw)) {
-                results.add(new CompanyProfile("", company.name(), company.creditCode(), company.legalPerson(),
-                        "NOT_SUBMITTED", "NOT_STARTED", "NOT_STARTED", "NOT_UPLOADED"));
-            }
-        }
-        if (results.isEmpty() && kw.length() >= 2) {
-            results.add(new CompanyProfile("", kw, "91130100MA" + String.format("%08d", (int) (Math.random() * 99999999)),
-                    "法定代表人", "NOT_SUBMITTED", "NOT_STARTED", "NOT_STARTED", "NOT_UPLOADED"));
-        }
-        return results;
+        return companyMapper.selectList(new LambdaQueryWrapper<Company>()
+                        .and(query -> query.like(Company::getName, kw).or().like(Company::getCreditCode, kw))
+                        .orderByAsc(Company::getName)
+                        .last("LIMIT 20"))
+                .stream().map(this::toCompanyProfile).toList();
     }
 
     public CompanyProfile getCompany(String id) {
@@ -108,15 +92,21 @@ public class CompanyService {
         Company company = companyMapper.selectOne(new LambdaQueryWrapper<Company>().eq(Company::getCreditCode, request.creditCode()).last("LIMIT 1"));
         if (company == null) {
             company = new Company();
-            company.setId(request.id() != null && !request.id().isBlank() ? parseId(request.id()) : 10000000L + (long) (Math.random() * 90000000));
             company.setCreditCode(request.creditCode());
+            company.setCreatedBy(AuthContext.userId());
             company.setCertificationStatus("PENDING");
             company.setRealNameStatus("NOT_STARTED");
             company.setFaceStatus("NOT_STARTED");
             company.setSealStatus("NOT_UPLOADED");
+        } else if (company.getCreatedBy() == null || company.getCreatedBy() != AuthContext.userId()) {
+            return toCompanyProfile(company);
         }
         company.setName(request.name());
         company.setLegalPersonName(request.legalPersonName());
+        company.setRegisteredAddress(trim(request.registeredAddress()));
+        company.setContactPhone(trim(request.contactPhone()));
+        company.setBankName(trim(request.bankName()));
+        company.setBankAccount(trim(request.bankAccount()));
         if (companyMapper.selectById(company.getId()) == null) {
             companyMapper.insert(company);
         } else {
@@ -126,6 +116,7 @@ public class CompanyService {
     }
 
     public CompanyProfile submitCertification(String id) {
+        accessControlService.requireLegalOrClaim(parseId(id));
         companyMapper.update(new LambdaUpdateWrapper<Company>()
                 .eq(Company::getId, parseId(id))
                 .set(Company::getCertificationStatus, "PENDING_REVIEW"));
@@ -133,6 +124,8 @@ public class CompanyService {
     }
 
     public CompanyProfile verifyRealName(VerificationRequest req) {
+        requireVerificationProvider();
+        accessControlService.requireLegalOrClaim(parseId(req.companyId()));
         companyMapper.update(new LambdaUpdateWrapper<Company>()
                 .eq(Company::getId, parseId(req.companyId()))
                 .set(Company::getRealNameStatus, "VERIFIED"));
@@ -140,6 +133,8 @@ public class CompanyService {
     }
 
     public CompanyProfile verifyFace(VerificationRequest req) {
+        requireVerificationProvider();
+        accessControlService.requireLegalOrClaim(parseId(req.companyId()));
         companyMapper.update(new LambdaUpdateWrapper<Company>()
                 .eq(Company::getId, parseId(req.companyId()))
                 .set(Company::getFaceStatus, "VERIFIED"));
@@ -147,6 +142,8 @@ public class CompanyService {
     }
 
     public SealRecord uploadSeal(SealRequest req) {
+        requireVerificationProvider();
+        accessControlService.requireLegalOrClaim(parseId(req.companyId()));
         companyMapper.update(new LambdaUpdateWrapper<Company>()
                 .eq(Company::getId, parseId(req.companyId()))
                 .set(Company::getSealStatus, "PENDING_REVIEW"));
@@ -157,7 +154,7 @@ public class CompanyService {
         long companyId = parseId(req.companyId());
         accessControlService.requireManager(companyId);
         String code = generateInviteCode();
-        saveInvite(companyId, code, "member");
+        saveInvite(companyId, code, "member", null);
         return new InviteResult(code, req.companyId());
     }
 
@@ -165,7 +162,8 @@ public class CompanyService {
         long companyId = parseId(req.companyId());
         accessControlService.requireLegal(companyId);
         String code = generateInviteCode();
-        saveInvite(companyId, code, "counterparty");
+        String relationRole = "supplier".equalsIgnoreCase(req.relationRole()) ? "supplier" : "buyer";
+        saveInvite(companyId, code, "counterparty", relationRole);
         return new InviteResult(code, req.companyId());
     }
 
@@ -192,13 +190,21 @@ public class CompanyService {
                     .eq(CompanyMember::getStatus, "ACTIVE")
                     .last("LIMIT 1"));
             if (legalMember == null) {
-                throw new BusinessException("仅公司法人可接受供方邀请，请先在您的公司完成法人认证");
+                throw new BusinessException("仅公司法人可接受企业合作邀请，请先在您的公司完成法人认证");
             }
             Company userCompany = companyMapper.selectById(legalMember.getCompanyId());
+            Company inviterCompany = companyMapper.selectById(invite.getCompanyId());
             String companyName = userCompany == null ? "未知企业" : userCompany.getName();
             CounterpartyRelationEntity relation = new CounterpartyRelationEntity();
-            relation.setCompanyId(invite.getCompanyId());
-            relation.setCounterpartyCompanyName(companyName);
+            if ("supplier".equalsIgnoreCase(invite.getRelationRole())) {
+                relation.setCompanyId(legalMember.getCompanyId());
+                relation.setCounterpartyCompanyId(invite.getCompanyId());
+                relation.setCounterpartyCompanyName(inviterCompany == null ? "未知企业" : inviterCompany.getName());
+            } else {
+                relation.setCompanyId(invite.getCompanyId());
+                relation.setCounterpartyCompanyId(legalMember.getCompanyId());
+                relation.setCounterpartyCompanyName(companyName);
+            }
             relation.setRelationType("SUPPLIER");
             relation.setStatus("ACTIVE");
             try {
@@ -206,7 +212,8 @@ public class CompanyService {
             } catch (Exception ignored) {
             }
             markInviteUsed(invite, userId);
-            return new JoinResult("ACTIVE", "已绑定供方关系：" + companyName);
+            String relationText = "supplier".equalsIgnoreCase(invite.getRelationRole()) ? "客户关系" : "供应商关系";
+            return new JoinResult("ACTIVE", "已建立" + relationText);
         }
 
         CompanyMember existing = companyMemberMapper.selectOne(new LambdaQueryWrapper<CompanyMember>()
@@ -236,18 +243,28 @@ public class CompanyService {
 
     public List<AuthorizationRecord> listMembers(String companyId) {
         return companyMemberMapper.selectAuthorizationRecords(parseId(companyId)).stream()
-                .map(row -> {
-                    String roleCode = string(row.get("roleCode"));
-                    String name = string(row.get("nickname"));
-                    String phone = string(row.get("phone"));
-                    String displayName = name != null && !name.isBlank() && !"新用户".equals(name)
-                            ? name
-                            : (phone != null && !phone.isBlank() ? "用户" + phone.substring(phone.length() - 4) : "微信用户");
-                    return new AuthorizationRecord(String.valueOf(row.get("id")), companyId, String.valueOf(row.get("userId")),
-                            displayName, roleCode, rolePermissionService.roleText(roleCode), List.of(), string(row.get("status")),
-                            phone != null ? phone : "");
-                })
+                .map(row -> toAuthorizationRecord(row, companyId))
                 .toList();
+    }
+
+    public PagePayload<AuthorizationRecord> pageMembers(String companyId, String status, int page, int size) {
+        long cid = accessControlService.resolveCompanyId(companyId);
+        accessControlService.requireManager(cid);
+        int normalizedPage = Math.max(1, page);
+        int normalizedSize = Math.max(1, Math.min(size, 100));
+        String cleanStatus = status == null ? null : status.trim();
+        LambdaQueryWrapper<CompanyMember> countQuery = new LambdaQueryWrapper<CompanyMember>()
+                .eq(CompanyMember::getCompanyId, cid);
+        if (cleanStatus != null && !cleanStatus.isBlank()) {
+            countQuery.eq(CompanyMember::getStatus, cleanStatus);
+        }
+        long total = companyMemberMapper.selectCount(countQuery);
+        long offset = (long) (normalizedPage - 1) * normalizedSize;
+        List<AuthorizationRecord> items = companyMemberMapper.selectAuthorizationPageRecords(
+                        cid, cleanStatus, normalizedSize, offset).stream()
+                .map(row -> toAuthorizationRecord(row, String.valueOf(cid)))
+                .toList();
+        return PagePayload.of(items, total, normalizedPage, normalizedSize);
     }
 
     public AuthorizationRecord approveMember(String id, ApproveRequest req, String companyId) {
@@ -285,9 +302,10 @@ public class CompanyService {
     }
 
     public List<Map<String, Object>> listRoles(String companyId) {
+        long cid = accessControlService.resolveCompanyId(companyId);
         return roleDefMapper.selectMaps(new LambdaQueryWrapper<RoleDef>()
                 .select(RoleDef::getId, RoleDef::getName, RoleDef::getPermissions)
-                .eq(RoleDef::getCompanyId, parseId(companyId))
+                .eq(RoleDef::getCompanyId, cid)
                 .orderByAsc(RoleDef::getId));
     }
 
@@ -321,11 +339,12 @@ public class CompanyService {
         roleDefMapper.deleteById(role.getId());
     }
 
-    private void saveInvite(long companyId, String code, String type) {
+    private void saveInvite(long companyId, String code, String type, String relationRole) {
         CompanyInvite invite = new CompanyInvite();
         invite.setCompanyId(companyId);
         invite.setCode(code);
         invite.setType(type);
+        invite.setRelationRole(relationRole);
         invite.setUsed(false);
         invite.setExpiresAt(LocalDateTime.now().plusHours(24));
         companyInviteMapper.insert(invite);
@@ -339,8 +358,27 @@ public class CompanyService {
 
     private CompanyProfile toCompanyProfile(Company company) {
         return new CompanyProfile(String.valueOf(company.getId()), company.getName(), company.getCreditCode(),
-                company.getLegalPersonName(), company.getCertificationStatus(), company.getRealNameStatus(),
+                company.getLegalPersonName(), company.getRegisteredAddress(), company.getContactPhone(),
+                company.getBankName(), company.getBankAccount(), company.getCertificationStatus(), company.getRealNameStatus(),
                 company.getFaceStatus(), company.getSealStatus());
+    }
+
+    private AuthorizationRecord toAuthorizationRecord(Map<String, Object> row, String companyId) {
+        String roleCode = string(row.get("roleCode"));
+        String name = string(row.get("nickname"));
+        String phone = string(row.get("phone"));
+        String displayName = name != null && !name.isBlank() && !"新用户".equals(name)
+                ? name
+                : (phone != null && !phone.isBlank() ? "用户" + phone.substring(phone.length() - 4) : "微信用户");
+        return new AuthorizationRecord(String.valueOf(row.get("id")), companyId, String.valueOf(row.get("userId")),
+                displayName, roleCode, rolePermissionService.roleText(roleCode), List.of(), string(row.get("status")),
+                phone != null ? phone : "");
+    }
+
+    private void requireVerificationProvider() {
+        if (!verificationAutoApprove) {
+            throw new BusinessException("认证服务尚未配置，无法完成该操作");
+        }
     }
 
     private String toJson(List<String> permissions) {
@@ -371,5 +409,9 @@ public class CompanyService {
 
     private String string(Object value) {
         return value == null ? null : String.valueOf(value);
+    }
+
+    private String trim(String value) {
+        return value == null ? null : value.trim();
     }
 }

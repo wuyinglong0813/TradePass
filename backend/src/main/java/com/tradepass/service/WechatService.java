@@ -1,18 +1,33 @@
 package com.tradepass.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tradepass.common.BusinessException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.net.URI;
+import java.net.URLEncoder;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Map;
 
 @Service
 public class WechatService {
+    private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(5);
+    private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(10);
+
     private final ObjectMapper mapper = new ObjectMapper();
+    private final HttpClient httpClient = HttpClient.newBuilder().connectTimeout(CONNECT_TIMEOUT).build();
     private final String wechatAppId;
     private final String wechatAppSecret;
     private final boolean devEnabled;
+    private volatile String cachedAccessToken;
+    private volatile Instant accessTokenExpiresAt = Instant.EPOCH;
 
     public WechatService(@Value("${wechat.app-id}") String wechatAppId,
                          @Value("${wechat.app-secret}") String wechatAppSecret,
@@ -24,77 +39,100 @@ public class WechatService {
 
     public String resolveOpenid(String code) {
         if (code.startsWith("dev-")) {
-            if (!devEnabled) {
-                throw new BusinessException("开发登录凭证在当前环境不可用");
-            }
+            if (!devEnabled) throw new BusinessException("开发登录凭证在当前环境不可用");
             return code;
         }
-        if (wechatAppSecret == null || wechatAppSecret.isBlank()) {
-            throw new BusinessException("未配置 WECHAT_APP_SECRET，无法完成微信登录");
-        }
+        requireWechatSecret("无法完成微信登录");
         try {
-            String url = String.format(
-                    "https://api.weixin.qq.com/sns/jscode2session?appid=%s&secret=%s&js_code=%s&grant_type=authorization_code",
-                    wechatAppId, wechatAppSecret, code);
-            var client = java.net.http.HttpClient.newHttpClient();
-            var httpReq = java.net.http.HttpRequest.newBuilder().uri(java.net.URI.create(url)).GET().build();
-            var resp = client.send(httpReq, java.net.http.HttpResponse.BodyHandlers.ofString());
-            var node = mapper.readTree(resp.body());
-            if (node.has("errcode") && node.get("errcode").asInt() != 0) {
-                throw new BusinessException("微信登录失败: " + node.get("errmsg").asText());
+            String query = "appid=" + encode(wechatAppId)
+                    + "&secret=" + encode(wechatAppSecret)
+                    + "&js_code=" + encode(code)
+                    + "&grant_type=authorization_code";
+            JsonNode node = sendJson(HttpRequest.newBuilder()
+                    .uri(URI.create("https://api.weixin.qq.com/sns/jscode2session?" + query))
+                    .timeout(REQUEST_TIMEOUT)
+                    .GET().build());
+            if (node.path("errcode").asInt(0) != 0) {
+                throw new BusinessException("微信登录失败: " + node.path("errmsg").asText("未知错误"));
             }
-            return node.get("openid").asText();
+            String openid = node.path("openid").asText("");
+            if (openid.isBlank()) throw new BusinessException("微信登录失败: 响应缺少 openid");
+            return openid;
         } catch (BusinessException e) {
             throw e;
         } catch (Exception e) {
-            throw new BusinessException("微信登录异常: " + e.getMessage());
+            throw new BusinessException("微信登录服务暂时不可用");
         }
     }
 
     public String resolvePhoneByCode(String phoneCode) {
         try {
             String token = getAccessToken();
-            String url = "https://api.weixin.qq.com/wxa/business/getuserphonenumber?access_token=" + token;
             String body = mapper.writeValueAsString(Map.of("code", phoneCode));
-            var client = java.net.http.HttpClient.newHttpClient();
-            var httpReq = java.net.http.HttpRequest.newBuilder()
-                    .uri(java.net.URI.create(url))
+            JsonNode node = sendJson(HttpRequest.newBuilder()
+                    .uri(URI.create("https://api.weixin.qq.com/wxa/business/getuserphonenumber?access_token=" + encode(token)))
+                    .timeout(REQUEST_TIMEOUT)
                     .header("Content-Type", "application/json")
-                    .POST(java.net.http.HttpRequest.BodyPublishers.ofString(body))
-                    .build();
-            var resp = client.send(httpReq, java.net.http.HttpResponse.BodyHandlers.ofString());
-            var node = mapper.readTree(resp.body());
+                    .POST(HttpRequest.BodyPublishers.ofString(body))
+                    .build());
             if (node.path("errcode").asInt(-1) != 0) {
-                throw new BusinessException("获取手机号失败: " + node.path("errmsg").asText());
+                throw new BusinessException("获取手机号失败: " + node.path("errmsg").asText("未知错误"));
             }
-            return node.path("phone_info").path("phoneNumber").asText();
+            String phone = node.path("phone_info").path("phoneNumber").asText("");
+            if (phone.isBlank()) throw new BusinessException("获取手机号失败: 响应缺少手机号");
+            return phone;
         } catch (BusinessException e) {
             throw e;
         } catch (Exception e) {
-            throw new BusinessException("获取手机号异常: " + e.getMessage());
+            throw new BusinessException("微信手机号服务暂时不可用");
         }
     }
 
     private String getAccessToken() {
-        try {
-            if (wechatAppSecret == null || wechatAppSecret.isBlank()) {
-                throw new BusinessException("未配置 WECHAT_APP_SECRET，无法获取 access_token");
+        Instant now = Instant.now();
+        if (cachedAccessToken != null && now.isBefore(accessTokenExpiresAt)) return cachedAccessToken;
+        synchronized (this) {
+            now = Instant.now();
+            if (cachedAccessToken != null && now.isBefore(accessTokenExpiresAt)) return cachedAccessToken;
+            requireWechatSecret("无法获取 access_token");
+            try {
+                String query = "grant_type=client_credential&appid=" + encode(wechatAppId)
+                        + "&secret=" + encode(wechatAppSecret);
+                JsonNode node = sendJson(HttpRequest.newBuilder()
+                        .uri(URI.create("https://api.weixin.qq.com/cgi-bin/token?" + query))
+                        .timeout(REQUEST_TIMEOUT)
+                        .GET().build());
+                String token = node.path("access_token").asText("");
+                if (token.isBlank()) {
+                    throw new BusinessException("获取 access_token 失败: " + node.path("errmsg").asText("未知错误"));
+                }
+                long expiresIn = Math.max(120, node.path("expires_in").asLong(7200));
+                cachedAccessToken = token;
+                accessTokenExpiresAt = now.plusSeconds(expiresIn - 60);
+                return token;
+            } catch (BusinessException e) {
+                throw e;
+            } catch (Exception e) {
+                throw new BusinessException("微信凭证服务暂时不可用");
             }
-            String url = String.format(
-                    "https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=%s&secret=%s",
-                    wechatAppId, wechatAppSecret);
-            var client = java.net.http.HttpClient.newHttpClient();
-            var httpReq = java.net.http.HttpRequest.newBuilder().uri(java.net.URI.create(url)).GET().build();
-            var resp = client.send(httpReq, java.net.http.HttpResponse.BodyHandlers.ofString());
-            var node = mapper.readTree(resp.body());
-            if (!node.has("access_token")) {
-                throw new BusinessException("获取 access_token 失败: " + resp.body());
-            }
-            return node.get("access_token").asText();
-        } catch (BusinessException e) {
-            throw e;
-        } catch (Exception e) {
-            throw new BusinessException("获取 access_token 异常: " + e.getMessage());
         }
+    }
+
+    private JsonNode sendJson(HttpRequest request) throws Exception {
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        if (response.statusCode() < 200 || response.statusCode() >= 300) {
+            throw new BusinessException("微信服务返回异常状态: " + response.statusCode());
+        }
+        return mapper.readTree(response.body());
+    }
+
+    private void requireWechatSecret(String action) {
+        if (wechatAppSecret == null || wechatAppSecret.isBlank()) {
+            throw new BusinessException("未配置 WECHAT_APP_SECRET，" + action);
+        }
+    }
+
+    private String encode(String value) {
+        return URLEncoder.encode(value, StandardCharsets.UTF_8);
     }
 }

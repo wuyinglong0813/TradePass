@@ -25,4 +25,29 @@ public interface TradeOrderMapper extends BaseMapper<TradeOrder> {
     List<Map<String, Object>> selectRanking(@Param("companyId") Long companyId,
                                             @Param("direction") String direction,
                                             @Param("period") String period);
+
+    @Select("""
+        SELECT COUNT(*) AS total, COALESCE(SUM(amount), 0) AS amount
+        FROM trade_order
+        WHERE company_id = #{companyId}
+          AND (#{counterpartyName} IS NULL OR #{counterpartyName} = '' OR counterparty_name = #{counterpartyName})
+          AND (#{direction} IS NULL OR #{direction} = '' OR direction = #{direction})
+        """)
+    Map<String, Object> selectOrderSummary(@Param("companyId") Long companyId,
+                                           @Param("counterpartyName") String counterpartyName,
+                                           @Param("direction") String direction);
+
+    @Select("""
+        SELECT DATE_FORMAT(order_date, '%Y-%m') AS period, COALESCE(SUM(amount), 0) AS amount
+        FROM trade_order
+        WHERE company_id = #{companyId}
+          AND counterparty_name = #{counterpartyName}
+          AND direction = #{direction}
+          AND order_date >= DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 11 MONTH), '%Y-%m-01')
+        GROUP BY DATE_FORMAT(order_date, '%Y-%m')
+        ORDER BY period
+        """)
+    List<Map<String, Object>> selectMonthlyOrderSummary(@Param("companyId") Long companyId,
+                                                        @Param("counterpartyName") String counterpartyName,
+                                                        @Param("direction") String direction);
 }

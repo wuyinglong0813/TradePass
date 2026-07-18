@@ -3,5 +3,5 @@
     "search-bar": "/components/search-bar/search-bar",
     "empty-state": "/components/empty-state/empty-state"
   },
-  "navigationBarTitleText": "授权管理"
+  "navigationBarTitleText": "组织成员"
 }

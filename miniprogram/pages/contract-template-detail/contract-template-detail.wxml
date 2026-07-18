@@ -29,7 +29,7 @@
 
       <block wx:elif="{{!item.editable}}">
         <view class="field-value locked" data-index="{{index}}">
-          <text class="locked-icon">🔒</text>
+          <image class="locked-icon" src="/images/icons/role.svg" mode="aspectFit"/>
           <text class="locked-text">{{item.hint || '自动生成'}}</text>
         </view>
       </block>
@@ -58,8 +58,8 @@
             <block wx:if="{{ci === 5}}">
               <input class="td-input num auto" type="digit" value="{{row[ci]}}" disabled/>
             </block>
-            <block wx:elif="{{ci >= 3}}">
-              <input class="td-input num" type="digit" value="{{row[ci]}}" data-row="{{ri}}" data-col="{{ci}}" bindinput="onTableCellChange"/>
+            <block wx:elif="{{ci === 3 || ci === 4}}">
+                <input class="td-input num" type="digit" value="{{row[ci]}}" data-row="{{ri}}" data-col="{{ci}}" bindinput="onTableCellChange"/>
             </block>
             <block wx:else>
               <input class="td-input" type="text" value="{{row[ci]}}" data-row="{{ri}}" data-col="{{ci}}" bindinput="onTableCellChange"/>

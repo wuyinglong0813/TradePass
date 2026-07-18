@@ -9,9 +9,11 @@
     "pages/me/me",
     "pages/company-bind/company-bind",
     "pages/order-detail/order-detail",
+    "pages/contract-center/contract-center",
     "pages/contract-preview/contract-preview",
     "pages/contract-template/contract-template",
     "pages/contract-template-detail/contract-template-detail",
+    "pages/document-template/document-template",
     "pages/sign-contract/sign-contract",
     "pages/reconciliation/reconciliation",
     "pages/contract-approval/contract-approval",
@@ -21,13 +23,14 @@
   ],
   "window": {
     "navigationBarTitleText": "商签通",
-    "navigationBarBackgroundColor": "#0f766e",
+    "navigationBarBackgroundColor": "#3498ff",
     "navigationBarTextStyle": "white",
-    "backgroundColor": "#f6f7f9"
+    "backgroundColor": "#f4f8fd",
+    "backgroundTextStyle": "dark"
   },
   "tabBar": {
     "color": "#9aa3a1",
-    "selectedColor": "#0f766e",
+    "selectedColor": "#3498ff",
     "backgroundColor": "#ffffff",
     "borderStyle": "white",
     "list": [

@@ -1,5 +1,11 @@
 const { request } = require('../../utils/request');
+const dict = require('../../utils/dict');
 const app = getApp();
+
+function companyAbbr(name) {
+  const clean = (name || '企业').replace(/有限公司|有限责任公司|股份有限公司/g, '');
+  return clean.slice(0, 2) || '企业';
+}
 
 Page({
   data: {
@@ -9,6 +15,10 @@ Page({
     maskedPhone: '',
     memberRoleText: '加载中',
     company: {},
+    companyAbbr: '企业',
+    companyVerified: false,
+    companyStatusText: '未认证',
+    realNameVerified: false,
     canManageAuth: false,
     companies: [],
     currentCompanyId: '',
@@ -19,7 +29,7 @@ Page({
 
   onShow() {
     const loggedIn = !!(app.globalData.token || wx.getStorageSync('tradepass_token'));
-    let isDev = true; // dev 阶段始终显示
+    const isDev = !!app.globalData.isLocalDevelopment;
     this.setData({ isLoggedIn: loggedIn, isDev });
     if (!loggedIn) return;
     this.loadMe();
@@ -72,6 +82,10 @@ Page({
         maskedPhone: maskedPhone || '未绑定手机号',
         memberRoleText: member.roleText || '未分配角色',
         company,
+        companyAbbr: companyAbbr(company.name),
+        companyVerified: company.certificationStatus === 'VERIFIED',
+        companyStatusText: dict.certification(company.certificationStatus).text,
+        realNameVerified: company.realNameStatus === 'VERIFIED',
         companies,
         currentCompanyId: user.currentCompanyId || '',
         canManageAuth: canManage
@@ -82,6 +96,14 @@ Page({
   /* 设置菜单 */
   openPrivacy() {
     wx.navigateTo({ url: '/pages/privacy/privacy' });
+  },
+  openAccountSecurity() {
+    wx.showModal({
+      title: '账号与安全',
+      content: `登录手机号：${this.data.maskedPhone}\n实名状态：${this.data.realNameVerified ? '已实名' : '待实名'}\n当前账号状态正常`,
+      showCancel: false,
+      confirmText: '我知道了'
+    });
   },
   openAgreement() {
     wx.showModal({
@@ -94,10 +116,29 @@ Page({
   openAbout() {
     wx.showModal({
       title: '关于商签通',
-      content: '商签通 v1.0\n安全合规的企业贸易管理平台\n\n提供企业认证、授权管理、交易排行、电子签章等服务。',
+      content: '商签通 v1.0\n连接交易双方，让合同凭证可信流转。\n\n提供企业认证、组织授权、合同协同与履约对账等服务。',
       showCancel: false,
       confirmText: '我知道了'
     });
+  },
+  openHelp() {
+    wx.showModal({
+      title: '帮助与反馈',
+      content: '如需帮助，请在企业中心查看成员、合同和对账状态。反馈入口将在正式客服渠道接入后开放。',
+      showCancel: false,
+      confirmText: '我知道了'
+    });
+  },
+  showProfileCode() {
+    wx.showModal({
+      title: '我的商签通身份',
+      content: `用户：${this.data.userDisplayName}\n当前身份：${this.data.memberRoleText}\n企业：${this.data.company.name || '暂未加入企业'}`,
+      showCancel: false,
+      confirmText: '我知道了'
+    });
+  },
+  goCompanyCenter() {
+    wx.switchTab({ url: '/pages/company/company' });
   },
 
   goAuthManage() {
@@ -108,6 +149,32 @@ Page({
   },
   goCompanyCert() {
     wx.navigateTo({ url: '/pages/company-cert/company-cert' });
+  },
+
+  openCompanySwitcher() {
+    const companies = this.data.companies || [];
+    if (companies.length === 0) {
+      this.goCompanyCenter();
+      return;
+    }
+    if (companies.length === 1) {
+      this.goCompanyCenter();
+      return;
+    }
+    wx.showActionSheet({
+      itemList: companies.map(item => `${item.companyName} · ${item.roleText}`),
+      success: async ({ tapIndex }) => {
+        const target = companies[tapIndex];
+        if (!target || target.companyId === this.data.currentCompanyId) return;
+        try {
+          await app.switchCompany(target.companyId);
+          wx.showToast({ title: '企业已切换', icon: 'success' });
+          await this.loadMe();
+        } catch (error) {
+          wx.showToast({ title: '切换失败', icon: 'none' });
+        }
+      }
+    });
   },
 
   // ---- Dev ----
