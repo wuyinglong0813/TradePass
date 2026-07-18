@@ -7,7 +7,7 @@ Component({
   },
   methods: {
     goLogin() {
-      wx.reLaunch({ url: '/pages/login/login' });
+      wx.navigateTo({ url: '/pages/login/login' });
     }
   }
 });

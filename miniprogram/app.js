@@ -88,7 +88,7 @@ App({
     } finally {
       clearSession(this);
       this._sessionReady = Promise.resolve(null);
-      wx.reLaunch({ url: '/pages/login/login' });
+      wx.reLaunch({ url: '/pages/index/index' });
     }
   },
 

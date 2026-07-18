@@ -1,5 +1,63 @@
 <view class="company-page">
-  <login-guard wx:if="{{!isLoggedIn}}" text="登录后管理您的企业"/>
+  <view class="enterprise-shell guest-enterprise-shell" wx:if="{{!isLoggedIn}}">
+    <view class="identity-card guest-identity-card" bindtap="goPhoneLogin">
+      <image class="identity-watermark" src="/images/brand-logo.svg" mode="aspectFit"/>
+      <view class="identity-top">
+        <view class="identity-avatar">企</view>
+        <view class="identity-copy">
+          <view class="identity-name">企业工作空间</view>
+          <view class="identity-code">登录后查看企业主体与认证信息</view>
+        </view>
+        <view class="identity-arrow">›</view>
+      </view>
+      <view class="trust-row">
+        <view class="trust-state"><view class="trust-dot">·</view>企业身份待登录后加载</view>
+        <view class="role-badge">未登录</view>
+      </view>
+    </view>
+
+    <view class="metrics-card guest-metrics">
+      <view class="metric-item"><view class="metric-value">—</view><view class="metric-label">企业成员</view></view>
+      <view class="metric-divider"></view>
+      <view class="metric-item"><view class="metric-value">—</view><view class="metric-label">角色权限</view></view>
+      <view class="metric-divider"></view>
+      <view class="metric-item"><view class="metric-value">—</view><view class="metric-label">合同模板</view></view>
+    </view>
+
+    <view class="section-head">
+      <view><view class="section-title">企业服务</view><view class="section-sub">登录后管理可信企业交易空间</view></view>
+      <view class="section-link" bindtap="goPhoneLogin">登录解锁 ›</view>
+    </view>
+    <view class="brand-list">
+      <view class="list-row" bindtap="goPhoneLogin">
+        <view class="row-icon"><image src="/images/icons/company.svg" mode="aspectFit"/></view>
+        <view class="row-copy"><view class="row-title">企业认证</view><view class="row-desc">主体信息、实名状态与电子签章</view></view>
+        <view class="state-pill muted">未登录</view><view class="row-arrow">›</view>
+      </view>
+      <view class="list-row" bindtap="goPhoneLogin">
+        <view class="row-icon"><image src="/images/icons/team.svg" mode="aspectFit"/></view>
+        <view class="row-copy"><view class="row-title">组织成员与权限</view><view class="row-desc">成员、角色和数据权限统一管理</view></view>
+        <view class="state-pill muted">未登录</view><view class="row-arrow">›</view>
+      </view>
+      <view class="list-row" bindtap="goPhoneLogin">
+        <view class="row-icon"><image src="/images/icons/template.svg" mode="aspectFit"/></view>
+        <view class="row-copy"><view class="row-title">业务模板</view><view class="row-desc">合同、销售单与送货单模板</view></view>
+        <view class="state-pill muted">未登录</view><view class="row-arrow">›</view>
+      </view>
+    </view>
+
+    <view class="primary-action guest-login-action" bindtap="goPhoneLogin">
+      <view class="primary-action-label"><view class="action-plus">→</view>手机号快捷登录</view><view>登录 / 注册</view>
+    </view>
+
+    <view class="guest-enterprise-guide">
+      <view class="guide-title">三步建立企业工作空间</view>
+      <view class="guest-guide-row"><view class="guest-guide-no">1</view><view><view class="guest-guide-name">登录并创建企业</view><view class="guest-guide-desc">录入企业主体信息，建立可信身份</view></view></view>
+      <view class="guest-guide-row"><view class="guest-guide-no">2</view><view><view class="guest-guide-name">配置成员与角色</view><view class="guest-guide-desc">按岗位设置合同与业务数据权限</view></view></view>
+      <view class="guest-guide-row"><view class="guest-guide-no">3</view><view><view class="guest-guide-name">开始合同协作</view><view class="guest-guide-desc">连接合作企业，生成合同与履约单据</view></view></view>
+    </view>
+    <view class="page-end">商签通 · 企业可信协作平台</view>
+  </view>
 
   <block wx:else>
     <view class="no-company" wx:if="{{!hasCompany}}">

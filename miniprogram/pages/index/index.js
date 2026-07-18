@@ -97,6 +97,10 @@ Page({
 
   /* 下拉刷新 */
   onPullDownRefresh() {
+    if (!this.data.isLoggedIn) {
+      wx.stopPullDownRefresh();
+      return;
+    }
     if (!this.data.showJoinForm) {
       Promise.all([this.loadHome(), this.loadCounterparties()]).finally(() => {
         wx.stopPullDownRefresh();
@@ -192,7 +196,7 @@ Page({
     const companyId = this.data.joinCompanyId.trim();
     if (!companyId) { wx.showToast({ title: '请输入邀请码', icon: 'none' }); return; }
     const user = app.globalData.userInfo;
-    if (!user || !user.id) { wx.showToast({ title: '请先登录', icon: 'none' }); return; }
+    if (!user || !user.id) { this.goLogin(); return; }
     try {
       const result = await request({
         url: '/companies/join',
@@ -289,10 +293,18 @@ Page({
   },
 
   goLogin() {
-    wx.reLaunch({ url: '/pages/login/login' });
+    wx.navigateTo({ url: '/pages/login/login' });
+  },
+
+  requireLogin() {
+    const loggedIn = !!(app.globalData.token || wx.getStorageSync('tradepass_token'));
+    if (loggedIn) return true;
+    this.goLogin();
+    return false;
   },
 
   openCounterparty(e) {
+    if (!this.requireLogin()) return;
     const name = e.currentTarget.dataset.name;
     wx.navigateTo({
       url: `/pages/order-detail/order-detail?counterpartyName=${encodeURIComponent(name)}&role=${this.data.role}`
@@ -300,6 +312,7 @@ Page({
   },
 
   openWorkbench(e) {
+    if (!this.requireLogin()) return;
     const key = e.currentTarget.dataset.key;
     const routes = {
       approval: '/pages/contract-approval/contract-approval',
@@ -317,10 +330,12 @@ Page({
   },
 
   goCreateCompany() {
+    if (!this.requireLogin()) return;
     wx.navigateTo({ url: '/pages/company-bind/company-bind' });
   },
 
   addCounterparty() {
+    if (!this.requireLogin()) return;
     const member = app.globalData.memberInfo;
     if (!member || member.roleCode !== 'LEGAL') {
       wx.showToast({ title: '仅法人可邀请合作企业', icon: 'none' });

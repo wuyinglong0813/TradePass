@@ -9,6 +9,7 @@ function companyAbbr(name) {
 
 Page({
   data: {
+    isLoggedIn: false,
     user: {},
     userDisplayName: '用户',
     userNameFirst: '用',
@@ -37,11 +38,15 @@ Page({
   },
 
   onPullDownRefresh() {
+    if (!this.data.isLoggedIn) {
+      wx.stopPullDownRefresh();
+      return;
+    }
     this.loadMe().finally(() => wx.stopPullDownRefresh());
   },
 
   goLogin() {
-    wx.reLaunch({ url: '/pages/login/login' });
+    wx.navigateTo({ url: '/pages/login/login' });
   },
 
   logout() {
@@ -98,6 +103,10 @@ Page({
     wx.navigateTo({ url: '/pages/privacy/privacy' });
   },
   openAccountSecurity() {
+    if (!this.data.isLoggedIn) {
+      this.goLogin();
+      return;
+    }
     wx.showModal({
       title: '账号与安全',
       content: `登录手机号：${this.data.maskedPhone}\n实名状态：${this.data.realNameVerified ? '已实名' : '待实名'}\n当前账号状态正常`,

@@ -81,10 +81,10 @@ test('shared components emit stable UI events', () => {
   assert.strictEqual(tapped, true);
 });
 
-test('login guard always returns to the login page', () => {
+test('login guard opens the phone quick-login page', () => {
   const loginGuard = loadComponent('../components/login-guard/login-guard');
   let url;
-  wx.reLaunch = options => { url = options.url; };
+  wx.navigateTo = options => { url = options.url; };
   loginGuard.methods.goLogin();
   assert.strictEqual(url, '/pages/login/login');
 });
@@ -138,7 +138,7 @@ test('request clears session and redirects after unauthorized response', async (
   assert.strictEqual(app.globalData.currentCompanyId, '');
   assert.ok(removedKeys.includes('tradepass_token'));
   assert.ok(removedKeys.includes('tradepass_company_id'));
-  assert.strictEqual(redirectUrl, '/pages/login/login');
+  assert.strictEqual(redirectUrl, '/pages/index/index');
 });
 
 function loadAppDefinition() {

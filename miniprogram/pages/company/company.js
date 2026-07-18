@@ -53,6 +53,10 @@ Page({
   },
 
   onPullDownRefresh() {
+    if (!this.data.isLoggedIn) {
+      wx.stopPullDownRefresh();
+      return;
+    }
     this.loadData().finally(() => wx.stopPullDownRefresh());
   },
 
@@ -158,6 +162,7 @@ Page({
   },
 
   goCreateCompany() { wx.navigateTo({ url: '/pages/company-bind/company-bind' }); },
+  goPhoneLogin() { wx.navigateTo({ url: '/pages/login/login' }); },
   goCert() { wx.navigateTo({ url: '/pages/company-cert/company-cert' }); },
   goAuthManage() { wx.navigateTo({ url: '/pages/auth-manage/auth-manage' }); },
   goRoleManage() { wx.navigateTo({ url: '/pages/role-manage/role-manage' }); },

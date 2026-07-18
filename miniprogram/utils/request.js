@@ -59,7 +59,7 @@ function handleUnauthorized(app) {
   if (redirecting) return;
   redirecting = true;
   wx.reLaunch({
-    url: '/pages/login/login',
+    url: '/pages/index/index',
     complete: () => { setTimeout(() => { redirecting = false; }, 1000); }
   });
 }

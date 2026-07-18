@@ -39,18 +39,40 @@
   </view>
 
   <block wx:if="{{!showPrivacy}}">
-    <view class="welcome-page" wx:if="{{!isLoggedIn}}">
-      <view class="welcome-glow welcome-glow-one"></view>
-      <view class="welcome-glow welcome-glow-two"></view>
-      <view class="welcome-main">
-        <image class="welcome-logo" src="/images/logo.png" mode="aspectFit"/>
-        <view class="welcome-title">商签通</view>
-        <view class="welcome-desc">连接交易双方，让每一份合同可信流转</view>
-        <view class="trust-row">
-          <view>企业认证</view><view>合同协同</view><view>履约对账</view>
+    <view class="guest-home" wx:if="{{!isLoggedIn}}">
+      <view class="guest-hero">
+        <image class="guest-hero-watermark" src="/images/brand-logo.svg" mode="aspectFit"/>
+        <view class="guest-brand">
+          <image src="/images/logo.png" mode="aspectFit"/>
+          <view><view class="guest-brand-name">商签通</view><view class="guest-brand-en">TradePass</view></view>
         </view>
-        <button class="welcome-btn" bindtap="goLogin">登录 / 注册</button>
+        <view class="guest-eyebrow">企业交易协作平台</view>
+        <view class="guest-desc">连接交易双方，让企业协作更高效、更可信</view>
       </view>
+
+      <view class="guest-login-card">
+        <view class="guest-login-icon">未</view>
+        <view class="guest-login-copy"><view class="guest-login-title">当前未登录</view><view class="guest-login-desc">登录后查看你的企业、合同与待办</view></view>
+        <button class="guest-login-btn" bindtap="goLogin">登录/注册</button>
+      </view>
+
+      <view class="guest-section">
+        <view class="guest-section-head"><view><view class="guest-section-title">常用业务</view><view class="guest-section-sub">点击功能后进入手机号快捷登录</view></view><view class="guest-section-more">登录解锁 ›</view></view>
+        <view class="guest-feature-grid">
+          <view class="guest-feature" bindtap="goLogin"><image src="/images/icons/contracts.svg" mode="aspectFit"/><view class="guest-feature-name">合同中心</view><view class="guest-feature-desc">合同台账与签署</view></view>
+          <view class="guest-feature" bindtap="goLogin"><image src="/images/icons/company.svg" mode="aspectFit"/><view class="guest-feature-name">企业认证</view><view class="guest-feature-desc">可信主体身份</view></view>
+          <view class="guest-feature" bindtap="goLogin"><image src="/images/icons/delivery.svg" mode="aspectFit"/><view class="guest-feature-name">履约单据</view><view class="guest-feature-desc">销售与送货 PDF</view></view>
+          <view class="guest-feature" bindtap="goLogin"><image src="/images/icons/reconcile.svg" mode="aspectFit"/><view class="guest-feature-name">对账中心</view><view class="guest-feature-desc">跨企业汇总</view></view>
+        </view>
+      </view>
+
+      <view class="guest-section guest-capability">
+        <view class="guest-section-head"><view><view class="guest-section-title">平台能力</view><view class="guest-section-sub">未登录也可以先了解商签通</view></view></view>
+        <view class="capability-row"><view class="capability-no">01</view><view><view class="capability-title">合同全流程协同</view><view class="capability-desc">从模板、发起、签署到履约凭证统一管理</view></view></view>
+        <view class="capability-row"><view class="capability-no">02</view><view><view class="capability-title">标准 A4 PDF 凭证</view><view class="capability-desc">合同、销售单和送货单可随时查看下载</view></view></view>
+        <view class="capability-row"><view class="capability-no">03</view><view><view class="capability-title">企业角色与权限</view><view class="capability-desc">按法人、管理员和业务角色安全协作</view></view></view>
+      </view>
+      <view class="page-end">商签通 · 安全连接每一次企业交易</view>
     </view>
 
     <view class="onboarding-page" wx:elif="{{showJoinForm}}">

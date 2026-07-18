@@ -10,6 +10,23 @@ page { background: #f4f8fd; }
 }
 
 .enterprise-shell { padding: 24rpx; }
+.guest-enterprise-shell { min-height: 100vh; }
+.guest-identity-card { cursor: pointer; }
+.guest-metrics .metric-value { color: #a4b0be; }
+.guest-login-action { margin-top: 22rpx; }
+.guest-login-action > view:last-child { color: rgba(255,255,255,.72); font-size: 20rpx; }
+.guest-enterprise-guide {
+  background: linear-gradient(145deg,#fff,#f6faff); border: 1rpx solid #dfeaf6; border-radius: 28rpx;
+  box-shadow: 0 12rpx 34rpx rgba(22,49,85,.055); margin-top: 24rpx; padding: 27rpx;
+}
+.guest-enterprise-guide .guide-title { color: #162336; font-size: 29rpx; font-weight: 700; margin-bottom: 9rpx; }
+.guest-guide-row { align-items: flex-start; border-top: 1rpx solid #eaf0f7; display: flex; gap: 15rpx; padding: 19rpx 0; }
+.guest-guide-no {
+  align-items: center; background: #e8f3ff; border-radius: 50%; color: #3498ff; display: flex;
+  flex-shrink: 0; font-size: 20rpx; font-weight: 700; height: 46rpx; justify-content: center; width: 46rpx;
+}
+.guest-guide-name { color: #24354a; font-size: 25rpx; font-weight: 600; }
+.guest-guide-desc { color: #8e9aaa; font-size: 20rpx; line-height: 1.5; margin-top: 5rpx; }
 .identity-card {
   background:
     radial-gradient(circle at 93% 0%,rgba(255,255,255,.17) 0,rgba(255,255,255,.17) 92rpx,transparent 220rpx),
