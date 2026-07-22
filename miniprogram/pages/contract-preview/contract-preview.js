@@ -15,8 +15,9 @@ Page({
     ],
     activeTab: 'detail',
     // 列表
-    salesList: [],
     logisticsList: [],
+    logisticsLoading: false,
+    logisticsUploading: false,
     salesDocuments: [],
     deliveryDocuments: [],
     invoiceList: [],
@@ -34,7 +35,24 @@ Page({
     // 详情面板
     showDetail: false,
     detailTitle: '',
-    detailFields: []
+    detailFields: [],
+    // 销售单 / 送货单创建编辑器
+    showDocumentEditor: false,
+    documentEditorType: '',
+    documentEditorLabel: '',
+    documentTemplates: [],
+    documentTemplateIndex: -1,
+    documentTitle: '',
+    documentCompanyName: '',
+    documentCounterpartyName: '',
+    documentContractNo: '',
+    documentDate: '',
+    documentColumns: [],
+    documentRows: [],
+    documentBlankRows: 1,
+    documentTotalAmount: '0',
+    documentEditorReady: false,
+    documentEditorSubmitting: false
   },
 
   onLoad(options) {
@@ -51,12 +69,11 @@ Page({
     if (tab === this.data.activeTab) return;
     this.setData({ activeTab: tab });
     if (tab === 'sales') {
-      this.loadSalesOrders();
       this.loadBusinessDocuments('SALES_ORDER');
     } else if (tab === 'delivery') {
       this.loadBusinessDocuments('DELIVERY_NOTE');
-    } else if ((tab === 'logistics' || tab === 'invoice') && this.data.logisticsList.length === 0) {
-      this.loadSalesOrders();
+    } else if (tab === 'logistics') {
+      this.loadLogisticsDocuments();
     }
   },
 
@@ -85,13 +102,14 @@ Page({
         const field = structuredFields.find(item => item.key === key);
         return (field && field.value) || '';
       };
-      const isPurchase = contract.direction === 'PURCHASE';
+      const isPurchase = (contract.viewerDirection || contract.direction) === 'PURCHASE';
       const currentCompany = this.currentCompanyName();
-      const pdfTitle = (sData && sData.title) || contract.name || this.data.contractName || '购销合同';
+      const viewerCounterpartyName = contract.viewerCounterpartyName || contract.counterpartyName;
+      const pdfTitle = contract.name || (sData && sData.title) || this.data.contractName || '购销合同';
       const pdfSupplier = fieldValue('supplier')
-        || (isPurchase ? contract.counterpartyName : currentCompany);
+        || (isPurchase ? viewerCounterpartyName : currentCompany);
       const pdfBuyer = fieldValue('buyer')
-        || (isPurchase ? currentCompany : contract.counterpartyName);
+        || (isPurchase ? currentCompany : viewerCounterpartyName);
       const pdfDate = fieldValue('signDate')
         || contract.startDate
         || String(contract.createdAt || '').slice(0, 10);
@@ -102,6 +120,8 @@ Page({
           statusText: statusMap[contract.status] || contract.status,
           amount: contract.amount || 0
         },
+        contractName: contract.name || this.data.contractName,
+        counterpartyName: viewerCounterpartyName || this.data.counterpartyName,
         hasStructured: !!sData,
         sData,
         pdfTitle,
@@ -204,38 +224,163 @@ Page({
     });
   },
 
-  /* 加载销售单 */
-  async loadSalesOrders() {
+  async loadLogisticsDocuments() {
+    if (this.data.logisticsLoading) return;
     const { request } = require('../../utils/request');
+    this.setData({ logisticsLoading: true });
     try {
-      const orders = await request({
-        url: `/orders?counterpartyName=${encodeURIComponent(this.data.counterpartyName)}`
+      const list = await request({
+        url: `/contracts/${this.data.contractId}/logistics-documents`
       });
-      const filteredSales = (orders || []).slice(0, 5).map(o => ({
-        id: parseInt(o.id),
-        orderNo: `SO-${String(o.id).padStart(4, '0')}`,
-        product: '贸易订单',
-        qty: 1,
-        amount: o.amount || 0,
-        date: o.orderDate || '',
-        status: o.status === 'CONFIRMED' ? '已确认' : o.status,
-        direction: o.direction || '采购'
+      const logisticsList = (list || []).map(item => ({
+        ...item,
+        dateText: String(item.createdAt || '').slice(0, 10),
+        fileSizeText: this.formatFileSize(item.fileSize)
       }));
-      this.setData({ salesList: filteredSales });
-    } catch (e) { /* 静默 */ }
-
-    if (this.data.logisticsList.length === 0) {
-      this.setData({
-        logisticsList: [
-          { id: 1, trackingNo: 'SF1234567890', carrier: '顺丰速运', status: '运输中', weight: '25kg', date: '2026-07-02', from: '深圳', to: '上海', contact: '张师傅 138****5678', desc: '电子产品' },
-          { id: 2, trackingNo: 'YT0987654321', carrier: '圆通快递', status: '已签收', weight: '12kg', date: '2026-07-01', from: '广州', to: '北京', contact: '李师傅 139****1234', desc: '办公用品' }
-        ],
-        invoiceList: [
-          { id: 1, invoiceNo: 'INV-20260701', type: '增值税专用发票', amount: 50000, taxRate: '13%', status: '已开票', date: '2026-07-02' },
-          { id: 2, invoiceNo: 'INV-20260702', type: '增值税专用发票', amount: 25000, taxRate: '13%', status: '待开票', date: '2026-07-03' }
-        ]
-      });
+      this.setData({ logisticsList });
+    } catch (error) {
+      wx.showToast({ title: error.message || '物流单加载失败', icon: 'none' });
+    } finally {
+      this.setData({ logisticsLoading: false });
     }
+  },
+
+  chooseLogisticsImage() {
+    if (this.data.logisticsUploading) return;
+    wx.chooseMedia({
+      count: 1,
+      mediaType: ['image'],
+      sourceType: ['album', 'camera'],
+      sizeType: ['compressed'],
+      success: result => {
+        const file = result.tempFiles && result.tempFiles[0];
+        if (!file || !file.tempFilePath) return;
+        if (file.size && file.size > 10 * 1024 * 1024) {
+          wx.showToast({ title: '物流单图片不能超过10MB', icon: 'none' });
+          return;
+        }
+        this.uploadLogisticsImage(file.tempFilePath);
+      }
+    });
+  },
+
+  uploadLogisticsImage(filePath) {
+    const app = getApp();
+    const token = app.globalData.token || wx.getStorageSync('tradepass_token') || '';
+    const companyId = app.globalData.currentCompanyId || wx.getStorageSync('tradepass_company_id') || '';
+    const header = {};
+    if (token) header.Authorization = token;
+    if (companyId) header['X-Company-Id'] = String(companyId);
+    const originalName = this.buildLogisticsFileName(filePath);
+
+    this.setData({ logisticsUploading: true });
+    wx.showLoading({ title: '上传图片中...' });
+    wx.uploadFile({
+      url: `${app.globalData.baseUrl}/contracts/${this.data.contractId}/logistics-documents`,
+      filePath,
+      name: 'file',
+      formData: { originalName },
+      header,
+      timeout: 30000,
+      success: response => {
+        let body = null;
+        try {
+          body = JSON.parse(response.data || '{}');
+        } catch (error) {
+          // 交由统一错误提示处理。
+        }
+        if (response.statusCode >= 200 && response.statusCode < 300 && body && body.code === 0) {
+          wx.showToast({ title: '物流单已上传', icon: 'success' });
+          this.loadLogisticsDocuments();
+          return;
+        }
+        wx.showToast({
+          title: (body && body.message) || `上传失败（${response.statusCode || '未知状态'}）`,
+          icon: 'none'
+        });
+      },
+      fail: error => {
+        wx.showToast({ title: error.errMsg || '物流单上传失败', icon: 'none' });
+      },
+      complete: () => {
+        wx.hideLoading();
+        this.setData({ logisticsUploading: false });
+      }
+    });
+  },
+
+  buildLogisticsFileName(filePath) {
+    const matched = String(filePath || '').match(/\.([a-zA-Z0-9]+)$/);
+    const candidate = matched ? matched[1].toLowerCase() : 'jpg';
+    const extension = ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(candidate)
+      ? candidate
+      : 'jpg';
+    const now = new Date();
+    const pad = value => String(value).padStart(2, '0');
+    const timestamp = [
+      now.getFullYear(),
+      pad(now.getMonth() + 1),
+      pad(now.getDate()),
+      '-',
+      pad(now.getHours()),
+      pad(now.getMinutes()),
+      pad(now.getSeconds())
+    ].join('');
+    return `物流单-${timestamp}.${extension}`;
+  },
+
+  previewLogisticsImage(e) {
+    const document = e.currentTarget.dataset.document;
+    if (!document || !document.id) return;
+    const app = getApp();
+    const token = app.globalData.token || wx.getStorageSync('tradepass_token') || '';
+    const companyId = app.globalData.currentCompanyId || wx.getStorageSync('tradepass_company_id') || '';
+    const header = {};
+    if (token) header.Authorization = token;
+    if (companyId) header['X-Company-Id'] = String(companyId);
+    const extensionMap = {
+      'image/png': 'png',
+      'image/gif': 'gif',
+      'image/webp': 'webp'
+    };
+    const extension = extensionMap[document.contentType] || 'jpg';
+    const filePath = `${wx.env.USER_DATA_PATH}/logistics-${document.id}.${extension}`;
+    try {
+      wx.getFileSystemManager().unlinkSync(filePath);
+    } catch (error) {
+      // 首次查看时文件不存在。
+    }
+
+    wx.showLoading({ title: '加载图片中...' });
+    wx.downloadFile({
+      url: `${app.globalData.baseUrl}/logistics-documents/${document.id}/image`,
+      header,
+      filePath,
+      timeout: 30000,
+      success: response => {
+        if (response.statusCode !== 200) {
+          wx.showToast({ title: `图片加载失败（${response.statusCode}）`, icon: 'none' });
+          return;
+        }
+        const imagePath = response.filePath || response.tempFilePath || filePath;
+        wx.previewImage({
+          current: imagePath,
+          urls: [imagePath],
+          fail: () => wx.showToast({ title: '图片打开失败', icon: 'none' })
+        });
+      },
+      fail: error => {
+        wx.showToast({ title: error.errMsg || '图片加载失败', icon: 'none' });
+      },
+      complete: () => wx.hideLoading()
+    });
+  },
+
+  formatFileSize(size) {
+    const bytes = Number(size || 0);
+    if (bytes < 1024) return `${bytes}B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
+    return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
   },
 
   async loadBusinessDocuments(documentType) {
@@ -263,6 +408,7 @@ Page({
     const label = documentType === 'SALES_ORDER' ? '销售单' : '送货单';
     const { request } = require('../../utils/request');
     try {
+      wx.showLoading({ title: '加载模板中...' });
       const templates = await request({
         url: `/document-templates?type=${documentType}`
       });
@@ -274,38 +420,278 @@ Page({
         });
         return;
       }
-      wx.showActionSheet({
-        alertText: `选择${label}模板`,
-        itemList: templates.map(item => item.name),
-        success: async result => {
-          const template = templates[result.tapIndex];
-          await this.generateBusinessDocument(documentType, template);
-        }
-      });
+      this.setData({
+        showDocumentEditor: true,
+        documentEditorType: documentType,
+        documentEditorLabel: label,
+        documentTemplates: templates,
+        documentTemplateIndex: -1,
+        documentTitle: label,
+        documentCompanyName: this.currentCompanyName(),
+        documentCounterpartyName: '',
+        documentContractNo: '',
+        documentDate: this.todayText(),
+        documentColumns: [],
+        documentRows: [],
+        documentBlankRows: documentType === 'SALES_ORDER' ? 8 : 10,
+        documentTotalAmount: '0',
+        documentEditorReady: false,
+        documentEditorSubmitting: false
+      }, () => this.applyDocumentTemplate(0));
     } catch (error) {
       wx.showToast({ title: error.message || '模板加载失败', icon: 'none' });
+    } finally {
+      wx.hideLoading();
     }
   },
 
-  async generateBusinessDocument(documentType, template) {
+  onDocumentTemplateChange(e) {
+    const index = Number(e.detail.value);
+    if (!Number.isInteger(index) || index < 0) return;
+    this.applyDocumentTemplate(index);
+  },
+
+  applyDocumentTemplate(index) {
+    const template = this.data.documentTemplates[index];
+    if (!template) return;
+    try {
+      const templateContent = JSON.parse(template.content || '{}');
+      const columns = Array.isArray(templateContent.columns)
+        ? templateContent.columns.map(item => String(item || '').trim()).filter(Boolean)
+        : [];
+      if (columns.length === 0) {
+        wx.showToast({ title: '模板内容为空', icon: 'none' });
+        return;
+      }
+      const contract = this.data.contract || {};
+      const rows = this.buildDocumentRows(columns);
+      const totalAmount = this.calculateDocumentTotal(
+        columns,
+        rows,
+        contract.amount || 0
+      );
+      this.setData({
+        documentTemplateIndex: index,
+        documentTitle: this.data.documentEditorLabel,
+        documentCompanyName: this.currentCompanyName(),
+        documentCounterpartyName: contract.viewerCounterpartyName
+          || this.data.counterpartyName
+          || contract.counterpartyName
+          || '',
+        documentContractNo: contract.contractNo || String(contract.id || this.data.contractId || ''),
+        documentDate: this.todayText(),
+        documentColumns: columns,
+        documentRows: rows,
+        documentBlankRows: Math.max(
+          rows.length,
+          Number(templateContent.blankRows) || (this.data.documentEditorType === 'SALES_ORDER' ? 8 : 10)
+        ),
+        documentTotalAmount: totalAmount,
+        documentEditorReady: true
+      });
+    } catch (error) {
+      wx.showToast({ title: '模板格式异常', icon: 'none' });
+    }
+  },
+
+  todayText() {
+    const now = new Date();
+    const pad = value => String(value).padStart(2, '0');
+    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  },
+
+  buildDocumentRows(columns) {
+    const sections = (this.data.sData && this.data.sData.sections) || [];
+    const table = sections.find(item => item && item.type === 'table') || {};
+    const sourceColumns = Array.isArray(table.columns) ? table.columns : [];
+    const sourceRows = (Array.isArray(table.rows) ? table.rows : []).filter(row =>
+      Array.isArray(row) && row.some(value => {
+        const text = String(value == null ? '' : value).trim();
+        return text && text !== '0' && text !== '0.00';
+      })
+    );
+    const rows = sourceRows.map((row, rowIndex) => columns.map(column =>
+      this.valueForDocumentColumn(column, rowIndex, sourceColumns, row)
+    ));
+    return rows.length > 0 ? rows : [columns.map(column =>
+      String(column).includes('序号') ? '1' : ''
+    )];
+  },
+
+  valueForDocumentColumn(targetColumn, rowIndex, sourceColumns, sourceRow) {
+    const target = String(targetColumn || '').trim();
+    if (target.includes('序号')) return String(rowIndex + 1);
+    let aliases = [target];
+    if (target.includes('品名') || target === '名称' || target.includes('产品')) {
+      aliases = ['品名', '名称', '产品'];
+    } else if (target.includes('规格')) {
+      aliases = ['规格', '型号'];
+    } else if (target.includes('单位')) {
+      aliases = ['单位'];
+    } else if (target.includes('数量')) {
+      aliases = ['数量'];
+    } else if (target.includes('单价')) {
+      aliases = ['单价'];
+    } else if (target.includes('金额')) {
+      aliases = ['金额'];
+    } else if (target.includes('备注')) {
+      aliases = ['备注'];
+    }
+    const sourceIndex = sourceColumns.findIndex(column =>
+      aliases.some(alias => String(column || '').includes(alias))
+    );
+    return sourceIndex >= 0 && sourceIndex < sourceRow.length
+      ? String(sourceRow[sourceIndex] == null ? '' : sourceRow[sourceIndex])
+      : '';
+  },
+
+  onDocumentFieldInput(e) {
+    const field = e.currentTarget.dataset.field;
+    const editableFields = [
+      'documentTitle', 'documentCompanyName', 'documentCounterpartyName',
+      'documentContractNo', 'documentTotalAmount'
+    ];
+    if (!editableFields.includes(field)) return;
+    this.setData({ [field]: e.detail.value });
+  },
+
+  onDocumentDateChange(e) {
+    this.setData({ documentDate: e.detail.value });
+  },
+
+  onDocumentCellInput(e) {
+    const rowIndex = Number(e.currentTarget.dataset.row);
+    const columnIndex = Number(e.currentTarget.dataset.col);
+    const rows = this.data.documentRows.map(row => row.slice());
+    if (!rows[rowIndex] || columnIndex < 0) return;
+    rows[rowIndex][columnIndex] = e.detail.value;
+
+    const columns = this.data.documentColumns;
+    const quantityIndex = columns.findIndex(column => String(column).includes('数量'));
+    const priceIndex = columns.findIndex(column => String(column).includes('单价'));
+    const amountIndex = columns.findIndex(column => String(column).includes('金额'));
+    const changesCalculatedAmount = (columnIndex === quantityIndex || columnIndex === priceIndex)
+      && quantityIndex >= 0 && priceIndex >= 0 && amountIndex >= 0;
+    if (changesCalculatedAmount) {
+      const amount = (parseFloat(rows[rowIndex][quantityIndex]) || 0)
+        * (parseFloat(rows[rowIndex][priceIndex]) || 0);
+      rows[rowIndex][amountIndex] = this.formatDocumentAmount(amount);
+    }
+    const shouldRecalculateTotal = changesCalculatedAmount || columnIndex === amountIndex;
+    this.setData({
+      documentRows: rows,
+      documentTotalAmount: shouldRecalculateTotal
+        ? this.calculateDocumentTotal(columns, rows, 0)
+        : this.data.documentTotalAmount
+    });
+  },
+
+  addDocumentRow() {
+    const columns = this.data.documentColumns;
+    if (columns.length === 0) return;
+    const rows = this.data.documentRows.map(row => row.slice());
+    rows.push(columns.map(column => String(column).includes('序号') ? String(rows.length + 1) : ''));
+    this.setData({
+      documentRows: rows,
+      documentBlankRows: Math.max(this.data.documentBlankRows, rows.length)
+    });
+  },
+
+  deleteDocumentRow(e) {
+    if (this.data.documentRows.length <= 1) return;
+    const index = Number(e.currentTarget.dataset.index);
+    const sequenceIndex = this.data.documentColumns.findIndex(column => String(column).includes('序号'));
+    const rows = this.data.documentRows
+      .filter((_, rowIndex) => rowIndex !== index)
+      .map((row, rowIndex) => {
+        const next = row.slice();
+        if (sequenceIndex >= 0) next[sequenceIndex] = String(rowIndex + 1);
+        return next;
+      });
+    this.setData({
+      documentRows: rows,
+      documentTotalAmount: this.calculateDocumentTotal(
+        this.data.documentColumns,
+        rows,
+        0
+      )
+    });
+  },
+
+  calculateDocumentTotal(columns, rows, fallback) {
+    const amountIndex = (columns || []).findIndex(column => String(column).includes('金额'));
+    if (amountIndex < 0) return this.formatDocumentAmount(fallback);
+    const values = (rows || []).map(row => String(row[amountIndex] == null ? '' : row[amountIndex]).trim());
+    if (!values.some(Boolean)) return this.formatDocumentAmount(fallback);
+    return this.formatDocumentAmount(values.reduce((sum, value) => sum + (parseFloat(value) || 0), 0));
+  },
+
+  formatDocumentAmount(value) {
+    const amount = Math.round((parseFloat(value) || 0) * 100) / 100;
+    return String(amount);
+  },
+
+  closeDocumentEditor() {
+    if (this.data.documentEditorSubmitting) return;
+    this.setData({ showDocumentEditor: false });
+  },
+
+  async submitBusinessDocument() {
+    const {
+      documentEditorType, documentEditorLabel, documentTemplates, documentTemplateIndex,
+      documentTitle, documentCompanyName, documentCounterpartyName, documentContractNo,
+      documentDate, documentColumns, documentRows, documentBlankRows,
+      documentTotalAmount
+    } = this.data;
+    if (documentTemplateIndex < 0 || !documentTemplates[documentTemplateIndex]) {
+      wx.showToast({ title: `请选择${documentEditorLabel}模板`, icon: 'none' });
+      return;
+    }
+    if (!documentTitle.trim()) {
+      wx.showToast({ title: '请输入单据标题', icon: 'none' });
+      return;
+    }
+    const confirmed = await new Promise(resolve => {
+      wx.showModal({
+        title: `确认创建${documentEditorLabel}`,
+        content: `模板：${documentTemplates[documentTemplateIndex].name}\n创建后可在列表中查看或下载 PDF`,
+        success: result => resolve(!!result.confirm),
+        fail: () => resolve(false)
+      });
+    });
+    if (!confirmed) return;
+
     const { request } = require('../../utils/request');
     try {
-      wx.showLoading({ title: '生成PDF中...' });
-      const document = await request({
+      this.setData({ documentEditorSubmitting: true });
+      wx.showLoading({ title: '创建中...' });
+      await request({
         url: `/contracts/${this.data.contractId}/documents`,
         method: 'POST',
         data: {
-          documentType,
-          templateId: template.id
+          documentType: documentEditorType,
+          templateId: documentTemplates[documentTemplateIndex].id,
+          content: {
+            title: documentTitle.trim(),
+            companyName: documentCompanyName.trim(),
+            counterpartyName: documentCounterpartyName.trim(),
+            contractNo: documentContractNo.trim(),
+            date: documentDate,
+            columns: documentColumns,
+            rows: documentRows,
+            blankRows: documentBlankRows,
+            totalAmount: documentTotalAmount
+          }
         }
       });
-      await this.loadBusinessDocuments(documentType);
-      wx.showToast({ title: 'PDF已生成', icon: 'success' });
-      this.downloadBusinessDocumentFile(document, false);
+      await this.loadBusinessDocuments(documentEditorType);
+      this.setData({ showDocumentEditor: false });
+      wx.showToast({ title: `${documentEditorLabel}已创建`, icon: 'success' });
     } catch (error) {
       wx.showToast({ title: error.message || '单据生成失败', icon: 'none' });
     } finally {
       wx.hideLoading();
+      this.setData({ documentEditorSubmitting: false });
     }
   },
 
@@ -360,63 +746,9 @@ Page({
   /* 列表项点击 → 显示详情面板 */
   onItemTap(e) {
     const { type, item } = e.currentTarget.dataset;
-    if (type === '销售单') {
-      this.showSalesDetail(item);
-    } else if (type === '物流单') {
-      this.showLogisticsDetail(item);
-    } else if (type === '发票') {
+    if (type === '发票') {
       this.showInvoiceDetail(item);
     }
-  },
-
-  showSalesDetail(o) {
-    this.setData({
-      showDetail: true,
-      detailTitle: '销售单详情',
-      detailFields: [
-        { label: '订单编号', value: o.orderNo },
-        { label: '订单状态', value: o.status, highlight: true },
-        { label: '交易方向', value: o.direction === '采购' ? '采购订单' : '销售订单' },
-        { label: '商品名称', value: o.product },
-        { label: '数量', value: `${o.qty} 件` },
-        { label: '订单金额', value: `¥${o.amount}`, amount: true },
-        { label: '对方公司', value: this.data.counterpartyName },
-        { label: '订单日期', value: o.date }
-      ]
-    });
-  },
-
-  showLogisticsDetail(l) {
-    const steps = [];
-    if (l.status === '已签收') {
-      steps.push(
-        { title: '已揽收', time: l.date, done: true },
-        { title: '运输中', time: l.date, done: true },
-        { title: '已签收', time: l.date, done: true }
-      );
-    } else {
-      steps.push(
-        { title: '已揽收', time: l.date, done: true },
-        { title: '运输中', time: l.date, done: true, active: true },
-        { title: '派送中', time: '', done: false },
-        { title: '已签收', time: '', done: false }
-      );
-    }
-    this.setData({
-      showDetail: true,
-      detailTitle: '物流单详情',
-      detailSteps: steps,
-      detailFields: [
-        { label: '运单号', value: l.trackingNo },
-        { label: '承运商', value: l.carrier },
-        { label: '物流状态', value: l.status, highlight: true },
-        { label: '货物描述', value: l.desc || '--' },
-        { label: '重量', value: l.weight },
-        { label: '发货地', value: l.from || '--' },
-        { label: '目的地', value: l.to || '--' },
-        { label: '联系方式', value: l.contact || '--' }
-      ]
-    });
   },
 
   showInvoiceDetail(inv) {

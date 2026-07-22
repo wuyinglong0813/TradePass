@@ -5,7 +5,7 @@ const ROLE_META = {
   LEGAL: { label: '法人', description: '企业最高管理权限', tone: 'legal' },
   ADMIN: { label: '管理员', description: '成员与业务配置管理', tone: 'admin' },
   SALES: { label: '销售员', description: '销售合同与客户业务', tone: 'sales' },
-  PURCHASE: { label: '采购员', description: '采购合同与供应商业务', tone: 'purchase' },
+  PURCHASER: { label: '采购员', description: '采购合同与供应商业务', tone: 'purchase' },
   FINANCE: { label: '财务', description: '对账与财务数据查看', tone: 'finance' },
   GUEST: { label: '访客', description: '基础查看权限', tone: 'guest' }
 };
@@ -119,12 +119,12 @@ Page({
     try {
       const list = await request({ url: `/roles?companyId=${cid}` });
       this.setData({
-        approveRoles: (list || []).map(r => {
-          const meta = roleMeta(r.name, r.name);
+        approveRoles: (list || []).filter(r => r.code !== 'LEGAL').map(r => {
+          const meta = roleMeta(r.code, r.name);
           return {
             label: meta.label,
-            value: r.name,
-            code: r.name,
+            value: r.code,
+            code: r.code,
             description: meta.description,
             tone: meta.tone
           };

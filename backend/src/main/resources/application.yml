@@ -10,14 +10,21 @@ tradepass:
     enabled: ${TRADEPASS_DEV_ENABLED:false}
   demo-data:
     enabled: ${TRADEPASS_DEMO_DATA_ENABLED:false}
+  migration:
+    allow-destructive-v5: ${TRADEPASS_ALLOW_DESTRUCTIVE_V5:false}
   auth:
     session-hours: ${TRADEPASS_SESSION_HOURS:168}
   verification:
     auto-approve: ${TRADEPASS_VERIFICATION_AUTO_APPROVE:false}
+    callback-token: ${TRADEPASS_VERIFICATION_CALLBACK_TOKEN:}
 
 spring:
   application:
     name: tradepass
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 12MB
   datasource:
     url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:1118}/tradepass?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
     username: ${DB_USERNAME:tradepass}

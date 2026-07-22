@@ -18,7 +18,7 @@ Page({
       const contracts = (list || []).map(c => ({
         id: parseInt(c.id),
         name: c.name,
-        counterpartyName: c.counterpartyName,
+        counterpartyName: c.viewerCounterpartyName || c.counterpartyName,
         templateName: c.templateName || '',
         amount: c.amount || 0,
         startDate: c.startDate || '',

@@ -50,6 +50,8 @@ Page({
       const statusText = { PENDING: '待签署', ACTIVE: '履约中', COMPLETED: '已完成', REJECTED: '已拒绝' };
       const nextContracts = (list || []).map(item => ({
         ...item,
+        counterpartyName: item.viewerCounterpartyName || item.counterpartyName,
+        direction: item.viewerDirection || item.direction,
         id: parseInt(item.id),
         amount: Number(item.amount || 0),
         statusText: statusText[item.status] || item.status,

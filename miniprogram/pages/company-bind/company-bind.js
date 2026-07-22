@@ -16,11 +16,15 @@ Page({
     this.setData({ keyword: '', results: [], searched: false });
   },
 
-  // 调用第三方企业查询接口
+  // 查询平台内已入驻企业；接口只返回脱敏后的最小信息
   async doSearch() {
     const keyword = this.data.keyword.trim();
     if (!keyword) {
       wx.showToast({ title: '请输入企业名称（与营业执照上一致）', icon: 'none' });
+      return;
+    }
+    if (keyword.length < 2) {
+      wx.showToast({ title: '至少输入 2 个字符', icon: 'none' });
       return;
     }
     wx.showLoading({ title: '搜索中...' });
@@ -46,8 +50,10 @@ Page({
   confirmCompany() {
     const c = this.data.selectedCompany;
     if (!c) return;
-    wx.redirectTo({
-      url: `/pages/company-cert/company-cert?name=${encodeURIComponent(c.name)}&creditCode=${encodeURIComponent(c.creditCode)}&legalPersonName=${encodeURIComponent(c.legalPersonName)}`
+    wx.showModal({
+      title: '企业已入驻',
+      content: `请联系“${c.name}”的企业管理员，通过成员邀请加入。企业认领流程开放后也可在此提交认领申请。`,
+      showCancel: false
     });
   }
 });

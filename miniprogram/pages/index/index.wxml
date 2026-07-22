@@ -53,7 +53,7 @@
       <view class="guest-login-card">
         <view class="guest-login-icon">未</view>
         <view class="guest-login-copy"><view class="guest-login-title">当前未登录</view><view class="guest-login-desc">登录后查看你的企业、合同与待办</view></view>
-        <button class="guest-login-btn" bindtap="goLogin">登录/注册</button>
+        <button class="guest-login-button" bindtap="goLogin">登录/注册</button>
       </view>
 
       <view class="guest-section">
@@ -118,6 +118,32 @@
         </view>
       </view>
 
+      <view class="company-switch-mask" wx:if="{{showCompanySwitcher}}" bindtap="closeCompanySwitcher">
+        <view class="company-switch-sheet" catchtap="noop">
+          <view class="company-switch-head">
+            <view>
+              <view class="company-switch-title">切换企业</view>
+              <view class="company-switch-subtitle">选择你要进入的企业空间</view>
+            </view>
+            <view class="company-switch-close" bindtap="closeCompanySwitcher">×</view>
+          </view>
+          <scroll-view class="company-switch-list" scroll-y>
+            <view class="company-switch-option {{item.companyId === currentCompanyId ? 'active' : ''}} {{item.companyId === switchingCompanyId ? 'switching' : ''}}"
+              wx:for="{{companies}}" wx:key="companyId" data-company-id="{{item.companyId}}" bindtap="selectCompanyFromSwitcher">
+              <view class="company-option-avatar">{{item.companyName[0]}}</view>
+              <view class="company-option-main">
+                <view class="company-option-name">{{item.companyName}}</view>
+                <view class="company-option-role">{{item.roleText || '企业成员'}}</view>
+              </view>
+              <view class="company-option-current" wx:if="{{item.companyId === currentCompanyId}}">当前</view>
+              <view class="company-option-loading" wx:elif="{{item.companyId === switchingCompanyId}}">切换中</view>
+              <view class="company-option-arrow" wx:else>›</view>
+            </view>
+          </scroll-view>
+          <view class="company-switch-tip">切换后，首页数据和业务权限会同步更新</view>
+        </view>
+      </view>
+
       <view class="home-guide" wx:if="{{showHomeGuide}}">
         <view class="guide-top"><view><view class="guide-eyebrow">第一次使用</view><view class="guide-title">三步完成第一份可信合同</view></view><view class="guide-progress">1 / 3</view></view>
         <view class="guide-route">
@@ -160,7 +186,7 @@
             <view class="empty-title">{{role === 'supplier' ? '还没有客户企业' : '还没有供应商企业'}}</view>
             <view class="empty-desc">建立合作关系后，即可发起合同与对账</view>
           </view>
-          <view class="partner-row" wx:for="{{partnerCompanies}}" wx:key="id" data-name="{{item.counterpartyName}}" bindtap="openCounterparty">
+          <view class="partner-row" wx:for="{{partnerCompanies}}" wx:key="id" data-name="{{item.counterpartyName}}" data-company-id="{{item.counterpartyCompanyId}}" bindtap="openCounterparty">
             <view class="partner-avatar">{{item.initial}}</view>
             <view class="partner-main">
               <view class="partner-name-row"><view class="partner-name">{{item.counterpartyName}}</view><view class="status-pill">{{item.status === 'ACTIVE' ? '合作中' : item.status}}</view></view>

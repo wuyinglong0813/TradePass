@@ -13,6 +13,7 @@ public class RoleDef {
     private Long companyId;
     private String code;
     private String name;
+    private Boolean systemRole;
     private String permissions;
     private LocalDateTime createdAt;
 
@@ -24,6 +25,8 @@ public class RoleDef {
     public void setCode(String code) { this.code = code; }
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
+    public Boolean getSystemRole() { return systemRole; }
+    public void setSystemRole(Boolean systemRole) { this.systemRole = systemRole; }
     public String getPermissions() { return permissions; }
     public void setPermissions(String permissions) { this.permissions = permissions; }
     public LocalDateTime getCreatedAt() { return createdAt; }

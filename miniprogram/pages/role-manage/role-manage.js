@@ -37,8 +37,10 @@ Page({
 
   formatPerms(permissions) {
     if (!permissions) return '无';
-    let arr = [];
-    try { arr = JSON.parse(permissions); } catch (e) { arr = permissions.split(','); }
+    let arr = Array.isArray(permissions) ? permissions : [];
+    if (!Array.isArray(permissions)) {
+      try { arr = JSON.parse(permissions); } catch (e) { arr = String(permissions).split(','); }
+    }
     if (arr.length === 0) return '无';
     if (arr.includes('all')) return '全部权限';
     const defs = this._permDefs || [];
@@ -57,12 +59,13 @@ Page({
   },
 
   editRole(e) {
-    const { id, name, perms } = e.currentTarget.dataset;
-    let selected = [];
-    try { selected = JSON.parse(perms); } catch (e) { selected = (perms || '').split(',').map(s => s.trim()); }
+    const { id } = e.currentTarget.dataset;
+    const role = this.data.roles.find(item => String(item.id) === String(id));
+    if (!role || !role.editable) return;
+    const selected = role.permissions || [];
     const defs = this._permDefs || [];
     this.setData({
-      showModal: true, editRoleId: id, roleName: name,
+      showModal: true, editRoleId: id, roleName: role.name,
       allPerms: defs.map(p => ({ code: p.code, label: p.label, checked: selected.includes(p.code) }))
     });
   },

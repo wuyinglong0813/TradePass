@@ -129,14 +129,6 @@ Page({
   // 提交认证
   async submitAuth() {
     const { companyName, creditCode, legalPersonName, authMethod, phone, smsCode } = this.data;
-    if (!this.data.isDev) {
-      wx.showModal({
-        title: '认证服务尚未接入',
-        content: '生产环境不会模拟实名认证结果。请先配置实名或人脸认证服务商后再提交。',
-        showCancel: false
-      });
-      return;
-    }
     if (authMethod === 'phone' && (!phone || !smsCode)) {
       wx.showToast({ title: '请填写手机号和验证码', icon: 'none' });
       return;
@@ -163,24 +155,34 @@ Page({
         }
       });
 
-      // 3. 提交实名认证 + 人脸（根据选择的方式）
-      await request({
-        url: '/verifications/real-name',
-        method: 'POST',
-        data: { companyId: created.id }
-      });
-      if (authMethod === 'face') {
+      // 3. 开发环境执行模拟核验；生产环境由认证服务商审核回调给出最终结果
+      if (this.data.isDev) {
         await request({
-          url: '/verifications/face',
+          url: '/verifications/real-name',
           method: 'POST',
           data: { companyId: created.id }
         });
+        if (authMethod === 'face') {
+          await request({
+            url: '/verifications/face',
+            method: 'POST',
+            data: { companyId: created.id }
+          });
+        }
       }
 
-      // 4. 刷新全局状态
+      // 4. 创建持久化认证申请；开发环境可自动审核，生产环境等待回调
+      const application = await request({
+        url: `/companies/${created.id}/certifications`,
+        method: 'POST',
+        data: {}
+      });
+
+      // 5. 刷新全局状态
       await app.loadMe();
 
-      wx.showToast({ title: '认证已提交，绑定成功', icon: 'success' });
+      const approved = application.status === 'APPROVED';
+      wx.showToast({ title: approved ? '企业认证已完成' : '认证申请已提交', icon: 'success' });
       setTimeout(() => {
         wx.switchTab({ url: '/pages/company/company' });
       }, 1000);

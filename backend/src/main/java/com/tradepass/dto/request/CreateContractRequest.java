@@ -16,14 +16,9 @@ public record CreateContractRequest(
         String startDate,
         String endDate,
         String terms,
-        Long counterpartyCompanyId,
-        @Pattern(regexp = "SALE|PURCHASE", message = "交易方向只能是 SALE 或 PURCHASE") String direction,
+        @NotNull Long counterpartyCompanyId,
+        @NotBlank @Pattern(regexp = "SALE|PURCHASE", message = "交易方向只能是 SALE 或 PURCHASE") String direction,
         @Size(max = 64) String contractNo,
-        @Size(max = 64) String clientRequestId
+        @NotBlank @Size(max = 64) String clientRequestId
 ) {
-    public CreateContractRequest(String counterpartyName, String name, String templateName, BigDecimal amount,
-                                 String startDate, String endDate, String terms) {
-        this(counterpartyName, name, templateName, amount, startDate, endDate, terms,
-                null, null, null, null);
-    }
 }

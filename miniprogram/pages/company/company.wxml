@@ -8,7 +8,7 @@
           <view class="identity-name">企业工作空间</view>
           <view class="identity-code">登录后查看企业主体与认证信息</view>
         </view>
-        <view class="identity-arrow">›</view>
+        <button class="guest-login-button" catchtap="goPhoneLogin">登录/注册</button>
       </view>
       <view class="trust-row">
         <view class="trust-state"><view class="trust-dot">·</view>企业身份待登录后加载</view>
@@ -46,10 +46,6 @@
       </view>
     </view>
 
-    <view class="primary-action guest-login-action" bindtap="goPhoneLogin">
-      <view class="primary-action-label"><view class="action-plus">→</view>手机号快捷登录</view><view>登录 / 注册</view>
-    </view>
-
     <view class="guest-enterprise-guide">
       <view class="guide-title">三步建立企业工作空间</view>
       <view class="guest-guide-row"><view class="guest-guide-no">1</view><view><view class="guest-guide-name">登录并创建企业</view><view class="guest-guide-desc">录入企业主体信息，建立可信身份</view></view></view>
@@ -70,6 +66,13 @@
         <button class="primary-button" bindtap="goCreateCompany">创建企业</button>
         <view class="secondary-action" bindtap="openJoin">输入邀请码加入</view>
       </view>
+      <view class="brand-list" wx:if="{{certificationApplications.length > 0}}">
+        <view class="list-row" wx:for="{{certificationApplications}}" wx:key="id">
+          <view class="row-icon"><image src="/images/icons/company.svg" mode="aspectFit"/></view>
+          <view class="row-copy"><view class="row-title">{{item.companyName}}</view><view class="row-desc">{{item.reviewReason || '认证申请已提交，请等待审核结果'}}</view></view>
+          <view class="state-pill {{item.status === 'REJECTED' ? 'pending' : ''}}">{{item.statusText}}</view>
+        </view>
+      </view>
     </view>
 
     <block wx:else>
@@ -82,7 +85,7 @@
               <view class="identity-name">{{company.name}}</view>
               <view class="identity-code">统一社会信用代码 {{maskedCreditCode}}</view>
             </view>
-            <view class="identity-arrow">›</view>
+            <view class="identity-arrow">⌄</view>
           </view>
           <view class="trust-row">
             <view class="trust-state"><view class="trust-dot">{{certCompleted ? '✓' : '·'}}</view>{{certCompleted ? '已完成企业认证' : certBadge.text}}</view>
@@ -118,59 +121,49 @@
           <view class="section-link" wx:if="{{canManage}}" bindtap="goAuthManage">管理设置 ›</view>
         </view>
 
-        <view class="brand-list" wx:if="{{canManage}}">
-          <view class="list-row" bindtap="goCert">
+        <view class="brand-list">
+          <view class="list-row company-management-row" bindtap="switchCompany">
             <view class="row-icon"><image src="/images/icons/company.svg" mode="aspectFit"/></view>
-            <view class="row-copy"><view class="row-title">企业认证</view><view class="row-desc">主体信息、实名与电子签章</view></view>
-            <view class="state-pill {{certCompleted ? '' : 'pending'}}">{{certBadge.text}}</view><view class="row-arrow">›</view>
+            <view class="row-copy"><view class="row-title">我的企业</view><view class="row-desc">{{company.name}} · 共 {{companies.length}} 家企业</view></view>
+            <view class="state-pill">当前</view><view class="row-arrow">›</view>
           </view>
-          <view class="list-row" bindtap="goAuthManage">
-            <view class="row-icon"><image src="/images/icons/team.svg" mode="aspectFit"/></view>
-            <view class="row-copy"><view class="row-title">组织成员</view><view class="row-desc">成员审批、部门与邀请管理</view></view>
-            <view class="state-pill muted">{{memberCount}}</view><view class="row-arrow">›</view>
-          </view>
-          <view class="list-row" bindtap="goRoleManage">
-            <view class="row-icon"><image src="/images/icons/role.svg" mode="aspectFit"/></view>
-            <view class="row-copy"><view class="row-title">角色权限</view><view class="row-desc">角色配置与数据访问范围</view></view>
-            <view class="state-pill muted">{{roleCount}}</view><view class="row-arrow">›</view>
-          </view>
-          <view class="list-row" wx:if="{{canContractTemplate}}" bindtap="goContractTemplate">
-            <view class="row-icon"><image src="/images/icons/template.svg" mode="aspectFit"/></view>
-            <view class="row-copy"><view class="row-title">合同模板</view><view class="row-desc">标准合同与条款模板库</view></view>
-            <view class="state-pill muted">{{templateCount}}</view><view class="row-arrow">›</view>
-          </view>
-          <view class="list-row" wx:if="{{canContractTemplate}}" bindtap="goDocumentTemplate">
-            <view class="row-icon"><image src="/images/icons/contracts.svg" mode="aspectFit"/></view>
-            <view class="row-copy"><view class="row-title">销售与送货单模板</view><view class="row-desc">独立管理销售单、送货单 PDF 模板</view></view>
-            <view class="state-pill">单据</view><view class="row-arrow">›</view>
-          </view>
-          <view class="list-row" bindtap="goInventory">
-            <view class="row-icon"><image src="/images/icons/inventory.svg" mode="aspectFit"/></view>
-            <view class="row-copy"><view class="row-title">库存管理</view><view class="row-desc">库存概览、预警与补货提醒</view></view>
-            <view class="state-pill muted">正常</view><view class="row-arrow">›</view>
-          </view>
+          <block wx:if="{{canManage}}">
+            <view class="list-row" bindtap="goCert">
+              <view class="row-icon"><image src="/images/icons/company.svg" mode="aspectFit"/></view>
+              <view class="row-copy"><view class="row-title">企业认证</view><view class="row-desc">主体信息、实名与电子签章</view></view>
+              <view class="state-pill {{certCompleted ? '' : 'pending'}}">{{certBadge.text}}</view><view class="row-arrow">›</view>
+            </view>
+            <view class="list-row" bindtap="goAuthManage">
+              <view class="row-icon"><image src="/images/icons/team.svg" mode="aspectFit"/></view>
+              <view class="row-copy"><view class="row-title">组织成员</view><view class="row-desc">成员审批、部门与邀请管理</view></view>
+              <view class="state-pill muted">{{memberCount}}</view><view class="row-arrow">›</view>
+            </view>
+            <view class="list-row" bindtap="goRoleManage">
+              <view class="row-icon"><image src="/images/icons/role.svg" mode="aspectFit"/></view>
+              <view class="row-copy"><view class="row-title">角色权限</view><view class="row-desc">角色配置与数据访问范围</view></view>
+              <view class="state-pill muted">{{roleCount}}</view><view class="row-arrow">›</view>
+            </view>
+            <view class="list-row" wx:if="{{canContractTemplate}}" bindtap="goContractTemplate">
+              <view class="row-icon"><image src="/images/icons/template.svg" mode="aspectFit"/></view>
+              <view class="row-copy"><view class="row-title">合同模板</view><view class="row-desc">标准合同与条款模板库</view></view>
+              <view class="state-pill muted">{{templateCount}}</view><view class="row-arrow">›</view>
+            </view>
+            <view class="list-row" wx:if="{{canContractTemplate}}" bindtap="goDocumentTemplate">
+              <view class="row-icon"><image src="/images/icons/contracts.svg" mode="aspectFit"/></view>
+              <view class="row-copy"><view class="row-title">销售与送货单模板</view><view class="row-desc">独立管理销售单、送货单 PDF 模板</view></view>
+              <view class="state-pill">单据</view><view class="row-arrow">›</view>
+            </view>
+            <view class="list-row" bindtap="goInventory">
+              <view class="row-icon"><image src="/images/icons/inventory.svg" mode="aspectFit"/></view>
+              <view class="row-copy"><view class="row-title">库存管理</view><view class="row-desc">库存数据源尚未接入</view></view>
+              <view class="state-pill muted">未接入</view><view class="row-arrow">›</view>
+            </view>
+          </block>
         </view>
 
-        <view class="readonly-card" wx:else>
+        <view class="readonly-card management-readonly" wx:if="{{!canManage}}">
           <image src="/images/icons/role.svg" mode="aspectFit"/>
           <view><view class="row-title">当前为{{member.roleText}}</view><view class="row-desc">企业管理功能由法人或管理员操作</view></view>
-        </view>
-
-        <view class="primary-action" wx:if="{{canManage}}" bindtap="goAuthManage">
-          <view class="primary-action-label"><view class="action-plus">＋</view>邀请企业成员</view><view>↗</view>
-        </view>
-
-        <view class="section-head company-section-head">
-          <view><view class="section-title">我的企业</view><view class="section-sub">切换当前代表的企业主体</view></view>
-          <view class="section-link">共 {{companies.length}} 家</view>
-        </view>
-        <view class="brand-list company-list">
-          <view class="list-row company-row {{item.companyId === currentCompanyId ? 'current' : ''}}" wx:for="{{companies}}" wx:key="companyId" data-company-id="{{item.companyId}}" bindtap="switchCompanyFromRow">
-            <view class="company-avatar">{{item.initial}}</view>
-            <view class="row-copy"><view class="row-title">{{item.companyName}}</view><view class="row-desc">{{item.roleText}}{{item.companyId === currentCompanyId ? ' · 当前企业' : ''}}</view></view>
-            <view class="state-pill" wx:if="{{item.companyId === currentCompanyId}}">当前</view><view class="row-arrow">›</view>
-          </view>
-          <view class="company-actions"><view bindtap="goCreateCompany">＋ 创建新企业</view><view bindtap="openJoin">＋ 输入邀请码加入</view></view>
         </view>
 
         <view class="page-end">商签通 · 企业可信协作平台</view>
@@ -178,6 +171,35 @@
     </block>
   </block>
 
-  <view class="mask" wx:if="{{showInventoryModal}}" bindtap="closeInventoryModal"><view class="modal" catchtap="noop"><image src="/images/icons/inventory.svg" mode="aspectFit"/><view class="modal-title">库存情况</view><view class="modal-body">查看企业商品库存，支持库存预警与补货提醒。</view><button class="primary-button" bindtap="closeInventoryModal">我知道了</button></view></view>
+  <view class="enterprise-switch-mask" wx:if="{{showCompanySwitcher}}" bindtap="closeCompanySwitcher">
+    <view class="enterprise-switch-sheet" catchtap="noop">
+      <view class="enterprise-switch-head">
+        <view>
+          <view class="enterprise-switch-title">切换企业</view>
+          <view class="enterprise-switch-subtitle">选择你要进入的企业空间</view>
+        </view>
+        <view class="enterprise-switch-close" bindtap="closeCompanySwitcher">×</view>
+      </view>
+      <scroll-view class="enterprise-switch-list" scroll-y>
+        <view class="enterprise-switch-option {{item.companyId === currentCompanyId ? 'active' : ''}} {{item.companyId === switchingCompanyId ? 'switching' : ''}}"
+          wx:for="{{companies}}" wx:key="companyId" data-company-id="{{item.companyId}}" bindtap="selectCompanyFromSwitcher">
+          <view class="enterprise-option-avatar">{{item.initial}}</view>
+          <view class="enterprise-option-main">
+            <view class="enterprise-option-name">{{item.companyName}}</view>
+            <view class="enterprise-option-role">{{item.roleText || '企业成员'}}</view>
+          </view>
+          <view class="enterprise-option-current" wx:if="{{item.companyId === currentCompanyId}}">当前</view>
+          <view class="enterprise-option-loading" wx:elif="{{item.companyId === switchingCompanyId}}">切换中</view>
+          <view class="enterprise-option-arrow" wx:else>›</view>
+        </view>
+      </scroll-view>
+      <view class="enterprise-switch-actions">
+        <view bindtap="goCreateCompany">＋ 创建新企业</view>
+        <view bindtap="openJoin">＋ 输入邀请码加入</view>
+      </view>
+      <view class="enterprise-switch-tip">切换后，企业数据和业务权限会同步更新</view>
+    </view>
+  </view>
+  <view class="mask" wx:if="{{showInventoryModal}}" bindtap="closeInventoryModal"><view class="modal" catchtap="noop"><image src="/images/icons/inventory.svg" mode="aspectFit"/><view class="modal-title">库存数据未接入</view><view class="modal-body">当前不展示模拟库存或虚假的库存状态，待对接真实仓储数据后开放。</view><button class="primary-button" bindtap="closeInventoryModal">我知道了</button></view></view>
   <view class="mask" wx:if="{{showJoinModal}}" bindtap="closeJoin"><view class="sheet" catchtap="noop"><view class="sheet-title">加入企业</view><view class="sheet-desc">输入企业管理员提供的邀请码</view><input class="sheet-input" placeholder="请输入邀请码" value="{{joinCode}}" bindinput="onJoinInput"/><button class="primary-button" bindtap="submitJoin">提交申请</button></view></view>
 </view>

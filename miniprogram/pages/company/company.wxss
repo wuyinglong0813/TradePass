@@ -13,8 +13,6 @@ page { background: #f4f8fd; }
 .guest-enterprise-shell { min-height: 100vh; }
 .guest-identity-card { cursor: pointer; }
 .guest-metrics .metric-value { color: #a4b0be; }
-.guest-login-action { margin-top: 22rpx; }
-.guest-login-action > view:last-child { color: rgba(255,255,255,.72); font-size: 20rpx; }
 .guest-enterprise-guide {
   background: linear-gradient(145deg,#fff,#f6faff); border: 1rpx solid #dfeaf6; border-radius: 28rpx;
   box-shadow: 0 12rpx 34rpx rgba(22,49,85,.055); margin-top: 24rpx; padding: 27rpx;
@@ -101,6 +99,111 @@ page { background: #f4f8fd; }
 .company-actions { border-top: 1rpx dashed #dce7f2; color: #3498ff; display: grid; font-size: 23rpx; grid-template-columns: 1fr 1fr; text-align: center; }
 .company-actions view { padding: 23rpx 8rpx; }
 .company-actions view + view { border-left: 1rpx solid #e8eff6; }
+.management-readonly { margin-top: 14rpx; }
+
+.enterprise-switch-mask {
+  align-items: flex-end;
+  background: rgba(13,30,51,.52);
+  bottom: 0;
+  display: flex;
+  left: 0;
+  position: fixed;
+  right: 0;
+  top: 0;
+  z-index: 260;
+}
+
+.enterprise-switch-sheet {
+  animation: enterpriseSheetUp .24s ease-out;
+  background: #f6f9fd;
+  border-radius: 32rpx 32rpx 0 0;
+  box-shadow: 0 -16rpx 50rpx rgba(17,44,76,.16);
+  box-sizing: border-box;
+  max-height: 78vh;
+  padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
+  width: 100%;
+}
+
+@keyframes enterpriseSheetUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+.enterprise-switch-head {
+  align-items: center;
+  background: #fff;
+  border-bottom: 1rpx solid #e6edf5;
+  border-radius: 32rpx 32rpx 0 0;
+  display: flex;
+  justify-content: space-between;
+  padding: 30rpx 30rpx 25rpx;
+}
+
+.enterprise-switch-title { color: #17283c; font-size: 34rpx; font-weight: 700; }
+.enterprise-switch-subtitle { color: #8e9baa; font-size: 21rpx; margin-top: 6rpx; }
+.enterprise-switch-close { color: #8693a1; font-size: 44rpx; line-height: 1; padding: 10rpx; }
+.enterprise-switch-list { box-sizing: border-box; max-height: 48vh; padding: 18rpx 22rpx 4rpx; }
+
+.enterprise-switch-option {
+  align-items: center;
+  background: #fff;
+  border: 1rpx solid #e0e9f3;
+  border-radius: 21rpx;
+  box-shadow: 0 7rpx 22rpx rgba(27,65,105,.045);
+  display: flex;
+  margin-bottom: 14rpx;
+  min-height: 104rpx;
+  padding: 15rpx 18rpx;
+}
+
+.enterprise-switch-option.active {
+  background: linear-gradient(145deg,#f4f9ff,#eaf4ff);
+  border-color: #bcdafa;
+  box-shadow: 0 8rpx 24rpx rgba(36,120,223,.1);
+}
+
+.enterprise-switch-option.switching { opacity: .68; }
+.enterprise-option-avatar {
+  align-items: center;
+  background: linear-gradient(145deg,#5ab4ff,#2478df);
+  border-radius: 17rpx;
+  color: #fff;
+  display: flex;
+  flex-shrink: 0;
+  font-size: 26rpx;
+  font-weight: 700;
+  height: 68rpx;
+  justify-content: center;
+  width: 68rpx;
+}
+.enterprise-switch-option.active .enterprise-option-avatar { box-shadow: 0 8rpx 18rpx rgba(36,120,223,.2); }
+.enterprise-option-main { flex: 1; margin-left: 17rpx; min-width: 0; }
+.enterprise-option-name { color: #213247; font-size: 27rpx; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.enterprise-option-role { color: #8d9aa9; font-size: 20rpx; margin-top: 6rpx; }
+.enterprise-option-current {
+  background: #dfefff;
+  border-radius: 18rpx;
+  color: #2478df;
+  font-size: 20rpx;
+  font-weight: 600;
+  padding: 7rpx 14rpx;
+}
+.enterprise-option-loading { color: #2478df; font-size: 20rpx; }
+.enterprise-option-arrow { color: #9eabba; font-size: 34rpx; padding: 0 8rpx 0 15rpx; }
+.enterprise-switch-actions {
+  background: #fff;
+  border: 1rpx solid #e0e9f3;
+  border-radius: 19rpx;
+  color: #2478df;
+  display: grid;
+  font-size: 22rpx;
+  grid-template-columns: 1fr 1fr;
+  margin: 4rpx 22rpx 0;
+  text-align: center;
+}
+.enterprise-switch-actions view { padding: 21rpx 8rpx; }
+.enterprise-switch-actions view + view { border-left: 1rpx solid #e7eef6; }
+.enterprise-switch-tip { color: #98a4b1; font-size: 20rpx; padding: 14rpx 28rpx 0; text-align: center; }
 
 .no-company { min-height: 100vh; }
 .no-company-hero { align-items: center; background: linear-gradient(145deg,#45a8ff,#2478df); color: #fff; display: flex; flex-direction: column; padding: 90rpx 40rpx 120rpx; }

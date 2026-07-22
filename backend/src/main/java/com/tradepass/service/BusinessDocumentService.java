@@ -150,7 +150,8 @@ public class BusinessDocumentService {
         document.setDocumentNo(createDocumentNo(type));
         document.setTemplateId(template.getId());
         document.setTemplateName(template.getName());
-        document.setContent(createSnapshot(type, template, contract, company));
+        String snapshot = createSnapshot(type, template, contract, company);
+        document.setContent(applySnapshotEdits(snapshot, body.get("content")));
         document.setCreatedBy(AuthContext.userId());
         documentMapper.insert(document);
         auditLogService.log(companyId, "BUSINESS_DOCUMENT", document.getId(), "CREATE",
@@ -240,6 +241,100 @@ public class BusinessDocumentService {
         } catch (Exception exception) {
             throw new BusinessException("合同商品数据格式不正确，无法生成单据");
         }
+    }
+
+    private String applySnapshotEdits(String snapshot, Object content) {
+        if (content == null) {
+            return snapshot;
+        }
+        try {
+            JsonNode edits = content instanceof String text
+                    ? objectMapper.readTree(text)
+                    : objectMapper.valueToTree(content);
+            if (edits == null || !edits.isObject()) {
+                throw new IllegalArgumentException("content must be an object");
+            }
+
+            ObjectNode result = (ObjectNode) objectMapper.readTree(snapshot);
+            copyTextEdit(edits, result, "title", 80);
+            copyTextEdit(edits, result, "companyName", 200);
+            copyTextEdit(edits, result, "counterpartyName", 200);
+            copyTextEdit(edits, result, "contractNo", 100);
+            copyTextEdit(edits, result, "date", 30);
+            copyTextEdit(edits, result, "totalAmount", 50);
+
+            ArrayNode columns = readColumns(edits.has("columns")
+                    ? edits.path("columns") : result.path("columns"));
+            ArrayNode rows = readRows(edits.has("rows")
+                    ? edits.path("rows") : result.path("rows"), columns.size());
+            int blankRows = edits.has("blankRows")
+                    ? edits.path("blankRows").asInt(result.path("blankRows").asInt(10))
+                    : result.path("blankRows").asInt(10);
+            result.set("columns", columns);
+            result.set("rows", rows);
+            result.put("blankRows", Math.max(rows.size(), Math.min(50, Math.max(1, blankRows))));
+            return result.toString();
+        } catch (BusinessException exception) {
+            throw exception;
+        } catch (Exception exception) {
+            throw new BusinessException("单据内容格式不正确");
+        }
+    }
+
+    private void copyTextEdit(JsonNode source, ObjectNode target, String field, int maxLength) {
+        if (!source.has(field)) return;
+        JsonNode value = source.path(field);
+        if (!value.isValueNode()) {
+            throw new BusinessException("单据内容格式不正确");
+        }
+        String text = value.asText("");
+        if (text.length() > maxLength) {
+            throw new BusinessException("单据内容过长");
+        }
+        target.put(field, text);
+    }
+
+    private ArrayNode readColumns(JsonNode source) {
+        if (!source.isArray() || source.isEmpty() || source.size() > 12) {
+            throw new BusinessException("单据表格列格式不正确");
+        }
+        ArrayNode columns = objectMapper.createArrayNode();
+        for (JsonNode item : source) {
+            if (!item.isValueNode()) {
+                throw new BusinessException("单据表格列格式不正确");
+            }
+            String value = item.asText("");
+            if (value.isBlank() || value.length() > 40) {
+                throw new BusinessException("单据表格列格式不正确");
+            }
+            columns.add(value);
+        }
+        return columns;
+    }
+
+    private ArrayNode readRows(JsonNode source, int columnCount) {
+        if (!source.isArray() || source.size() > 100) {
+            throw new BusinessException("单据表格内容格式不正确");
+        }
+        ArrayNode rows = objectMapper.createArrayNode();
+        for (JsonNode sourceRow : source) {
+            if (!sourceRow.isArray()) {
+                throw new BusinessException("单据表格内容格式不正确");
+            }
+            ArrayNode row = rows.addArray();
+            for (int index = 0; index < columnCount; index++) {
+                JsonNode cell = index < sourceRow.size() ? sourceRow.get(index) : null;
+                if (cell != null && !cell.isValueNode()) {
+                    throw new BusinessException("单据表格内容格式不正确");
+                }
+                String value = cell == null ? "" : cell.asText("");
+                if (value.length() > 200) {
+                    throw new BusinessException("单据表格内容过长");
+                }
+                row.add(value);
+            }
+        }
+        return rows;
     }
 
     private ProductSource extractProducts(String terms) {

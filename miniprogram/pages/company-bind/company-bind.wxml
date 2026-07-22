@@ -11,7 +11,7 @@
   <view class="search-bar-wrap">
     <view class="search-bar">
       <image class="search-icon" src="/images/icons/search.svg" mode="aspectFit"/>
-      <input class="search-input" placeholder="请输入企业名称（与营业执照上一致）" value="{{keyword}}" bindinput="onKeywordInput" confirm-type="search" bindconfirm="doSearch" />
+      <input class="search-input" placeholder="请输入企业名称（与营业执照上一致）" maxlength="50" value="{{keyword}}" bindinput="onKeywordInput" confirm-type="search" bindconfirm="doSearch" />
       <view class="search-clear" wx:if="{{keyword}}" bindtap="clearKeyword">✕</view>
     </view>
     <button class="search-btn" bindtap="doSearch">搜索</button>
@@ -24,12 +24,12 @@
       <view class="empty-text">未找到相关企业</view>
       <view class="empty-hint">请尝试更换关键词搜索</view>
     </view>
-    <block wx:for="{{results}}" wx:key="creditCode">
+    <block wx:for="{{results}}" wx:key="id">
       <view class="result-card" data-index="{{index}}" bindtap="selectCompany">
         <view class="result-name">{{item.name}}</view>
         <view class="result-row">
-          <text class="result-label">法定代表人</text>
-          <text class="result-value">{{item.legalPersonName}}</text>
+          <text class="result-label">统一社会信用代码</text>
+          <text class="result-value">{{item.maskedCreditCode}}</text>
         </view>
         <view class="result-arrow">›</view>
       </view>
@@ -42,10 +42,14 @@
       <view class="confirm-label">已选择企业</view>
       <view class="confirm-name">{{selectedCompany.name}}</view>
       <view class="confirm-row">
-        <text class="confirm-key">法定代表人</text>
-        <text class="confirm-val">{{selectedCompany.legalPersonName}}</text>
+        <text class="confirm-key">统一社会信用代码</text>
+        <text class="confirm-val">{{selectedCompany.maskedCreditCode}}</text>
       </view>
-      <button class="confirm-btn" bindtap="confirmCompany">确认</button>
+      <view class="confirm-row">
+        <text class="confirm-key">平台状态</text>
+        <text class="confirm-val">{{selectedCompany.verified ? '已认证' : '已入驻'}}</text>
+      </view>
+      <button class="confirm-btn" bindtap="confirmCompany">如何加入</button>
     </view>
   </view>
 </view>

@@ -67,7 +67,7 @@ public class ContractPdfService {
             Font tableFont = new Font(baseFont, 8.5f, Font.NORMAL, Color.BLACK);
 
             document.addTitle(safe(content.title(), "购销合同"));
-            document.addSubject("购销合同 PDF");
+            document.addSubject(safe(content.title(), "购销合同") + " PDF");
             document.addCreator("TradePass");
             document.open();
 
@@ -295,7 +295,9 @@ public class ContractPdfService {
             if (root == null || !root.isObject()) {
                 return new ContractContent(title, fields, table, clauses);
             }
-            title = text(root.path("title"), title);
+            if (contract.name() == null || contract.name().isBlank()) {
+                title = text(root.path("title"), title);
+            }
             JsonNode fieldNodes = root.path("fields");
             if (fieldNodes.isArray()) {
                 for (JsonNode field : fieldNodes) {

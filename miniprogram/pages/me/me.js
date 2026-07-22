@@ -160,32 +160,6 @@ Page({
     wx.navigateTo({ url: '/pages/company-cert/company-cert' });
   },
 
-  openCompanySwitcher() {
-    const companies = this.data.companies || [];
-    if (companies.length === 0) {
-      this.goCompanyCenter();
-      return;
-    }
-    if (companies.length === 1) {
-      this.goCompanyCenter();
-      return;
-    }
-    wx.showActionSheet({
-      itemList: companies.map(item => `${item.companyName} · ${item.roleText}`),
-      success: async ({ tapIndex }) => {
-        const target = companies[tapIndex];
-        if (!target || target.companyId === this.data.currentCompanyId) return;
-        try {
-          await app.switchCompany(target.companyId);
-          wx.showToast({ title: '企业已切换', icon: 'success' });
-          await this.loadMe();
-        } catch (error) {
-          wx.showToast({ title: '切换失败', icon: 'none' });
-        }
-      }
-    });
-  },
-
   // ---- Dev ----
   async loadDevUsers() {
     try {

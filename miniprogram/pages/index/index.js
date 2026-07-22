@@ -28,6 +28,9 @@ Page({
     showHomeGuide: false,
     joinCompanyId: '',
     companies: [],
+    currentCompanyId: '',
+    showCompanySwitcher: false,
+    switchingCompanyId: '',
     isLegalPerson: false,
     counterpartyInviteCode: '',
     counterpartyEmptyBtn: '',
@@ -62,6 +65,7 @@ Page({
     this.setData({
       isLoggedIn: loggedIn,
       companies: app.globalData.companies || [],
+      currentCompanyId: String(app.getCurrentCompanyId() || ''),
       userName: (user && user.nickname) || ''
     });
     if (!loggedIn) return;
@@ -133,26 +137,40 @@ Page({
   switchCompany() {
     const companies = this.data.companies;
     if (companies.length <= 1) return;
-    const items = companies.map(c => c.companyName);
-    wx.showActionSheet({
-      itemList: items,
-      success: async (res) => {
-        const company = companies[res.tapIndex];
-        try {
-          const meData = await app.switchCompany(company.companyId);
-          this.setData({
-            companyDisplayName: (meData.company && meData.company.name) || company.companyName,
-            companies: meData.companies || [],
-            role: meData.member && meData.member.roleCode === 'PURCHASER' ? 'buyer' : 'supplier'
-          });
-          this.initRoleFromMember();
-          this.loadHome();
-          this.loadCounterparties();
-        } catch (e) {
-          wx.showToast({ title: '切换失败', icon: 'none' });
-        }
-      }
-    });
+    this.setData({ showCompanySwitcher: true, switchingCompanyId: '' });
+  },
+
+  closeCompanySwitcher() {
+    if (this.data.switchingCompanyId) return;
+    this.setData({ showCompanySwitcher: false });
+  },
+
+  async selectCompanyFromSwitcher(e) {
+    const companyId = String(e.currentTarget.dataset.companyId || '');
+    const company = this.data.companies.find(item => String(item.companyId) === companyId);
+    if (!company || this.data.switchingCompanyId) return;
+    if (companyId === String(this.data.currentCompanyId)) {
+      this.setData({ showCompanySwitcher: false });
+      return;
+    }
+    try {
+      this.setData({ switchingCompanyId: companyId });
+      const meData = await app.switchCompany(company.companyId);
+      this.setData({
+        companyDisplayName: (meData.company && meData.company.name) || company.companyName,
+        companies: meData.companies || [],
+        currentCompanyId: companyId,
+        role: meData.member && meData.member.roleCode === 'PURCHASER' ? 'buyer' : 'supplier',
+        showCompanySwitcher: false,
+        switchingCompanyId: ''
+      });
+      this.initRoleFromMember();
+      await Promise.all([this.loadHome(), this.loadCounterparties()]);
+      wx.showToast({ title: '企业已切换', icon: 'success' });
+    } catch (e) {
+      this.setData({ switchingCompanyId: '' });
+      wx.showToast({ title: '切换失败', icon: 'none' });
+    }
   },
 
   /* 角色切换（Tab 点击）*/
@@ -269,19 +287,19 @@ Page({
   },
 
   refreshPartnerCompanies() {
-    const role = this.data.role;
     const ranking = this.data.ranking || [];
     const relations = this.data.relationCounterparties || [];
-    const source = role === 'supplier' ? relations.concat(ranking) : ranking.concat(relations);
     const seen = new Set();
     const partnerCompanies = [];
-    source.forEach((item, index) => {
+    relations.forEach(item => {
       const name = item.counterpartyName;
-      if (!name || seen.has(name)) return;
-      seen.add(name);
+      const counterpartyCompanyId = item.counterpartyCompanyId;
+      if (!name || !counterpartyCompanyId || seen.has(String(counterpartyCompanyId))) return;
+      seen.add(String(counterpartyCompanyId));
       const rankItem = ranking.find(rank => rank.counterpartyName === name) || {};
       partnerCompanies.push({
-        id: item.id || `${role}-${index}`,
+        id: item.id,
+        counterpartyCompanyId,
         counterpartyName: name,
         initial: name.substring(0, 1),
         status: item.status || 'ACTIVE',
@@ -289,7 +307,10 @@ Page({
         amount: rankItem.amount || 0
       });
     });
-    this.setData({ partnerCompanies });
+    this.setData({
+      partnerCompanies,
+      'stats.counterpartyCount': partnerCompanies.length
+    });
   },
 
   goLogin() {
@@ -306,8 +327,11 @@ Page({
   openCounterparty(e) {
     if (!this.requireLogin()) return;
     const name = e.currentTarget.dataset.name;
+    const requestedCompanyId = e.currentTarget.dataset.companyId || '';
+    const matched = (this.data.partnerCompanies || []).find(item => item.counterpartyName === name);
+    const counterpartyCompanyId = requestedCompanyId || (matched && matched.counterpartyCompanyId) || '';
     wx.navigateTo({
-      url: `/pages/order-detail/order-detail?counterpartyName=${encodeURIComponent(name)}&role=${this.data.role}`
+      url: `/pages/order-detail/order-detail?counterpartyName=${encodeURIComponent(name)}&counterpartyCompanyId=${encodeURIComponent(counterpartyCompanyId)}&role=${this.data.role}`
     });
   },
 

@@ -7,6 +7,7 @@ import com.tradepass.common.BusinessException;
 import com.tradepass.entity.CompanyMember;
 import com.tradepass.entity.RoleDef;
 import com.tradepass.mapper.CompanyMemberMapper;
+import com.tradepass.mapper.CounterpartyRelationMapper;
 import com.tradepass.mapper.RoleDefMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -21,14 +22,16 @@ import static org.mockito.Mockito.when;
 
 class AccessControlServiceTest {
     private CompanyMemberMapper memberMapper;
+    private CounterpartyRelationMapper relationMapper;
     private RoleDefMapper roleMapper;
     private AccessControlService service;
 
     @BeforeEach
     void setUp() {
         memberMapper = mock(CompanyMemberMapper.class);
+        relationMapper = mock(CounterpartyRelationMapper.class);
         roleMapper = mock(RoleDefMapper.class);
-        service = new AccessControlService(memberMapper, roleMapper,
+        service = new AccessControlService(memberMapper, relationMapper, roleMapper,
                 new RolePermissionService(), new ObjectMapper());
         AuthContext.set(7L, 3L);
     }
@@ -109,6 +112,30 @@ class AccessControlServiceTest {
         assertThatCode(() -> service.requireLegal(3L)).doesNotThrowAnyException();
         assertThatThrownBy(() -> service.requireLegalOrClaim(3L)).hasMessage("无权执行企业认领认证");
         assertThatCode(() -> service.requireLegalOrClaim(3L)).doesNotThrowAnyException();
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void scopesCompanyProfilesToMembersAndActiveCounterparties() {
+        when(memberMapper.selectCount(any(Wrapper.class))).thenReturn(1L, 0L, 1L, 0L, 0L, 1L);
+        assertThat(service.requireCompanyProfileAccess(9L))
+                .isEqualTo(AccessControlService.CompanyProfileAccess.SENSITIVE_OWNER);
+        assertThat(service.requireCompanyProfileAccess(9L))
+                .isEqualTo(AccessControlService.CompanyProfileAccess.MEMBER);
+
+        when(relationMapper.countActiveBetween(3L, 9L)).thenReturn(1L);
+        assertThat(service.requireCompanyProfileAccess(9L))
+                .isEqualTo(AccessControlService.CompanyProfileAccess.COUNTERPARTY);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void rejectsUnrelatedCompanyProfileAccess() {
+        when(memberMapper.selectCount(any(Wrapper.class))).thenReturn(0L);
+
+        assertThatThrownBy(() -> service.requireCompanyProfileAccess(9L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("无权访问企业敏感资料");
     }
 
     private CompanyMember activeMember(String role, String customPermissions) {

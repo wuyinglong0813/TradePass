@@ -5,10 +5,10 @@
   </view>
 
   <block wx:for="{{roles}}" wx:key="id">
-    <view class="role-card card" bindtap="editRole" data-id="{{item.id}}" data-name="{{item.name}}" data-perms="{{item.permissions}}">
+    <view class="role-card card" bindtap="editRole" data-id="{{item.id}}">
       <view class="role-name">{{item.name}}</view>
       <view class="role-perms">{{item.permsDisplay || item.permissions}}</view>
-      <view class="arrow">›</view>
+      <view class="arrow">{{item.editable ? '›' : '系统角色'}}</view>
     </view>
   </block>
 

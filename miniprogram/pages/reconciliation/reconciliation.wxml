@@ -8,9 +8,9 @@
 
   <view class="overview-card">
     <view class="overview-item"><view class="overview-value">¥{{overview.totalSales}}</view><view class="overview-label">{{role === 'buyer' ? '采购总额' : '销售总额'}}</view></view>
-    <view class="overview-item"><view class="overview-value">¥{{overview.totalInvoiced}}</view><view class="overview-label">已开票额</view></view>
-    <view class="overview-item success"><view class="overview-value">¥{{overview.matched}}</view><view class="overview-label">已对平</view></view>
-    <view class="overview-item {{overview.unmatched > 0 ? 'warning' : ''}}"><view class="overview-value">¥{{overview.unmatched}}</view><view class="overview-label">待处理差异</view></view>
+    <view class="overview-item"><view class="overview-value">{{overview.totalInvoiced}}</view><view class="overview-label">已开票额·未接入</view></view>
+    <view class="overview-item"><view class="overview-value">{{overview.matched}}</view><view class="overview-label">已对平·未计算</view></view>
+    <view class="overview-item"><view class="overview-value">{{overview.unmatched}}</view><view class="overview-label">差异·未计算</view></view>
   </view>
 
   <view class="detail-card">
@@ -20,9 +20,9 @@
       <view class="item-body">
         <view><view class="meta-label">{{role === 'buyer' ? '采购金额' : '销售金额'}}</view><view class="meta-value">¥{{item.salesAmount}}</view></view>
         <view><view class="meta-label">发票号码</view><view class="meta-value">{{item.invoiceNo}}</view></view>
-        <view><view class="meta-label">开票金额</view><view class="meta-value">¥{{item.invoiceAmount}}</view></view>
+        <view><view class="meta-label">开票金额</view><view class="meta-value">{{item.invoiceAmount}}</view></view>
       </view>
-      <view class="difference" wx:if="{{item.diff > 0}}">差异 ¥{{item.diff}} · 待处理</view>
+      <view class="difference">发票数据未接入，不生成虚假差异</view>
     </view>
     <view class="page-end" wx:if="{{!loading && items.length === 0}}">暂无可对账订单</view>
   </view>

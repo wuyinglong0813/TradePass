@@ -66,7 +66,7 @@
   <!-- 销售单 / 物流单 / 送货单 / 发票浏览 -->
   <block wx:if="{{activeTab === 'sales'}}">
     <view class="document-bar">
-      <view><view class="document-title">销售单 PDF</view><view class="document-sub">按企业销售单模板生成</view></view>
+      <view><view class="document-title">销售单 PDF</view><view class="document-sub">选择模板并编辑本次单据内容</view></view>
       <button class="document-create" data-type="SALES_ORDER" bindtap="createBusinessDocument">＋ 创建销售单</button>
     </view>
     <view class="document-list" wx:if="{{salesDocuments.length > 0}}">
@@ -76,35 +76,36 @@
         <view class="document-actions"><view data-document="{{item}}" bindtap="viewBusinessDocument">查看</view><view data-document="{{item}}" bindtap="downloadBusinessDocument">下载</view></view>
       </view>
     </view>
-    <view class="list-section-title" wx:if="{{salesList.length > 0}}">关联销售订单</view>
-    <view class="list-empty compact" wx:if="{{salesList.length === 0 && salesDocuments.length === 0}}">
+    <view class="list-empty compact" wx:if="{{salesDocuments.length === 0}}">
       <view class="empty-icon">📦</view><view class="empty-text">暂无销售单</view>
-    </view>
-    <view class="list" wx:else>
-      <view class="order-card" wx:for="{{salesList}}" wx:key="id" data-type="销售单" data-item="{{item}}" bindtap="onItemTap">
-        <view class="oc-top"><view class="oc-no">{{item.orderNo}}</view><view class="oc-status {{item.status === '已确认' ? 'done' : 'pending'}}">{{item.status}}</view></view>
-        <view class="oc-body"><view class="oc-product">{{item.product}}</view><view class="oc-qty">×{{item.qty}}</view></view>
-        <view class="oc-bottom"><view class="oc-date">{{item.date}}</view><view class="oc-amount">¥{{item.amount}}</view></view>
-      </view>
+      <view class="empty-sub">点击上方按钮，为当前合同生成销售单</view>
     </view>
   </block>
 
   <block wx:if="{{activeTab === 'logistics'}}">
-    <view class="list-empty" wx:if="{{logisticsList.length === 0}}">
-      <view class="empty-icon">🚚</view><view class="empty-text">暂无物流单</view>
+    <view class="document-bar">
+      <view><view class="document-title">物流单图片</view><view class="document-sub">支持拍照或从相册选择，上传后按图片查看</view></view>
+      <button class="document-create" loading="{{logisticsUploading}}" disabled="{{logisticsUploading}}" bindtap="chooseLogisticsImage">＋ 上传物流单</button>
     </view>
-    <view class="list" wx:else>
-      <view class="order-card" wx:for="{{logisticsList}}" wx:key="id" data-type="物流单" data-item="{{item}}" bindtap="onItemTap">
-        <view class="oc-top"><view class="oc-no">{{item.trackingNo}}</view><view class="oc-status {{item.status === '已签收' ? 'done' : 'shipped'}}">{{item.status}}</view></view>
-        <view class="oc-body"><view class="oc-product">{{item.carrier}}</view><view class="oc-qty">{{item.weight}}</view></view>
-        <view class="oc-bottom"><view class="oc-date">{{item.date}}</view></view>
+    <view class="document-list" wx:if="{{logisticsList.length > 0}}">
+      <view class="document-card" wx:for="{{logisticsList}}" wx:key="id" data-document="{{item}}" bindtap="previewLogisticsImage">
+        <view class="document-badge logistics">图</view>
+        <view class="document-info"><view class="document-no">{{item.originalName}}</view><view class="document-meta">{{item.fileSizeText}} · {{item.dateText}}</view></view>
+        <view class="document-actions"><view>查看图片</view></view>
       </view>
+    </view>
+    <view class="list-empty compact" wx:if="{{!logisticsLoading && logisticsList.length === 0}}">
+      <view class="empty-icon">🖼️</view><view class="empty-text">暂无物流单图片</view>
+      <view class="empty-sub">点击上方按钮拍照或从相册上传</view>
+    </view>
+    <view class="list-empty compact" wx:if="{{logisticsLoading}}">
+      <view class="empty-text">物流单加载中...</view>
     </view>
   </block>
 
   <block wx:if="{{activeTab === 'delivery'}}">
     <view class="document-bar">
-      <view><view class="document-title">送货单 PDF</view><view class="document-sub">按企业送货单模板生成</view></view>
+      <view><view class="document-title">送货单 PDF</view><view class="document-sub">选择模板并编辑本次单据内容</view></view>
       <button class="document-create" data-type="DELIVERY_NOTE" bindtap="createBusinessDocument">＋ 创建送货单</button>
     </view>
     <view class="document-list" wx:if="{{deliveryDocuments.length > 0}}">
@@ -122,7 +123,8 @@
 
   <block wx:if="{{activeTab === 'invoice'}}">
     <view class="list-empty" wx:if="{{invoiceList.length === 0}}">
-      <view class="empty-icon">🧾</view><view class="empty-text">暂无发票</view>
+      <view class="empty-icon">🧾</view><view class="empty-text">发票数据源尚未接入</view>
+      <view class="empty-sub">当前不生成或展示模拟发票</view>
     </view>
     <view class="list" wx:else>
       <view class="order-card" wx:for="{{invoiceList}}" wx:key="id" data-type="发票" data-item="{{item}}" bindtap="onItemTap">
@@ -134,6 +136,109 @@
   </block>
 
   <view class="page-end" wx:if="{{activeTab !== 'detail'}}">— 已经到底了 —</view>
+
+  <!-- 销售单 / 送货单创建编辑器 -->
+  <view class="document-editor-page" wx:if="{{showDocumentEditor}}">
+    <view class="document-editor-header">
+      <view class="document-editor-close" bindtap="closeDocumentEditor">取消</view>
+      <view class="document-editor-title">创建{{documentEditorLabel}}</view>
+      <view class="document-editor-close placeholder">取消</view>
+    </view>
+
+    <scroll-view class="document-editor-body" scroll-y>
+      <view class="document-party-bar">
+        <view class="document-party-item">
+          <view class="document-party-avatar my">{{documentCompanyName[0]}}</view>
+          <view class="document-party-name">{{documentCompanyName}}</view>
+          <view class="document-party-tag">制单方</view>
+        </view>
+        <view class="document-party-vs"><image src="/images/logo.png" mode="aspectFit"/></view>
+        <view class="document-party-item">
+          <view class="document-party-avatar counterparty">{{documentCounterpartyName[0]}}</view>
+          <view class="document-party-name">{{documentCounterpartyName}}</view>
+          <view class="document-party-tag">往来单位</view>
+        </view>
+      </view>
+
+      <view class="document-edit-card">
+        <view class="document-form-label">{{documentEditorLabel}}模板</view>
+        <picker mode="selector" range="{{documentTemplates}}" range-key="name" value="{{documentTemplateIndex}}" bindchange="onDocumentTemplateChange">
+          <view class="document-template-picker {{documentTemplateIndex < 0 ? 'placeholder' : ''}}">
+            {{documentTemplates[documentTemplateIndex] ? documentTemplates[documentTemplateIndex].name : '请选择模板'}} ▾
+          </view>
+        </picker>
+      </view>
+
+      <block wx:if="{{documentEditorReady}}">
+        <view class="document-edit-card">
+          <view class="document-form-label">{{documentEditorLabel}}名称</view>
+          <input class="document-name-input" value="{{documentTitle}}" data-field="documentTitle" bindinput="onDocumentFieldInput" placeholder="请输入单据名称"/>
+        </view>
+
+        <view class="document-edit-card document-title-card">
+          <view class="document-preview-title">{{documentTitle || documentEditorLabel}}</view>
+          <view class="document-preview-no">单据编号：创建时自动生成</view>
+        </view>
+
+        <view class="document-edit-card">
+          <view class="document-edit-section-title">单据信息</view>
+          <view class="document-field-row">
+            <view class="document-field-label">制单企业</view>
+            <input class="document-field-input" value="{{documentCompanyName}}" data-field="documentCompanyName" bindinput="onDocumentFieldInput" placeholder="请输入制单企业"/>
+          </view>
+          <view class="document-field-row">
+            <view class="document-field-label">往来单位</view>
+            <input class="document-field-input" value="{{documentCounterpartyName}}" data-field="documentCounterpartyName" bindinput="onDocumentFieldInput" placeholder="请输入往来单位"/>
+          </view>
+          <view class="document-field-row">
+            <view class="document-field-label">关联合同</view>
+            <input class="document-field-input" value="{{documentContractNo}}" data-field="documentContractNo" bindinput="onDocumentFieldInput" placeholder="请输入合同编号"/>
+          </view>
+          <view class="document-field-row">
+            <view class="document-field-label">单据日期</view>
+            <picker class="document-field-picker" mode="date" value="{{documentDate}}" bindchange="onDocumentDateChange">
+              <view class="document-field-value">{{documentDate || '请选择日期'}}</view>
+            </picker>
+          </view>
+        </view>
+
+        <view class="document-edit-card">
+          <view class="document-edit-section-head">
+            <view><view class="document-edit-section-title">商品明细</view><view class="document-edit-hint">左右滑动可编辑全部列</view></view>
+          </view>
+          <scroll-view class="document-table-scroll" scroll-x enable-flex>
+            <view class="document-edit-table" style="width: {{documentColumns.length * 190 + 78}}rpx;">
+              <view class="document-edit-table-row header">
+                <view class="document-edit-cell" wx:for="{{documentColumns}}" wx:key="*this">{{item}}</view>
+                <view class="document-edit-cell action"></view>
+              </view>
+              <view class="document-edit-table-row" wx:for="{{documentRows}}" wx:for-item="row" wx:for-index="rowIndex" wx:key="rowIndex">
+                <view class="document-edit-cell" wx:for="{{documentColumns}}" wx:for-item="column" wx:for-index="columnIndex" wx:key="*this">
+                  <input class="document-cell-input" value="{{row[columnIndex]}}" data-row="{{rowIndex}}" data-col="{{columnIndex}}" bindinput="onDocumentCellInput"/>
+                </view>
+                <view class="document-edit-cell action"><view class="document-row-delete" data-index="{{rowIndex}}" bindtap="deleteDocumentRow">×</view></view>
+              </view>
+            </view>
+          </scroll-view>
+          <view class="document-row-add" bindtap="addDocumentRow">＋ 添加商品行</view>
+          <view class="document-total-field" wx:if="{{documentEditorType === 'SALES_ORDER'}}">
+            <view class="document-total-label">合计：</view>
+            <view class="document-total-value">¥{{documentTotalAmount}}</view>
+          </view>
+        </view>
+      </block>
+
+      <view class="document-editor-empty" wx:else>
+        <view class="document-editor-empty-icon">▤</view>
+        <view>请先选择一个{{documentEditorLabel}}模板</view>
+      </view>
+      <view class="document-editor-safe"></view>
+    </scroll-view>
+
+    <view class="document-editor-actions" wx:if="{{documentEditorReady}}">
+      <button class="document-editor-button submit" loading="{{documentEditorSubmitting}}" disabled="{{documentEditorSubmitting}}" bindtap="submitBusinessDocument">创建{{documentEditorLabel}}</button>
+    </view>
+  </view>
 
   <!-- 详情面板 -->
   <view class="mask" wx:if="{{showDetail}}" bindtap="closeDetail">

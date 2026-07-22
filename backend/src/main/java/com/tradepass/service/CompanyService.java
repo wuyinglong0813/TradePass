@@ -3,10 +3,12 @@ package com.tradepass.service;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.tradepass.common.AuthContext;
 import com.tradepass.common.BusinessException;
 import com.tradepass.common.TradePassDtos.AuthorizationRecord;
 import com.tradepass.common.TradePassDtos.CompanyProfile;
+import com.tradepass.common.TradePassDtos.CompanySearchSummary;
 import com.tradepass.common.TradePassDtos.SealRecord;
 import com.tradepass.dto.request.ApproveRequest;
 import com.tradepass.dto.request.CompanySubmitRequest;
@@ -18,6 +20,7 @@ import com.tradepass.dto.request.VerificationRequest;
 import com.tradepass.dto.response.InviteResult;
 import com.tradepass.dto.response.JoinResult;
 import com.tradepass.dto.response.PagePayload;
+import com.tradepass.dto.response.RolePayload;
 import com.tradepass.entity.Company;
 import com.tradepass.entity.CompanyInvite;
 import com.tradepass.entity.CompanyMember;
@@ -27,6 +30,7 @@ import com.tradepass.mapper.CompanyInviteMapper;
 import com.tradepass.mapper.CompanyMapper;
 import com.tradepass.mapper.CompanyMemberMapper;
 import com.tradepass.mapper.CounterpartyRelationMapper;
+import com.tradepass.mapper.PermDefMapper;
 import com.tradepass.mapper.RoleDefMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,6 +39,8 @@ import org.springframework.beans.factory.annotation.Value;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -44,8 +50,11 @@ public class CompanyService {
     private final CompanyInviteMapper companyInviteMapper;
     private final CounterpartyRelationMapper counterpartyRelationMapper;
     private final RoleDefMapper roleDefMapper;
+    private final PermDefMapper permDefMapper;
     private final AccessControlService accessControlService;
+    private final CompanySearchRateLimiter companySearchRateLimiter;
     private final RolePermissionService rolePermissionService;
+    private final AuditLogService auditLogService;
     private final boolean verificationAutoApprove;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -54,37 +63,54 @@ public class CompanyService {
                           CompanyInviteMapper companyInviteMapper,
                           CounterpartyRelationMapper counterpartyRelationMapper,
                           RoleDefMapper roleDefMapper,
+                          PermDefMapper permDefMapper,
                           AccessControlService accessControlService,
+                          CompanySearchRateLimiter companySearchRateLimiter,
                           RolePermissionService rolePermissionService,
+                          AuditLogService auditLogService,
                           @Value("${tradepass.verification.auto-approve:false}") boolean verificationAutoApprove) {
         this.companyMapper = companyMapper;
         this.companyMemberMapper = companyMemberMapper;
         this.companyInviteMapper = companyInviteMapper;
         this.counterpartyRelationMapper = counterpartyRelationMapper;
         this.roleDefMapper = roleDefMapper;
+        this.permDefMapper = permDefMapper;
         this.accessControlService = accessControlService;
+        this.companySearchRateLimiter = companySearchRateLimiter;
         this.rolePermissionService = rolePermissionService;
+        this.auditLogService = auditLogService;
         this.verificationAutoApprove = verificationAutoApprove;
     }
 
-    public List<CompanyProfile> searchCompanies(String keyword) {
+    public List<CompanySearchSummary> searchCompanies(String keyword) {
+        companySearchRateLimiter.check(AuthContext.userId());
         String kw = keyword.trim();
         if (kw.isEmpty()) {
             return List.of();
+        }
+        if (kw.length() < 2) {
+            throw new BusinessException("搜索关键词至少需要 2 个字符");
+        }
+        if (kw.length() > 50 || kw.contains("%") || kw.contains("_")) {
+            throw new BusinessException("搜索关键词格式不正确");
         }
         return companyMapper.selectList(new LambdaQueryWrapper<Company>()
                         .and(query -> query.like(Company::getName, kw).or().like(Company::getCreditCode, kw))
                         .orderByAsc(Company::getName)
                         .last("LIMIT 20"))
-                .stream().map(this::toCompanyProfile).toList();
+                .stream().map(this::toCompanySearchSummary).toList();
     }
 
     public CompanyProfile getCompany(String id) {
-        Company company = companyMapper.selectById(parseId(id));
+        long companyId = parseId(id);
+        Company company = companyMapper.selectById(companyId);
         if (company == null) {
             throw new BusinessException("企业不存在");
         }
-        return toCompanyProfile(company);
+        AccessControlService.CompanyProfileAccess access = accessControlService.requireCompanyProfileAccess(companyId);
+        return access == AccessControlService.CompanyProfileAccess.SENSITIVE_OWNER
+                ? toCompanyProfile(company)
+                : toRestrictedCompanyProfile(company);
     }
 
     @Transactional
@@ -99,7 +125,7 @@ public class CompanyService {
             company.setFaceStatus("NOT_STARTED");
             company.setSealStatus("NOT_UPLOADED");
         } else if (company.getCreatedBy() == null || company.getCreatedBy() != AuthContext.userId()) {
-            return toCompanyProfile(company);
+            throw new BusinessException("企业已入驻，请通过企业邀请或认领流程加入");
         }
         company.setName(request.name());
         company.setLegalPersonName(request.legalPersonName());
@@ -270,64 +296,136 @@ public class CompanyService {
     public AuthorizationRecord approveMember(String id, ApproveRequest req, String companyId) {
         long cid = parseId(companyId);
         accessControlService.requireManager(cid);
-        String perms = req.customPermissions() != null && !req.customPermissions().isEmpty()
-                ? toJson(req.customPermissions())
-                : null;
-        companyMemberMapper.update(new LambdaUpdateWrapper<CompanyMember>()
-                .eq(CompanyMember::getId, parseId(id))
+        long memberId = parseId(id);
+        CompanyMember target = companyMemberMapper.selectOne(new LambdaQueryWrapper<CompanyMember>()
+                .eq(CompanyMember::getId, memberId)
                 .eq(CompanyMember::getCompanyId, cid)
-                .set(CompanyMember::getRoleCode, req.roleCode())
+                .eq(CompanyMember::getStatus, "PENDING")
+                .last("LIMIT 1"));
+        if (target == null) {
+            throw new BusinessException("成员申请不存在或状态已变化");
+        }
+        RoleDef role = requireAssignableRole(cid, req.roleCode());
+        List<String> rolePermissions = parsePermissions(role.getPermissions());
+        List<String> customPermissions = req.customPermissions() == null ? List.of() : req.customPermissions();
+        validateGrantablePermissions(cid, rolePermissions);
+        if (!customPermissions.isEmpty()) {
+            validateGrantablePermissions(cid, customPermissions);
+        }
+        String perms = !customPermissions.isEmpty()
+                ? toJson(customPermissions)
+                : null;
+        int updated = companyMemberMapper.update(new LambdaUpdateWrapper<CompanyMember>()
+                .eq(CompanyMember::getId, memberId)
+                .eq(CompanyMember::getCompanyId, cid)
+                .eq(CompanyMember::getStatus, "PENDING")
+                .set(CompanyMember::getRoleCode, role.getCode())
                 .set(CompanyMember::getCustomPermissions, perms)
+                .set(CompanyMember::getIsLegalPerson, false)
+                .set(CompanyMember::getIsAdministrator, "ADMIN".equals(role.getCode()))
                 .set(CompanyMember::getStatus, "ACTIVE"));
-        return new AuthorizationRecord(id, companyId, "", "", req.roleCode(),
-                rolePermissionService.roleText(req.roleCode()), List.of(), "ACTIVE", "");
+        if (updated != 1) {
+            throw new BusinessException("成员申请状态已变化，请刷新后重试");
+        }
+        Set<String> effective = new LinkedHashSet<>(rolePermissions);
+        effective.addAll(customPermissions);
+        auditLogService.log(cid, "COMPANY_MEMBER", memberId, "APPROVE", "分配角色 " + role.getCode());
+        return new AuthorizationRecord(id, companyId, String.valueOf(target.getUserId()), "", role.getCode(),
+                role.getName(), List.copyOf(effective), "ACTIVE", "");
     }
 
     public void rejectMember(String id, String companyId) {
         long cid = parseId(companyId);
         accessControlService.requireManager(cid);
-        companyMemberMapper.delete(new LambdaQueryWrapper<CompanyMember>()
+        int deleted = companyMemberMapper.delete(new LambdaQueryWrapper<CompanyMember>()
                 .eq(CompanyMember::getId, parseId(id))
                 .eq(CompanyMember::getCompanyId, cid)
                 .eq(CompanyMember::getStatus, "PENDING"));
+        if (deleted != 1) {
+            throw new BusinessException("成员申请不存在或状态已变化");
+        }
+        auditLogService.log(cid, "COMPANY_MEMBER", id, "REJECT", "拒绝成员加入申请");
     }
 
     public void removeMember(String id, String companyId) {
         long cid = parseId(companyId);
         accessControlService.requireManager(cid);
-        companyMemberMapper.delete(new LambdaQueryWrapper<CompanyMember>()
-                .eq(CompanyMember::getId, parseId(id))
+        long memberId = parseId(id);
+        CompanyMember target = companyMemberMapper.selectOne(new LambdaQueryWrapper<CompanyMember>()
+                .eq(CompanyMember::getId, memberId)
                 .eq(CompanyMember::getCompanyId, cid)
-                .eq(CompanyMember::getIsLegalPerson, false));
+                .last("LIMIT 1"));
+        if (target == null) {
+            throw new BusinessException("成员不存在");
+        }
+        if (target.getUserId() == AuthContext.userId()) {
+            throw new BusinessException("不能移除当前登录成员");
+        }
+        if (Boolean.TRUE.equals(target.getIsLegalPerson()) || "LEGAL".equals(target.getRoleCode())) {
+            throw new BusinessException("法人只能通过法人变更流程移交");
+        }
+        if ("ADMIN".equals(target.getRoleCode()) && companyMemberMapper.selectCount(
+                new LambdaQueryWrapper<CompanyMember>()
+                        .eq(CompanyMember::getCompanyId, cid)
+                        .eq(CompanyMember::getRoleCode, "ADMIN")
+                        .eq(CompanyMember::getStatus, "ACTIVE")) <= 1) {
+            throw new BusinessException("企业至少需要保留一名管理员");
+        }
+        int deleted = companyMemberMapper.delete(new LambdaQueryWrapper<CompanyMember>()
+                .eq(CompanyMember::getId, memberId)
+                .eq(CompanyMember::getCompanyId, cid)
+                .eq(CompanyMember::getStatus, "ACTIVE"));
+        if (deleted != 1) {
+            throw new BusinessException("成员状态已变化，请刷新后重试");
+        }
+        auditLogService.log(cid, "COMPANY_MEMBER", memberId, "REMOVE", "移除企业成员");
     }
 
-    public List<Map<String, Object>> listRoles(String companyId) {
+    public List<RolePayload> listRoles(String companyId) {
         long cid = accessControlService.resolveCompanyId(companyId);
-        return roleDefMapper.selectMaps(new LambdaQueryWrapper<RoleDef>()
-                .select(RoleDef::getId, RoleDef::getName, RoleDef::getPermissions)
-                .eq(RoleDef::getCompanyId, cid)
-                .orderByAsc(RoleDef::getId));
+        accessControlService.requireManager(cid);
+        return roleDefMapper.selectList(new LambdaQueryWrapper<RoleDef>()
+                        .eq(RoleDef::getCompanyId, cid)
+                        .orderByDesc(RoleDef::getSystemRole)
+                        .orderByAsc(RoleDef::getId))
+                .stream().map(this::toRolePayload).toList();
     }
 
-    public Map<String, Object> createRole(RoleRequest req) {
+    public RolePayload createRole(RoleRequest req) {
         long companyId = parseId(req.companyId());
         accessControlService.requireManager(companyId);
+        validateGrantablePermissions(companyId, req.permissions());
         RoleDef role = new RoleDef();
         role.setCompanyId(companyId);
+        role.setCode("CUSTOM_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12).toUpperCase());
         role.setName(req.name());
+        role.setSystemRole(false);
         role.setPermissions(toJson(req.permissions()));
         roleDefMapper.insert(role);
-        return Map.of("id", role.getId(), "name", req.name(), "permissions", req.permissions());
+        auditLogService.log(companyId, "ROLE", role.getId(), "CREATE", "创建角色 " + role.getCode());
+        return toRolePayload(role);
     }
 
     public void updateRole(String id, RoleRequest req) {
         long companyId = parseId(req.companyId());
         accessControlService.requireManager(companyId);
-        roleDefMapper.update(new LambdaUpdateWrapper<RoleDef>()
-                .eq(RoleDef::getId, parseId(id))
+        RoleDef existing = roleDefMapper.selectById(parseId(id));
+        if (existing == null || existing.getCompanyId() != companyId) {
+            throw new BusinessException("角色不存在");
+        }
+        if (Boolean.TRUE.equals(existing.getSystemRole())) {
+            throw new BusinessException("系统角色不可编辑");
+        }
+        validateGrantablePermissions(companyId, req.permissions());
+        int updated = roleDefMapper.update(new LambdaUpdateWrapper<RoleDef>()
+                .eq(RoleDef::getId, existing.getId())
                 .eq(RoleDef::getCompanyId, companyId)
                 .set(RoleDef::getName, req.name())
                 .set(RoleDef::getPermissions, toJson(req.permissions())));
+        if (updated != 1) {
+            throw new BusinessException("角色状态已变化，请刷新后重试");
+        }
+        auditLogService.log(companyId, "ROLE", existing.getId(), "UPDATE", "更新角色 " + existing.getCode());
     }
 
     public void deleteRole(String id) {
@@ -336,7 +434,16 @@ public class CompanyService {
             return;
         }
         accessControlService.requireManager(role.getCompanyId());
+        if (Boolean.TRUE.equals(role.getSystemRole())) {
+            throw new BusinessException("系统角色不可删除");
+        }
+        if (companyMemberMapper.selectCount(new LambdaQueryWrapper<CompanyMember>()
+                .eq(CompanyMember::getCompanyId, role.getCompanyId())
+                .eq(CompanyMember::getRoleCode, role.getCode())) > 0) {
+            throw new BusinessException("角色仍有成员使用，请先迁移成员角色");
+        }
         roleDefMapper.deleteById(role.getId());
+        auditLogService.log(role.getCompanyId(), "ROLE", role.getId(), "DELETE", "删除角色 " + role.getCode());
     }
 
     private void saveInvite(long companyId, String code, String type, String relationRole) {
@@ -363,6 +470,43 @@ public class CompanyService {
                 company.getFaceStatus(), company.getSealStatus());
     }
 
+    private CompanySearchSummary toCompanySearchSummary(Company company) {
+        return new CompanySearchSummary(String.valueOf(company.getId()), company.getName(),
+                maskCreditCode(company.getCreditCode()), "VERIFIED".equals(company.getCertificationStatus()));
+    }
+
+    private CompanyProfile toRestrictedCompanyProfile(Company company) {
+        return new CompanyProfile(String.valueOf(company.getId()), company.getName(), company.getCreditCode(),
+                company.getLegalPersonName(), company.getRegisteredAddress(), maskPhone(company.getContactPhone()),
+                company.getBankName(), maskBankAccount(company.getBankAccount()), company.getCertificationStatus(),
+                null, null, company.getSealStatus());
+    }
+
+    private String maskCreditCode(String value) {
+        return maskMiddle(value, 4, 4);
+    }
+
+    private String maskPhone(String value) {
+        return maskMiddle(value, 3, 4);
+    }
+
+    private String maskBankAccount(String value) {
+        return maskMiddle(value, 0, 4);
+    }
+
+    private String maskMiddle(String value, int visiblePrefix, int visibleSuffix) {
+        if (value == null || value.isBlank()) {
+            return value;
+        }
+        int length = value.length();
+        if (length <= visiblePrefix + visibleSuffix) {
+            return "*".repeat(length);
+        }
+        return value.substring(0, visiblePrefix)
+                + "*".repeat(length - visiblePrefix - visibleSuffix)
+                + value.substring(length - visibleSuffix);
+    }
+
     private AuthorizationRecord toAuthorizationRecord(Map<String, Object> row, String companyId) {
         String roleCode = string(row.get("roleCode"));
         String name = string(row.get("nickname"));
@@ -370,9 +514,66 @@ public class CompanyService {
         String displayName = name != null && !name.isBlank() && !"新用户".equals(name)
                 ? name
                 : (phone != null && !phone.isBlank() ? "用户" + phone.substring(phone.length() - 4) : "微信用户");
+        String status = string(row.get("status"));
+        AccessControlService.EffectiveRole effective = "ACTIVE".equals(status)
+                ? accessControlService.effectiveRole(parseId(companyId), parseId(string(row.get("userId"))))
+                : new AccessControlService.EffectiveRole(roleCode, rolePermissionService.roleText(roleCode), List.of());
         return new AuthorizationRecord(String.valueOf(row.get("id")), companyId, String.valueOf(row.get("userId")),
-                displayName, roleCode, rolePermissionService.roleText(roleCode), List.of(), string(row.get("status")),
+                displayName, effective.code(), effective.name(), effective.permissions(), status,
                 phone != null ? phone : "");
+    }
+
+    private RoleDef requireAssignableRole(long companyId, String roleCode) {
+        if (roleCode == null || roleCode.isBlank() || "LEGAL".equals(roleCode)) {
+            throw new BusinessException("该角色不能通过成员审批分配");
+        }
+        RoleDef role = roleDefMapper.selectOne(new LambdaQueryWrapper<RoleDef>()
+                .eq(RoleDef::getCompanyId, companyId)
+                .eq(RoleDef::getCode, roleCode)
+                .last("LIMIT 1"));
+        if (role == null) {
+            throw new BusinessException("角色不存在或不属于当前企业");
+        }
+        return role;
+    }
+
+    private void validateGrantablePermissions(long companyId, List<String> permissions) {
+        if (permissions == null || permissions.isEmpty()) {
+            throw new BusinessException("角色至少需要一个权限");
+        }
+        Set<String> unique = new LinkedHashSet<>();
+        for (String permission : permissions) {
+            String code = permission == null ? "" : permission.trim();
+            if (code.isBlank() || "all".equals(code)) {
+                throw new BusinessException("不能配置保留权限 " + code);
+            }
+            if (!unique.add(code)) {
+                throw new BusinessException("权限配置存在重复项 " + code);
+            }
+            if (permDefMapper.selectById(code) == null) {
+                throw new BusinessException("未知权限 " + code);
+            }
+            if (!accessControlService.hasPermission(companyId, code)) {
+                throw new BusinessException("不能授予当前操作者不具备的权限 " + code);
+            }
+        }
+    }
+
+    private List<String> parsePermissions(String json) {
+        if (json == null || json.isBlank()) {
+            return List.of();
+        }
+        try {
+            return objectMapper.readValue(json, new TypeReference<>() { });
+        } catch (Exception e) {
+            throw new BusinessException("权限配置格式错误");
+        }
+    }
+
+    private RolePayload toRolePayload(RoleDef role) {
+        boolean systemRole = Boolean.TRUE.equals(role.getSystemRole());
+        return new RolePayload(String.valueOf(role.getId()), role.getCode(), role.getName(),
+                parsePermissions(role.getPermissions()), systemRole, !systemRole, !systemRole);
     }
 
     private void requireVerificationProvider() {

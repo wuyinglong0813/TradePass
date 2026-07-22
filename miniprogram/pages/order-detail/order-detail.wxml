@@ -81,7 +81,7 @@
     <view class="empty-state" wx:elif="{{filteredContracts.length === 0}}">
       <image src="/images/icons/contracts.svg" mode="aspectFit"/>
       <view class="empty-title">{{contracts.length === 0 ? '暂无双方合同' : '当前状态下暂无合同'}}</view>
-      <view class="empty-desc">{{contracts.length === 0 ? '点击上方签订合同，开启第一笔可信交易' : '切换其他状态查看合同'}}</view>
+      <view class="empty-desc">{{contracts.length === 0 ? (canSignContract ? '点击上方签订合同，开启第一笔可信交易' : '需先建立有效企业合作关系，才能发起合同') : '切换其他状态查看合同'}}</view>
     </view>
 
     <view

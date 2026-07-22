@@ -54,13 +54,13 @@ Page({
       const nextItems = (orders || []).map(order => ({
         id: order.id,
         counterpartyName: order.counterpartyName,
-        orderNo: `ORD-${String(order.id).padStart(6, '0')}`,
+        orderNo: order.orderNo || '—',
         salesAmount: Number(order.amount || 0).toFixed(2),
         invoiceNo: '发票数据未接入',
-        invoiceAmount: '0.00',
-        status: 'UNMATCHED',
-        statusText: '待获取发票',
-        diff: Number(order.amount || 0).toFixed(2)
+        invoiceAmount: '—',
+        status: 'SOURCE_PENDING',
+        statusText: '发票待接入',
+        diff: null
       }));
       const items = reset ? nextItems : this.data.items.concat(nextItems);
       const loadedTotal = items.reduce((sum, order) => sum + Number(order.salesAmount || 0), 0);
@@ -68,9 +68,9 @@ Page({
       this.setData({
         overview: reset ? {
           totalSales: total.toFixed(2),
-          totalInvoiced: '0.00',
-          matched: '0.00',
-          unmatched: total.toFixed(2)
+          totalInvoiced: '—',
+          matched: '—',
+          unmatched: '—'
         } : this.data.overview,
         items,
         page,

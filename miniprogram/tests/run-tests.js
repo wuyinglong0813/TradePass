@@ -1,6 +1,8 @@
 'use strict';
 
 const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
 const {
   numberToChineseCurrency,
   calcTableTotal,
@@ -87,6 +89,73 @@ test('login guard opens the phone quick-login page', () => {
   wx.navigateTo = options => { url = options.url; };
   loginGuard.methods.goLogin();
   assert.strictEqual(url, '/pages/login/login');
+});
+
+function loadPage(relativePath) {
+  let definition;
+  global.Page = value => { definition = value; };
+  const modulePath = require.resolve(relativePath);
+  delete require.cache[modulePath];
+  require(relativePath);
+  return definition;
+}
+
+test('logistics images get readable names and file sizes', () => {
+  const contractPreview = loadPage('../pages/contract-preview/contract-preview');
+  assert.match(
+    contractPreview.buildLogisticsFileName('wxfile://tmp/photo.PNG'),
+    /^物流单-\d{8}-\d{6}\.png$/
+  );
+  assert.strictEqual(contractPreview.formatFileSize(2048), '2.0KB');
+  assert.strictEqual(contractPreview.formatFileSize(2 * 1024 * 1024), '2.0MB');
+});
+
+test('business document editor maps contract products into the selected template', () => {
+  const contractPreview = loadPage('../pages/contract-preview/contract-preview');
+  const context = {
+    data: {
+      sData: {
+        sections: [{
+          type: 'table',
+          columns: ['产品名称', '规格型号', '单位', '数量', '单价(元)', '金额(元)'],
+          rows: [['商品A', 'A-1', '件', '2', '3.5', '7']]
+        }]
+      }
+    },
+    valueForDocumentColumn: contractPreview.valueForDocumentColumn
+  };
+  const columns = ['序号', '品名', '规格', '单位', '数量', '单价', '金额', '备注'];
+  const rows = contractPreview.buildDocumentRows.call(context, columns);
+
+  assert.deepStrictEqual(rows, [['1', '商品A', 'A-1', '件', '2', '3.5', '7', '']]);
+  assert.strictEqual(contractPreview.calculateDocumentTotal(columns, rows, 0), '7');
+});
+
+test('contract details and snapshots use the entered contract name', () => {
+  const signScript = fs.readFileSync(
+    path.join(__dirname, '..', 'pages', 'sign-contract', 'sign-contract.js'),
+    'utf8'
+  );
+  const previewScript = fs.readFileSync(
+    path.join(__dirname, '..', 'pages', 'contract-preview', 'contract-preview.js'),
+    'utf8'
+  );
+  assert.ok(signScript.includes('title: contractName.trim()'));
+  assert.ok(previewScript.includes(
+    "const pdfTitle = contract.name || (sData && sData.title) || this.data.contractName || '购销合同'"
+  ));
+});
+
+test('company search confirmation does not depend on sensitive company fields', () => {
+  const companyBind = loadPage('../pages/company-bind/company-bind');
+  let modal;
+  wx.showModal = options => { modal = options; };
+  companyBind.confirmCompany.call({
+    data: { selectedCompany: { id: '3', name: '测试企业', maskedCreditCode: '9113**********4567' } }
+  });
+  assert.strictEqual(modal.title, '企业已入驻');
+  assert.match(modal.content, /企业管理员/);
+  assert.strictEqual(modal.showCancel, false);
 });
 
 const app = {
@@ -211,6 +280,67 @@ test('app switchCompany sends target tenant header and updates global profile', 
   assert.strictEqual(captured.data.companyId, 9);
   assert.strictEqual(instance.globalData.currentCompanyId, '9');
   assert.strictEqual(result.member.roleCode, 'ADMIN');
+});
+
+test('contract sales tab only shows documents bound to the current contract', () => {
+  const pageDir = path.join(__dirname, '..', 'pages', 'contract-preview');
+  const script = fs.readFileSync(path.join(pageDir, 'contract-preview.js'), 'utf8');
+  const template = fs.readFileSync(path.join(pageDir, 'contract-preview.wxml'), 'utf8');
+
+  assert.ok(script.includes('/contracts/${this.data.contractId}/documents'));
+  assert.ok(!script.includes('/orders?counterpartyName'));
+  assert.ok(!script.includes('loadSalesOrders'));
+  assert.ok(!template.includes('关联销售订单'));
+  assert.ok(!template.includes('salesList'));
+});
+
+test('business documents require an editable template flow and do not auto-open after creation', () => {
+  const script = fs.readFileSync(
+    path.join(__dirname, '..', 'pages', 'contract-preview', 'contract-preview.js'),
+    'utf8'
+  );
+  assert.ok(script.includes('documentTemplateIndex: -1'));
+  assert.ok(script.includes('showDocumentEditor: true'));
+  assert.ok(script.includes('content: {'));
+  assert.ok(!script.includes('this.downloadBusinessDocumentFile(document, false)'));
+});
+
+test('home company switching uses the custom switcher instead of a native action sheet', () => {
+  const script = fs.readFileSync(path.join(__dirname, '..', 'pages', 'index', 'index.js'), 'utf8');
+  const template = fs.readFileSync(path.join(__dirname, '..', 'pages', 'index', 'index.wxml'), 'utf8');
+  assert.ok(script.includes('showCompanySwitcher: true'));
+  assert.ok(!script.includes('wx.showActionSheet'));
+  assert.ok(template.includes('company-switch-sheet'));
+});
+
+test('profile only displays the current company and cannot switch tenants', () => {
+  const script = fs.readFileSync(path.join(__dirname, '..', 'pages', 'me', 'me.js'), 'utf8');
+  const template = fs.readFileSync(path.join(__dirname, '..', 'pages', 'me', 'me.wxml'), 'utf8');
+  assert.ok(!script.includes('openCompanySwitcher'));
+  assert.ok(!template.includes('切换企业'));
+  assert.ok(!template.includes('bindtap="openCompanySwitcher"'));
+});
+
+test('enterprise management owns company switching and has no duplicate member invite action', () => {
+  const script = fs.readFileSync(path.join(__dirname, '..', 'pages', 'company', 'company.js'), 'utf8');
+  const template = fs.readFileSync(path.join(__dirname, '..', 'pages', 'company', 'company.wxml'), 'utf8');
+  assert.ok(script.includes('showCompanySwitcher: true'));
+  assert.ok(!script.includes('wx.showActionSheet'));
+  assert.ok(template.includes('enterprise-switch-sheet'));
+  assert.ok(template.indexOf('企业管理') < template.indexOf('我的企业'));
+  assert.ok(!template.includes('邀请企业成员'));
+  assert.ok(!template.includes('switchCompanyFromRow'));
+});
+
+test('home partner list is driven only by bound enterprise relations', () => {
+  const script = fs.readFileSync(path.join(__dirname, '..', 'pages', 'index', 'index.js'), 'utf8');
+  const detail = fs.readFileSync(path.join(__dirname, '..', 'pages', 'order-detail', 'order-detail.js'), 'utf8');
+
+  assert.ok(script.includes('relations.forEach(item =>'));
+  assert.ok(!script.includes('relations.concat(ranking)'));
+  assert.ok(!script.includes('ranking.concat(relations)'));
+  assert.ok(script.includes("if (!name || !counterpartyCompanyId"));
+  assert.ok(detail.includes("canSignContract: !!counterpartyCompanyId && hasPerm('contract_sign')"));
 });
 
 (async () => {

@@ -6,27 +6,41 @@ import com.tradepass.common.BusinessException;
 import com.tradepass.entity.CompanyMember;
 import com.tradepass.entity.RoleDef;
 import com.tradepass.mapper.CompanyMemberMapper;
+import com.tradepass.mapper.CounterpartyRelationMapper;
 import com.tradepass.mapper.RoleDefMapper;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 
 import java.util.HashSet;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
 @Service
 public class AccessControlService {
+    public record EffectiveRole(String code, String name, List<String> permissions) {
+    }
+    public enum CompanyProfileAccess {
+        SENSITIVE_OWNER,
+        MEMBER,
+        COUNTERPARTY
+    }
+
     private final CompanyMemberMapper companyMemberMapper;
+    private final CounterpartyRelationMapper counterpartyRelationMapper;
     private final RoleDefMapper roleDefMapper;
     private final RolePermissionService rolePermissionService;
     private final ObjectMapper objectMapper;
 
     public AccessControlService(CompanyMemberMapper companyMemberMapper,
+                                CounterpartyRelationMapper counterpartyRelationMapper,
                                 RoleDefMapper roleDefMapper,
                                 RolePermissionService rolePermissionService,
                                 ObjectMapper objectMapper) {
         this.companyMemberMapper = companyMemberMapper;
+        this.counterpartyRelationMapper = counterpartyRelationMapper;
         this.roleDefMapper = roleDefMapper;
         this.rolePermissionService = rolePermissionService;
         this.objectMapper = objectMapper;
@@ -80,6 +94,35 @@ public class AccessControlService {
         }
     }
 
+    /**
+     * 企业敏感资料仅对法人/候选法人开放；普通成员和有效合作方只能获得脱敏资料。
+     */
+    public CompanyProfileAccess requireCompanyProfileAccess(long targetCompanyId) {
+        long userId = AuthContext.userId();
+        boolean sensitiveOwner = companyMemberMapper.selectCount(new LambdaQueryWrapper<CompanyMember>()
+                .eq(CompanyMember::getCompanyId, targetCompanyId)
+                .eq(CompanyMember::getUserId, userId)
+                .and(q -> q.eq(CompanyMember::getRoleCode, "LEGAL")
+                        .eq(CompanyMember::getStatus, "ACTIVE")
+                        .or(claim -> claim.eq(CompanyMember::getRoleCode, "LEGAL_CANDIDATE")
+                                .eq(CompanyMember::getStatus, "PENDING")))) > 0;
+        if (sensitiveOwner) {
+            return CompanyProfileAccess.SENSITIVE_OWNER;
+        }
+
+        if (isActiveMember(targetCompanyId, userId)) {
+            return CompanyProfileAccess.MEMBER;
+        }
+
+        Long currentCompanyId = AuthContext.companyId();
+        if (currentCompanyId != null
+                && isActiveMember(currentCompanyId, userId)
+                && counterpartyRelationMapper.countActiveBetween(currentCompanyId, targetCompanyId) > 0) {
+            return CompanyProfileAccess.COUNTERPARTY;
+        }
+        throw new BusinessException("无权访问企业敏感资料");
+    }
+
     public void requireLegalOrClaim(long companyId) {
         boolean allowed = companyMemberMapper.selectCount(new LambdaQueryWrapper<CompanyMember>()
                 .eq(CompanyMember::getCompanyId, companyId)
@@ -109,13 +152,19 @@ public class AccessControlService {
     }
 
     public boolean hasPermission(long companyId, String permission) {
+        return effectiveRole(companyId, AuthContext.userId()).permissions().stream()
+                .anyMatch(value -> "all".equals(value) || permission.equals(value));
+    }
+
+    public EffectiveRole effectiveRole(long companyId, long userId) {
         CompanyMember member = companyMemberMapper.selectOne(new LambdaQueryWrapper<CompanyMember>()
                 .eq(CompanyMember::getCompanyId, companyId)
-                .eq(CompanyMember::getUserId, AuthContext.userId())
+                .eq(CompanyMember::getUserId, userId)
                 .eq(CompanyMember::getStatus, "ACTIVE")
                 .last("LIMIT 1"));
         if (member == null) {
-            return false;
+            RolePermissionService.RoleDef guest = rolePermissionService.role("GUEST");
+            return new EffectiveRole("GUEST", guest.text(), guest.permissions());
         }
 
         Set<String> effective = new HashSet<>();
@@ -129,7 +178,10 @@ public class AccessControlService {
             effective.addAll(rolePermissionService.role(member.getRoleCode()).permissions());
         }
         effective.addAll(parsePermissions(member.getCustomPermissions()));
-        return effective.contains("all") || effective.contains(permission);
+        List<String> permissions = new ArrayList<>(effective);
+        Collections.sort(permissions);
+        String name = role == null ? rolePermissionService.roleText(member.getRoleCode()) : role.getName();
+        return new EffectiveRole(member.getRoleCode(), name, List.copyOf(permissions));
     }
 
     private List<String> parsePermissions(String json) {

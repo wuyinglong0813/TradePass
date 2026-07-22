@@ -36,7 +36,7 @@
   <block wx:if="{{hasTemplate}}">
     <!-- 合同标题 -->
     <view class="card contract-title-card">
-      <view class="ct-title">购销合同</view>
+      <view class="ct-title">{{contractName || '请输入合同名称'}}</view>
       <view class="ct-no">合同编号：签订时自动生成</view>
     </view>
 

@@ -20,6 +20,11 @@ public record ContractPayload(
         String initiatedBy,
         String approvedBy,
         String approvedAt,
-        String createdAt
+        String createdAt,
+        String viewerCompanyId,
+        String viewerCounterpartyCompanyId,
+        String viewerCounterpartyName,
+        String viewerDirection,
+        String perspective
 ) {
 }

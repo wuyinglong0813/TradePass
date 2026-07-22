@@ -32,6 +32,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -45,6 +46,7 @@ class AuthServiceTest {
     private PermDefMapper permissionMapper;
     private TradeContractMapper contractMapper;
     private WechatService wechatService;
+    private AccessControlService accessControlService;
     private AuthSessionService sessionService;
 
     @BeforeEach
@@ -56,7 +58,10 @@ class AuthServiceTest {
         permissionMapper = mock(PermDefMapper.class);
         contractMapper = mock(TradeContractMapper.class);
         wechatService = mock(WechatService.class);
+        accessControlService = mock(AccessControlService.class);
         sessionService = mock(AuthSessionService.class);
+        when(accessControlService.effectiveRole(anyLong(), anyLong()))
+                .thenReturn(new AccessControlService.EffectiveRole("ADMIN", "管理员", List.of("member_manage")));
     }
 
     @AfterEach
@@ -145,10 +150,12 @@ class AuthServiceTest {
         assertThat(service.myTodos()).isEmpty();
 
         AuthContext.set(7L, 3L);
-        when(memberMapper.selectCount(any(Wrapper.class))).thenReturn(0L);
+        when(accessControlService.hasPermission(3L, "member_manage")).thenReturn(false);
+        when(accessControlService.hasPermission(3L, "auth_manage")).thenReturn(false);
         assertThat(service.myTodos()).isEmpty();
 
-        when(memberMapper.selectCount(any(Wrapper.class))).thenReturn(1L, 2L);
+        when(accessControlService.hasPermission(3L, "member_manage")).thenReturn(true);
+        when(memberMapper.selectCount(any(Wrapper.class))).thenReturn(2L);
         Company company = company(3L, "当前企业", 7L);
         company.setCertificationStatus("PENDING_REVIEW");
         when(companyMapper.selectById(3L)).thenReturn(company);
@@ -224,7 +231,7 @@ class AuthServiceTest {
 
     private AuthService service(boolean devEnabled) {
         return new AuthService(userMapper, companyMapper, memberMapper, permissionMapper, contractMapper,
-                wechatService, new RolePermissionService(), sessionService, devEnabled);
+                wechatService, new RolePermissionService(), accessControlService, sessionService, devEnabled);
     }
 
     private Map<String, Object> memberRow(long userId, String role, String status) {

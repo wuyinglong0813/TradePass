@@ -1,8 +1,13 @@
 const { calcTableTotal, reorderClauses } = require('../../utils/chineseCurrency');
 
+function newClientRequestId() {
+  return `contract-${Date.now()}-${Math.random().toString(16).slice(2, 14)}`;
+}
+
 Page({
   data: {
     counterpartyName: '',
+    counterpartyCompanyId: '',
     myCompanyName: '',
     role: 'supplier',
     contractActionText: '发起销售合同',
@@ -23,11 +28,13 @@ Page({
     // 条款
     clauses: [],
     // 是否已选择模板
-    hasTemplate: false
+    hasTemplate: false,
+    clientRequestId: ''
   },
 
   onLoad(options) {
     const name = decodeURIComponent(options.counterpartyName || '');
+    const counterpartyCompanyId = decodeURIComponent(options.counterpartyCompanyId || '');
     const role = options.role === 'buyer' ? 'buyer' : 'supplier';
     const app = getApp();
     const companies = app.globalData.companies || [];
@@ -35,9 +42,11 @@ Page({
     const cur = companies.find(c => c.companyId === cid);
     this.setData({
       counterpartyName: name,
+      counterpartyCompanyId,
       myCompanyName: (cur && cur.companyName) || '我的企业',
       role,
-      contractActionText: role === 'supplier' ? '发起销售合同' : '发起采购合同'
+      contractActionText: role === 'supplier' ? '发起销售合同' : '发起采购合同',
+      clientRequestId: newClientRequestId()
     });
     this.loadTemplates();
   },
@@ -159,14 +168,15 @@ Page({
 
   // ======= 提交 =======
   async onSubmit() {
-    const { templates, templateIndex, contractName, fields, tableSection, tableRows, totalAmount, clauses, counterpartyName, myCompanyName } = this.data;
+    const { templates, templateIndex, contractName, fields, tableSection, tableRows, totalAmount, clauses,
+      counterpartyName, counterpartyCompanyId, role, clientRequestId } = this.data;
     if (templateIndex < 0) { wx.showToast({ title: '请选择合同模板', icon: 'none' }); return; }
     if (!contractName.trim()) { wx.showToast({ title: '请输入合同名称', icon: 'none' }); return; }
 
     const total = parseFloat(totalAmount) || 0;
     // 构建完整合同 JSON 存入 terms
     const contractContent = JSON.stringify({
-      title: '购销合同',
+      title: contractName.trim(),
       fields: fields.map(f => ({ ...f })),
       sections: [
         ...(tableSection ? [{
@@ -197,6 +207,9 @@ Page({
         method: 'POST',
         data: {
           counterpartyName,
+          counterpartyCompanyId: Number(counterpartyCompanyId),
+          direction: role === 'supplier' ? 'SALE' : 'PURCHASE',
+          clientRequestId,
           name: contractName.trim(),
           templateName: templates[templateIndex].name,
           amount: total,

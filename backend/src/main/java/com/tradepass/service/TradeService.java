@@ -2,6 +2,10 @@ package com.tradepass.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.tradepass.common.AuthContext;
 import com.tradepass.common.BusinessException;
 import com.tradepass.common.TradePassDtos.CounterpartyRelation;
@@ -13,7 +17,6 @@ import com.tradepass.dto.response.PagePayload;
 import com.tradepass.dto.response.TradeOrderPayload;
 import com.tradepass.entity.Company;
 import com.tradepass.entity.ContractTemplate;
-import com.tradepass.entity.CounterpartyRelationEntity;
 import com.tradepass.entity.TemplateCategory;
 import com.tradepass.entity.TradeContract;
 import com.tradepass.entity.TradeOrder;
@@ -25,6 +28,7 @@ import com.tradepass.mapper.TradeContractMapper;
 import com.tradepass.mapper.TradeOrderMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.dao.DuplicateKeyException;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -44,6 +48,7 @@ public class TradeService {
     private final CompanyMapper companyMapper;
     private final AccessControlService accessControlService;
     private final AuditLogService auditLogService;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public TradeService(TradeOrderMapper tradeOrderMapper,
                         CounterpartyRelationMapper counterpartyRelationMapper,
@@ -150,8 +155,10 @@ public class TradeService {
                 ? counterpartyRelationMapper.selectSupplierCounterparties(cid)
                 : counterpartyRelationMapper.selectBuyerCounterparties(cid);
         return rows.stream()
+                .filter(row -> row.get("counterpartyCompanyId") != null)
                 .map(row -> new CounterpartyRelation(
                         String.valueOf(row.get("id")),
+                        string(row.get("counterpartyCompanyId")),
                         string(row.get("counterpartyName")),
                         string(row.get("relationType")),
                         string(row.get("status"))))
@@ -161,13 +168,7 @@ public class TradeService {
     public CounterpartyRelation addCounterparty(AddCounterpartyRequest request) {
         long companyId = AuthContext.requireCompanyId();
         accessControlService.requireLegal(companyId);
-        CounterpartyRelationEntity relation = new CounterpartyRelationEntity();
-        relation.setCompanyId(companyId);
-        relation.setCounterpartyCompanyName(request.counterpartyName());
-        relation.setRelationType("SUPPLIER");
-        relation.setStatus("ACTIVE");
-        counterpartyRelationMapper.insert(relation);
-        return new CounterpartyRelation(String.valueOf(relation.getId()), request.counterpartyName(), "SUPPLIER", "ACTIVE");
+        throw new BusinessException("请使用合作企业邀请，对方接受后才会建立有效关系");
     }
 
     public List<Map<String, Object>> listTemplateCategories() {
@@ -324,19 +325,14 @@ public class TradeService {
         if (contract == null || !isContractParty(contract, companyId)) {
             throw new BusinessException("合同不存在");
         }
-        return toContractPayload(contract);
+        return toContractPayload(contract, companyId);
     }
 
     public List<ContractPayload> listContracts(String counterpartyName) {
         long companyId = AuthContext.requireCompanyId();
         accessControlService.requireAnyPermission(companyId, "contract_view", "contract_sign");
-        LambdaQueryWrapper<TradeContract> query = new LambdaQueryWrapper<TradeContract>()
-                .eq(TradeContract::getCompanyId, companyId)
-                .orderByDesc(TradeContract::getCreatedAt);
-        if (counterpartyName != null && !counterpartyName.isBlank()) {
-            query.eq(TradeContract::getCounterpartyName, counterpartyName);
-        }
-        return tradeContractMapper.selectList(query).stream().map(this::toContractPayload).toList();
+        return tradeContractMapper.selectPartyContracts(companyId, trim(counterpartyName), null, 1000, 0)
+                .stream().map(contract -> toContractPayload(contract, companyId)).toList();
     }
 
     public PagePayload<ContractPayload> pageContracts(String counterpartyName, String status, int page, int size) {
@@ -344,10 +340,13 @@ public class TradeService {
         int normalizedSize = normalizeSize(size);
         long companyId = AuthContext.requireCompanyId();
         accessControlService.requireAnyPermission(companyId, "contract_view", "contract_sign");
-        long total = tradeContractMapper.selectCount(contractQuery(companyId, counterpartyName, status));
-        List<ContractPayload> items = tradeContractMapper.selectList(contractQuery(companyId, counterpartyName, status)
-                        .last(limitClause(normalizedPage, normalizedSize)))
-                .stream().map(this::toContractPayload).toList();
+        String cleanName = trim(counterpartyName);
+        String cleanStatus = trim(status);
+        long total = tradeContractMapper.countPartyContracts(companyId, cleanName, cleanStatus);
+        long offset = (long) (normalizedPage - 1) * normalizedSize;
+        List<ContractPayload> items = tradeContractMapper.selectPartyContracts(
+                        companyId, cleanName, cleanStatus, normalizedSize, offset)
+                .stream().map(contract -> toContractPayload(contract, companyId)).toList();
         return PagePayload.of(items, total, normalizedPage, normalizedSize);
     }
 
@@ -361,7 +360,7 @@ public class TradeService {
     public ContractPayload createContract(CreateContractRequest request) {
         long companyId = AuthContext.requireCompanyId();
         accessControlService.requirePermission(companyId, "contract_sign");
-        validateDirection(request.direction(), false);
+        validateDirection(request.direction(), true);
         LocalDate startDate = parseDate(request.startDate());
         LocalDate endDate = parseDate(request.endDate());
         if (startDate != null && endDate != null && endDate.isBefore(startDate)) {
@@ -373,36 +372,53 @@ public class TradeService {
                     .eq(TradeContract::getClientRequestId, request.clientRequestId().trim())
                     .last("LIMIT 1"));
             if (existing != null) {
-                return toContractPayload(existing);
+                return toContractPayload(existing, companyId);
             }
         }
 
-        Long counterpartyCompanyId = resolveCounterpartyCompanyId(
-                companyId, request.counterpartyCompanyId(), request.counterpartyName());
-        if (counterpartyCompanyId != null && counterpartyCompanyId == companyId) {
+        Company counterparty = requireActiveCounterparty(companyId, request.counterpartyCompanyId());
+        if (counterparty.getId() == companyId) {
             throw new BusinessException("合同对方不能是当前企业");
         }
+        Company initiator = companyMapper.selectById(companyId);
+        if (initiator == null) {
+            throw new BusinessException("当前企业不存在");
+        }
+        String direction = normalizeDirection(request.direction());
+        String contractName = request.name().trim();
         BigDecimal amount = requireNonNegativeAmount(request.amount(), "合同金额");
         TradeContract contract = new TradeContract();
         contract.setCompanyId(companyId);
         contract.setContractNo(normalizeBusinessNo(request.contractNo(), "HT"));
-        contract.setCounterpartyCompanyId(counterpartyCompanyId);
-        contract.setCounterpartyName(request.counterpartyName());
-        contract.setDirection(normalizeDirection(request.direction()));
+        contract.setCounterpartyCompanyId(counterparty.getId());
+        contract.setCounterpartyName(counterparty.getName());
+        contract.setDirection(direction);
         contract.setClientRequestId(trim(request.clientRequestId()));
-        contract.setName(request.name());
+        contract.setName(contractName);
         contract.setTemplateName(request.templateName());
         contract.setAmount(amount);
         contract.setStartDate(startDate);
         contract.setEndDate(endDate);
-        contract.setTerms(request.terms());
+        contract.setTerms(normalizeContractTerms(request.terms(), contractName,
+                initiator.getName(), counterparty.getName(), direction));
         contract.setVersionNo(1);
         contract.setStatus("PENDING");
         contract.setInitiatedBy(AuthContext.userId());
-        tradeContractMapper.insert(contract);
+        try {
+            tradeContractMapper.insert(contract);
+        } catch (DuplicateKeyException duplicate) {
+            TradeContract existing = tradeContractMapper.selectOne(new LambdaQueryWrapper<TradeContract>()
+                    .eq(TradeContract::getCompanyId, companyId)
+                    .eq(TradeContract::getClientRequestId, request.clientRequestId().trim())
+                    .last("LIMIT 1"));
+            if (existing != null) {
+                return toContractPayload(existing, companyId);
+            }
+            throw duplicate;
+        }
         auditLogService.log(companyId, "CONTRACT", contract.getId(), "CREATE",
                 "发起合同 " + contract.getContractNo() + "，金额 " + amount);
-        return toContractPayload(contract);
+        return toContractPayload(contract, companyId);
     }
 
     @Transactional
@@ -442,9 +458,9 @@ public class TradeService {
         accessControlService.requireAnyPermission(companyId, "contract_view", "contract_sign");
         return tradeContractMapper.selectList(new LambdaQueryWrapper<TradeContract>()
                         .eq(TradeContract::getCompanyId, companyId)
-                        .eq(TradeContract::getInitiatedBy, AuthContext.userId())
+                .eq(TradeContract::getInitiatedBy, AuthContext.userId())
                         .orderByDesc(TradeContract::getCreatedAt))
-                .stream().map(this::toContractPayload).toList();
+                .stream().map(contract -> toContractPayload(contract, companyId)).toList();
     }
 
     public List<ContractPayload> pendingContracts() {
@@ -457,7 +473,7 @@ public class TradeService {
                         .eq(TradeContract::getCounterpartyCompanyId, companyId)
                         .eq(TradeContract::getStatus, "PENDING")
                         .orderByDesc(TradeContract::getCreatedAt))
-                .stream().map(this::toContractPayload).toList();
+                .stream().map(contract -> toContractPayload(contract, companyId)).toList();
     }
 
     private TradeContract ensurePendingIncomingContract(Long id, long companyId) {
@@ -487,21 +503,6 @@ public class TradeService {
         return query;
     }
 
-    private LambdaQueryWrapper<TradeContract> contractQuery(long companyId, String counterpartyName, String status) {
-        LambdaQueryWrapper<TradeContract> query = new LambdaQueryWrapper<TradeContract>()
-                .eq(TradeContract::getCompanyId, companyId)
-                .orderByDesc(TradeContract::getCreatedAt);
-        String cleanName = trim(counterpartyName);
-        if (cleanName != null && !cleanName.isBlank()) {
-            query.eq(TradeContract::getCounterpartyName, cleanName);
-        }
-        String cleanStatus = trim(status);
-        if (cleanStatus != null && !cleanStatus.isBlank()) {
-            query.eq(TradeContract::getStatus, cleanStatus);
-        }
-        return query;
-    }
-
     private int normalizePage(int page) {
         return Math.max(1, page);
     }
@@ -527,7 +528,15 @@ public class TradeService {
         );
     }
 
-    private ContractPayload toContractPayload(TradeContract contract) {
+    private ContractPayload toContractPayload(TradeContract contract, long viewerCompanyId) {
+        boolean outgoing = contract.getCompanyId() == viewerCompanyId;
+        Long viewerCounterpartyId = outgoing ? contract.getCounterpartyCompanyId() : contract.getCompanyId();
+        String viewerCounterpartyName = outgoing
+                ? contract.getCounterpartyName()
+                : companyName(contract.getCompanyId());
+        String viewerDirection = outgoing
+                ? normalizeDirection(contract.getDirection())
+                : invertDirection(contract.getDirection());
         return new ContractPayload(
                 idString(contract.getId()),
                 contract.getContractNo(),
@@ -546,7 +555,12 @@ public class TradeService {
                 idString(contract.getInitiatedBy()),
                 idString(contract.getApprovedBy()),
                 contract.getApprovedAt() == null ? null : contract.getApprovedAt().toString(),
-                contract.getCreatedAt() == null ? LocalDate.now().toString() : contract.getCreatedAt().toString()
+                contract.getCreatedAt() == null ? LocalDate.now().toString() : contract.getCreatedAt().toString(),
+                String.valueOf(viewerCompanyId),
+                idString(viewerCounterpartyId),
+                viewerCounterpartyName,
+                viewerDirection,
+                outgoing ? "OUTGOING" : "INCOMING"
         );
     }
 
@@ -556,27 +570,58 @@ public class TradeService {
         }
         return amount.setScale(2, java.math.RoundingMode.HALF_UP);
     }
-    private Long resolveCounterpartyCompanyId(long companyId, Long requestedId, String counterpartyName) {
-        if (requestedId != null) {
-            Company company = companyMapper.selectById(requestedId);
-            if (company == null) {
-                throw new BusinessException("合作企业不存在");
+    private Company requireActiveCounterparty(long companyId, Long requestedId) {
+        if (requestedId == null) {
+            throw new BusinessException("请选择已建立合作关系的企业");
+        }
+        Company company = companyMapper.selectById(requestedId);
+        if (company == null) {
+            throw new BusinessException("合作企业不存在");
+        }
+        if (counterpartyRelationMapper.countActiveBetween(companyId, requestedId) <= 0) {
+            throw new BusinessException("与该企业尚未建立有效合作关系");
+        }
+        return company;
+    }
+
+    private String normalizeContractTerms(String terms, String contractName, String initiatorName,
+                                          String counterpartyName, String direction) {
+        if (terms == null || terms.isBlank()) {
+            return terms;
+        }
+        try {
+            JsonNode parsed = objectMapper.readTree(terms);
+            if (!(parsed instanceof ObjectNode root)) {
+                throw new BusinessException("合同正文格式错误");
             }
-            return requestedId;
+            root.put("title", contractName);
+            JsonNode fieldsNode = root.get("fields");
+            if (fieldsNode instanceof ArrayNode fields) {
+                String supplier = "SALE".equals(direction) ? initiatorName : counterpartyName;
+                String buyer = "SALE".equals(direction) ? counterpartyName : initiatorName;
+                for (JsonNode node : fields) {
+                    if (node instanceof ObjectNode field) {
+                        String key = field.path("key").asText();
+                        if ("supplier".equals(key)) field.put("value", supplier);
+                        if ("buyer".equals(key)) field.put("value", buyer);
+                    }
+                }
+            }
+            return objectMapper.writeValueAsString(root);
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new BusinessException("合同正文格式错误");
         }
-        CounterpartyRelationEntity relation = counterpartyRelationMapper.selectOne(
-                new LambdaQueryWrapper<CounterpartyRelationEntity>()
-                        .eq(CounterpartyRelationEntity::getCompanyId, companyId)
-                        .eq(CounterpartyRelationEntity::getCounterpartyCompanyName, counterpartyName)
-                        .eq(CounterpartyRelationEntity::getStatus, "ACTIVE")
-                        .last("LIMIT 1"));
-        if (relation != null && relation.getCounterpartyCompanyId() != null) {
-            return relation.getCounterpartyCompanyId();
-        }
-        Company company = companyMapper.selectOne(new LambdaQueryWrapper<Company>()
-                .eq(Company::getName, counterpartyName)
-                .last("LIMIT 1"));
-        return company == null ? null : company.getId();
+    }
+
+    private String companyName(Long companyId) {
+        Company company = companyId == null ? null : companyMapper.selectById(companyId);
+        return company == null ? "未知企业" : company.getName();
+    }
+
+    private String invertDirection(String direction) {
+        return "PURCHASE".equalsIgnoreCase(direction) ? "SALE" : "PURCHASE";
     }
 
     private boolean isContractParty(TradeContract contract, long companyId) {

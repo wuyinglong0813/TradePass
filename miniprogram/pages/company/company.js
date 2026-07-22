@@ -38,11 +38,14 @@ Page({
     roleCount: 0,
     templateCount: 0,
     companies: [],
+    certificationApplications: [],
     currentCompanyId: '',
     todos: [],
     showJoinModal: false,
     joinCode: '',
-    showInventoryModal: false
+    showInventoryModal: false,
+    showCompanySwitcher: false,
+    switchingCompanyId: ''
   },
 
   onShow() {
@@ -63,6 +66,7 @@ Page({
   async loadData() {
     try {
       const payload = await request({ url: '/me' });
+      const certificationApplications = await request({ url: '/me/company-certification-applications' }).catch(() => []);
       const company = payload.company || {};
       const member = payload.member || {};
       const companies = payload.companies || [];
@@ -85,6 +89,10 @@ Page({
         member,
         canManage,
         companies: companyItems,
+        certificationApplications: (certificationApplications || []).map(item => ({
+          ...item,
+          statusText: item.status === 'APPROVED' ? '已通过' : item.status === 'REJECTED' ? '已驳回' : '审核中'
+        })),
         currentCompanyId
       });
       await Promise.all([
@@ -136,32 +144,39 @@ Page({
   },
 
   switchCompany() {
-    const companies = this.data.companies;
-    if (companies.length <= 1) return;
-    wx.showActionSheet({
-      itemList: companies.map(c => c.companyName),
-      success: async (res) => {
-        try {
-          await app.switchCompany(companies[res.tapIndex].companyId);
-          await this.loadData();
-        } catch (e) { wx.showToast({ title: '切换失败', icon: 'none' }); }
-      }
-    });
+    if (this.data.companies.length === 0) return;
+    this.setData({ showCompanySwitcher: true, switchingCompanyId: '' });
   },
 
-  async switchCompanyFromRow(e) {
-    const companyId = e.currentTarget.dataset.companyId;
-    if (!companyId || companyId === this.data.currentCompanyId) return;
+  closeCompanySwitcher() {
+    if (this.data.switchingCompanyId) return;
+    this.setData({ showCompanySwitcher: false });
+  },
+
+  async selectCompanyFromSwitcher(e) {
+    const companyId = String(e.currentTarget.dataset.companyId || '');
+    const company = this.data.companies.find(item => String(item.companyId) === companyId);
+    if (!company || this.data.switchingCompanyId) return;
+    if (companyId === String(this.data.currentCompanyId)) {
+      this.setData({ showCompanySwitcher: false });
+      return;
+    }
     try {
+      this.setData({ switchingCompanyId: companyId });
       await app.switchCompany(companyId);
+      this.setData({ showCompanySwitcher: false, switchingCompanyId: '' });
       wx.showToast({ title: '企业已切换', icon: 'success' });
       await this.loadData();
     } catch (error) {
+      this.setData({ switchingCompanyId: '' });
       wx.showToast({ title: '切换失败', icon: 'none' });
     }
   },
 
-  goCreateCompany() { wx.navigateTo({ url: '/pages/company-bind/company-bind' }); },
+  goCreateCompany() {
+    this.setData({ showCompanySwitcher: false });
+    wx.navigateTo({ url: '/pages/company-bind/company-bind' });
+  },
   goPhoneLogin() { wx.navigateTo({ url: '/pages/login/login' }); },
   goCert() { wx.navigateTo({ url: '/pages/company-cert/company-cert' }); },
   goAuthManage() { wx.navigateTo({ url: '/pages/auth-manage/auth-manage' }); },
@@ -173,7 +188,7 @@ Page({
   },
   closeInventoryModal() { this.setData({ showInventoryModal: false }); },
 
-  openJoin() { this.setData({ showJoinModal: true, joinCode: '' }); },
+  openJoin() { this.setData({ showCompanySwitcher: false, showJoinModal: true, joinCode: '' }); },
   closeJoin() { this.setData({ showJoinModal: false }); },
   onJoinInput(e) { this.setData({ joinCode: e.detail.value }); },
   noop() {},

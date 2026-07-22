@@ -105,14 +105,16 @@ class TradeServiceTest {
     void mapsBuyerAndSupplierCounterpartyViews() {
         when(accessControl.resolveCompanyId("3")).thenReturn(3L);
         when(relationMapper.selectBuyerCounterparties(3L)).thenReturn(List.of(
-                Map.of("id", 5L, "counterpartyName", "供应方", "relationType", "SUPPLIER", "status", "ACTIVE")
+                Map.of("id", 5L, "counterpartyCompanyId", 9L, "counterpartyName", "供应方", "relationType", "SUPPLIER", "status", "ACTIVE"),
+                Map.of("id", 7L, "counterpartyName", "历史名称关系", "relationType", "SUPPLIER", "status", "ACTIVE")
         ));
 
         List<CounterpartyRelation> buyerView = service.listCounterparties("3", "buyer");
+        assertThat(buyerView).hasSize(1);
         assertThat(buyerView.get(0).counterpartyName()).isEqualTo("供应方");
 
         when(relationMapper.selectSupplierCounterparties(3L)).thenReturn(List.of(
-                Map.of("id", 6L, "counterpartyName", "采购方", "relationType", "CUSTOMER", "status", "ACTIVE")
+                Map.of("id", 6L, "counterpartyCompanyId", 10L, "counterpartyName", "采购方", "relationType", "CUSTOMER", "status", "ACTIVE")
         ));
         List<CounterpartyRelation> supplierView = service.listCounterparties("3", "supplier");
         assertThat(supplierView.get(0).counterpartyName()).isEqualTo("采购方");
@@ -152,8 +154,8 @@ class TradeServiceTest {
         contract.setAmount(BigDecimal.TEN);
         contract.setStatus("PENDING");
         contract.setInitiatedBy(7L);
-        when(contractMapper.selectCount(any(Wrapper.class))).thenReturn(1L);
-        when(contractMapper.selectList(any(Wrapper.class))).thenReturn(List.of(contract));
+        when(contractMapper.countPartyContracts(3L, null, "PENDING")).thenReturn(1L);
+        when(contractMapper.selectPartyContracts(3L, null, "PENDING", 20, 0L)).thenReturn(List.of(contract));
         assertThat(service.pageContracts(null, "PENDING", 1, 20).items())
                 .extracting(ContractPayload::id).containsExactly("20");
 
@@ -165,18 +167,11 @@ class TradeServiceTest {
     }
 
     @Test
-    void requiresLegalRoleWhenAddingCounterparty() {
-        doAnswer(invocation -> {
-            CounterpartyRelationEntity relation = invocation.getArgument(0);
-            relation.setId(6L);
-            return 1;
-        }).when(relationMapper).insert(any(CounterpartyRelationEntity.class));
-
-        CounterpartyRelation result = service.addCounterparty(new AddCounterpartyRequest("新供应商"));
-
+    void requiresInvitationWhenAddingCounterparty() {
+        assertThatThrownBy(() -> service.addCounterparty(new AddCounterpartyRequest("新供应商")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("合作企业邀请");
         verify(accessControl).requireLegal(3L);
-        assertThat(result.id()).isEqualTo("6");
-        assertThat(result.status()).isEqualTo("ACTIVE");
     }
 
     @Test
@@ -234,14 +229,27 @@ class TradeServiceTest {
             contract.setId(20L);
             return 1;
         }).when(contractMapper).insert(any(TradeContract.class));
-        CreateContractRequest request = new CreateContractRequest("对方", "年度合同", "模板",
-                new BigDecimal("1000"), "2026-01-01", "2026-12-31", "条款");
+        Company initiator = new Company();
+        initiator.setId(3L);
+        initiator.setName("当前企业");
+        Company counterparty = new Company();
+        counterparty.setId(9L);
+        counterparty.setName("对方企业");
+        when(companyMapper.selectById(3L)).thenReturn(initiator);
+        when(companyMapper.selectById(9L)).thenReturn(counterparty);
+        when(relationMapper.countActiveBetween(3L, 9L)).thenReturn(1L);
+        CreateContractRequest request = new CreateContractRequest("用户输入名称", "年度合同", "模板",
+                new BigDecimal("1000"), "2026-01-01", "2026-12-31", "{}",
+                9L, "SALE", null, "request-20");
 
         ContractPayload created = service.createContract(request);
         assertThat(created.id()).isEqualTo("20");
         assertThat(created.startDate()).isEqualTo("2026-01-01");
         assertThat(created.status()).isEqualTo("PENDING");
         assertThat(created.initiatedBy()).isEqualTo("7");
+        assertThat(created.counterpartyName()).isEqualTo("对方企业");
+        assertThat(created.viewerDirection()).isEqualTo("SALE");
+        assertThat(created.terms()).contains("\"title\":\"年度合同\"");
 
         TradeContract incoming = new TradeContract();
         incoming.setId(20L);
@@ -277,5 +285,31 @@ class TradeServiceTest {
         when(contractMapper.selectList(any(Wrapper.class))).thenReturn(List.of(pending));
 
         assertThat(service.pendingContracts()).extracting(ContractPayload::id).containsExactly("1");
+    }
+
+    @Test
+    void sharedLedgerUsesTheReceivingCompanyPerspective() {
+        TradeContract incoming = new TradeContract();
+        incoming.setId(31L);
+        incoming.setCompanyId(9L);
+        incoming.setCounterpartyCompanyId(3L);
+        incoming.setCounterpartyName("当前企业");
+        incoming.setDirection("SALE");
+        incoming.setName("供货合同");
+        incoming.setAmount(BigDecimal.TEN);
+        incoming.setStatus("ACTIVE");
+        Company initiator = new Company();
+        initiator.setId(9L);
+        initiator.setName("供应商");
+        when(companyMapper.selectById(9L)).thenReturn(initiator);
+        when(contractMapper.countPartyContracts(3L, null, null)).thenReturn(1L);
+        when(contractMapper.selectPartyContracts(3L, null, null, 20, 0L)).thenReturn(List.of(incoming));
+
+        ContractPayload view = service.pageContracts(null, null, 1, 20).items().get(0);
+
+        assertThat(view.viewerCounterpartyCompanyId()).isEqualTo("9");
+        assertThat(view.viewerCounterpartyName()).isEqualTo("供应商");
+        assertThat(view.viewerDirection()).isEqualTo("PURCHASE");
+        assertThat(view.perspective()).isEqualTo("INCOMING");
     }
 }

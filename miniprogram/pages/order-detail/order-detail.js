@@ -25,6 +25,7 @@ function contractPeriod(startDate, endDate) {
 Page({
   data: {
     counterpartyName: '',
+    counterpartyCompanyId: '',
     myCompanyName: '',
     role: 'supplier',
     relationText: '客户企业',
@@ -62,6 +63,7 @@ Page({
 
   onLoad(options) {
     const name = decodeURIComponent(options.counterpartyName || '');
+    const counterpartyCompanyId = decodeURIComponent(options.counterpartyCompanyId || '');
     const role = options.role === 'buyer' ? 'buyer' : 'supplier';
     // 获取我方当前企业名
     const companies = app.globalData.companies || [];
@@ -69,13 +71,14 @@ Page({
     const cur = companies.find(c => c.companyId === cid);
     this.setData({
       counterpartyName: name,
+      counterpartyCompanyId,
       myCompanyName: (cur && cur.companyName) || '我的企业',
       role,
       relationText: role === 'supplier' ? '客户企业' : '供应商企业',
       trendTitle: role === 'supplier' ? '月销售额趋势' : '月采购额趋势',
       signLabel: role === 'supplier' ? '签订销售合同' : '签订采购合同',
       reconciliationLabel: role === 'supplier' ? '客户对账' : '供应商对账',
-      canSignContract: hasPerm('contract_sign'),
+      canSignContract: !!counterpartyCompanyId && hasPerm('contract_sign'),
       canReconciliation: hasPerm('reconciliation')
     });
     this.loadMonthlySales(name);
@@ -200,8 +203,12 @@ Page({
     const name = this.data.counterpartyName;
     switch (key) {
       case 'sign':
+        if (!this.data.counterpartyCompanyId) {
+          wx.showToast({ title: '请先建立有效的企业合作关系', icon: 'none' });
+          return;
+        }
         wx.navigateTo({
-          url: `/pages/sign-contract/sign-contract?counterpartyName=${encodeURIComponent(name)}&role=${this.data.role}`
+          url: `/pages/sign-contract/sign-contract?counterpartyName=${encodeURIComponent(name)}&counterpartyCompanyId=${encodeURIComponent(this.data.counterpartyCompanyId)}&role=${this.data.role}`
         });
         break;
       case 'reconciliation':

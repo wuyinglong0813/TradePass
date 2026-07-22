@@ -43,6 +43,7 @@ public class AuthService {
     private final TradeContractMapper tradeContractMapper;
     private final WechatService wechatService;
     private final RolePermissionService rolePermissionService;
+    private final AccessControlService accessControlService;
     private final AuthSessionService authSessionService;
     private final boolean devEnabled;
 
@@ -53,6 +54,7 @@ public class AuthService {
                        TradeContractMapper tradeContractMapper,
                        WechatService wechatService,
                        RolePermissionService rolePermissionService,
+                       AccessControlService accessControlService,
                        AuthSessionService authSessionService,
                        @Value("${tradepass.dev.enabled:false}") boolean devEnabled) {
         this.sysUserMapper = sysUserMapper;
@@ -62,6 +64,7 @@ public class AuthService {
         this.tradeContractMapper = tradeContractMapper;
         this.wechatService = wechatService;
         this.rolePermissionService = rolePermissionService;
+        this.accessControlService = accessControlService;
         this.authSessionService = authSessionService;
         this.devEnabled = devEnabled;
     }
@@ -147,11 +150,8 @@ public class AuthService {
             return todos;
         }
 
-        boolean manager = companyMemberMapper.selectCount(new LambdaQueryWrapper<CompanyMember>()
-                .eq(CompanyMember::getCompanyId, companyId)
-                .eq(CompanyMember::getUserId, userId)
-                .eq(CompanyMember::getStatus, "ACTIVE")
-                .in(CompanyMember::getRoleCode, List.of("LEGAL", "ADMIN"))) > 0;
+        boolean manager = accessControlService.hasPermission(companyId, "member_manage")
+                || accessControlService.hasPermission(companyId, "auth_manage");
         if (!manager) {
             return todos;
         }
@@ -169,7 +169,7 @@ public class AuthService {
         }
         if (company != null) {
             Long pendingContracts = tradeContractMapper.selectCount(new LambdaQueryWrapper<TradeContract>()
-                    .eq(TradeContract::getCounterpartyName, company.getName())
+                    .eq(TradeContract::getCounterpartyCompanyId, companyId)
                     .eq(TradeContract::getStatus, "PENDING"));
             if (pendingContracts > 0) {
                 todos.add(new TodoItem("CONTRACT", "合同待审批", pendingContracts + " 份合同等待你方签署", pendingContracts.intValue(), "contract-approval"));
@@ -255,11 +255,13 @@ public class AuthService {
     }
 
     public MemberInfo loadMember(long userId, long companyId) {
-        return toMemberInfo(companyMemberMapper.selectMemberInfo(userId, companyId));
+        return toMemberInfo(companyMemberMapper.selectMemberInfo(userId, companyId), companyId);
     }
 
     public MemberInfo loadMemberAnyCompany(long userId) {
-        return toMemberInfo(companyMemberMapper.selectMemberInfoAnyCompany(userId));
+        Map<String, Object> row = companyMemberMapper.selectMemberInfoAnyCompany(userId);
+        Long companyId = row == null || row.get("companyId") == null ? null : Long.parseLong(String.valueOf(row.get("companyId")));
+        return toMemberInfo(row, companyId);
     }
 
     public List<CompanyRole> loadUserCompanies(long userId) {
@@ -267,7 +269,9 @@ public class AuthService {
                 .map(row -> {
                     String roleCode = string(row.get("roleCode"));
                     return new CompanyRole(String.valueOf(row.get("companyId")), string(row.get("companyName")),
-                            roleCode, rolePermissionService.roleText(roleCode));
+                            roleCode, row.get("roleName") == null
+                                    ? rolePermissionService.roleText(roleCode)
+                                    : string(row.get("roleName")));
                 })
                 .toList();
     }
@@ -292,19 +296,21 @@ public class AuthService {
         return new MePayload(profile, company != null ? company : fallbackCompany(), member, companies);
     }
 
-    private MemberInfo toMemberInfo(Map<String, Object> row) {
+    private MemberInfo toMemberInfo(Map<String, Object> row, Long companyId) {
         if (row == null || row.isEmpty()) {
             return null;
         }
         String roleCode = string(row.get("roleCode"));
         String status = string(row.get("status"));
-        RolePermissionService.RoleDef role = rolePermissionService.role(roleCode);
+        AccessControlService.EffectiveRole role = companyId == null || !"ACTIVE".equals(status)
+                ? new AccessControlService.EffectiveRole("GUEST", "访客", List.of())
+                : accessControlService.effectiveRole(companyId, Long.parseLong(String.valueOf(row.get("userId"))));
         return new MemberInfo(
                 String.valueOf(row.get("userId")),
                 string(row.get("nickname")),
                 string(row.get("phone")),
                 roleCode != null ? roleCode : "GUEST",
-                role.text(),
+                role.name(),
                 role.permissions(),
                 status != null ? status : "NONE"
         );

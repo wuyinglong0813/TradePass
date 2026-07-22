@@ -12,7 +12,8 @@ import java.util.Map;
 @Mapper
 public interface CompanyMemberMapper extends BaseMapper<CompanyMember> {
     @Select("""
-        SELECT u.id AS userId, u.nickname, u.phone, m.role_code AS roleCode, m.status
+        SELECT u.id AS userId, u.nickname, u.phone, m.company_id AS companyId,
+               m.role_code AS roleCode, m.custom_permissions AS customPermissions, m.status
         FROM sys_user u
         LEFT JOIN company_member m ON u.id = m.user_id AND m.company_id = #{companyId}
         WHERE u.id = #{userId}
@@ -20,7 +21,8 @@ public interface CompanyMemberMapper extends BaseMapper<CompanyMember> {
     Map<String, Object> selectMemberInfo(@Param("userId") Long userId, @Param("companyId") Long companyId);
 
     @Select("""
-        SELECT u.id AS userId, u.nickname, u.phone, m.role_code AS roleCode, m.status
+        SELECT u.id AS userId, u.nickname, u.phone, m.company_id AS companyId,
+               m.role_code AS roleCode, m.custom_permissions AS customPermissions, m.status
         FROM sys_user u
         LEFT JOIN company_member m ON u.id = m.user_id
         WHERE u.id = #{userId}
@@ -29,16 +31,19 @@ public interface CompanyMemberMapper extends BaseMapper<CompanyMember> {
     Map<String, Object> selectMemberInfoAnyCompany(@Param("userId") Long userId);
 
     @Select("""
-        SELECT c.id AS companyId, c.name AS companyName, m.role_code AS roleCode
+        SELECT c.id AS companyId, c.name AS companyName, m.role_code AS roleCode,
+               COALESCE(r.name, m.role_code) AS roleName
         FROM company c
         JOIN company_member m ON c.id = m.company_id
+        LEFT JOIN role_def r ON r.company_id = m.company_id AND r.code = m.role_code
         WHERE m.user_id = #{userId} AND m.status = 'ACTIVE'
         ORDER BY c.id
         """)
     List<Map<String, Object>> selectUserCompanies(@Param("userId") Long userId);
 
     @Select("""
-        SELECT m.id, m.user_id AS userId, m.role_code AS roleCode, m.status, u.nickname, u.phone
+        SELECT m.id, m.user_id AS userId, m.role_code AS roleCode,
+               m.custom_permissions AS customPermissions, m.status, u.nickname, u.phone
         FROM company_member m
         JOIN sys_user u ON m.user_id = u.id
         WHERE m.company_id = #{companyId}
@@ -47,7 +52,8 @@ public interface CompanyMemberMapper extends BaseMapper<CompanyMember> {
     List<Map<String, Object>> selectAuthorizationRecords(@Param("companyId") Long companyId);
 
     @Select("""
-        SELECT m.id, m.user_id AS userId, m.role_code AS roleCode, m.status, u.nickname, u.phone
+        SELECT m.id, m.user_id AS userId, m.role_code AS roleCode,
+               m.custom_permissions AS customPermissions, m.status, u.nickname, u.phone
         FROM company_member m
         JOIN sys_user u ON m.user_id = u.id
         WHERE m.company_id = #{companyId}

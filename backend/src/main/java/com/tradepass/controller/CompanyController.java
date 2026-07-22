@@ -3,6 +3,7 @@ package com.tradepass.controller;
 import com.tradepass.common.ApiResponse;
 import com.tradepass.common.TradePassDtos.AuthorizationRecord;
 import com.tradepass.common.TradePassDtos.CompanyProfile;
+import com.tradepass.common.TradePassDtos.CompanySearchSummary;
 import com.tradepass.common.TradePassDtos.SealRecord;
 import com.tradepass.dto.request.ApproveRequest;
 import com.tradepass.dto.request.CompanySubmitRequest;
@@ -14,7 +15,11 @@ import com.tradepass.dto.request.VerificationRequest;
 import com.tradepass.dto.response.InviteResult;
 import com.tradepass.dto.response.JoinResult;
 import com.tradepass.dto.response.PagePayload;
+import com.tradepass.dto.response.CertificationApplicationPayload;
+import com.tradepass.dto.response.RolePayload;
+import com.tradepass.service.CompanyCertificationService;
 import com.tradepass.service.CompanyService;
+import org.springframework.beans.factory.annotation.Autowired;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -27,19 +32,25 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api")
 public class CompanyController {
     private final CompanyService companyService;
+    private final CompanyCertificationService certificationService;
 
-    public CompanyController(CompanyService companyService) {
+    @Autowired
+    public CompanyController(CompanyService companyService, CompanyCertificationService certificationService) {
         this.companyService = companyService;
+        this.certificationService = certificationService;
+    }
+
+    CompanyController(CompanyService companyService) {
+        this(companyService, null);
     }
 
     @GetMapping("/companies/search")
-    public ApiResponse<List<CompanyProfile>> searchCompanies(@RequestParam String keyword) {
+    public ApiResponse<List<CompanySearchSummary>> searchCompanies(@RequestParam String keyword) {
         return ApiResponse.ok(companyService.searchCompanies(keyword));
     }
 
@@ -54,8 +65,11 @@ public class CompanyController {
     }
 
     @PostMapping("/companies/{id}/certifications")
-    public ApiResponse<CompanyProfile> submitCertification(@PathVariable String id) {
-        return ApiResponse.ok(companyService.submitCertification(id));
+    public ApiResponse<CertificationApplicationPayload> submitCertification(@PathVariable String id) {
+        if (certificationService == null) {
+            throw new IllegalStateException("企业认证服务未配置");
+        }
+        return ApiResponse.ok(certificationService.submit(id));
     }
 
     @PostMapping("/verifications/real-name")
@@ -116,12 +130,12 @@ public class CompanyController {
     }
 
     @GetMapping("/roles")
-    public ApiResponse<List<Map<String, Object>>> listRoles(@RequestParam String companyId) {
+    public ApiResponse<List<RolePayload>> listRoles(@RequestParam String companyId) {
         return ApiResponse.ok(companyService.listRoles(companyId));
     }
 
     @PostMapping("/roles")
-    public ApiResponse<Map<String, Object>> createRole(@Valid @RequestBody RoleRequest request) {
+    public ApiResponse<RolePayload> createRole(@Valid @RequestBody RoleRequest request) {
         return ApiResponse.ok(companyService.createRole(request));
     }
 

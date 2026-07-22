@@ -96,6 +96,7 @@ page { background: #f4f8fd; }
   flex-shrink: 0; font-size: 23rpx; font-weight: 700; height: 58rpx; justify-content: center; width: 58rpx;
 }
 .document-badge.delivery { background: #eaf1ff; color: #5c7be7; }
+.document-badge.logistics { background: #e9f8f0; color: #20a66a; }
 .document-info { flex: 1; margin-left: 14rpx; min-width: 0; }
 .document-no { color: #223247; font-size: 24rpx; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .document-meta { color: #95a1af; font-size: 19rpx; margin-top: 5rpx; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -103,6 +104,183 @@ page { background: #f4f8fd; }
 .document-actions view { padding: 12rpx 8rpx; }
 .document-actions view + view { border-left: 1rpx solid #e6edf5; }
 .list-section-title { color: #8290a2; font-size: 22rpx; margin: 22rpx 28rpx 12rpx; }
+
+/* ===== 销售单 / 送货单创建编辑器 ===== */
+.document-editor-page {
+  background: #f4f8fd;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  left: 0;
+  position: fixed;
+  right: 0;
+  top: 0;
+  z-index: 220;
+}
+
+.document-editor-header {
+  align-items: center;
+  background: #ffffff;
+  border-bottom: 1rpx solid #e4edf7;
+  box-sizing: border-box;
+  display: flex;
+  flex-shrink: 0;
+  justify-content: space-between;
+  min-height: 88rpx;
+  padding: 18rpx 28rpx;
+}
+
+.document-editor-title { color: #17283c; font-size: 32rpx; font-weight: 700; }
+.document-editor-close { color: #3498ff; font-size: 26rpx; min-width: 72rpx; }
+.document-editor-close.placeholder { visibility: hidden; }
+.document-editor-body { box-sizing: border-box; flex: 1; min-height: 0; padding: 24rpx; }
+
+.document-party-bar {
+  align-items: center;
+  background: linear-gradient(160deg, #3498ff, #45a8ff);
+  border-radius: 16rpx;
+  display: flex;
+  gap: 32rpx;
+  justify-content: center;
+  margin-bottom: 20rpx;
+  padding: 36rpx 40rpx;
+}
+.document-party-item { align-items: center; display: flex; flex-direction: column; }
+.document-party-avatar {
+  align-items: center; border-radius: 24rpx; color: #fff; display: flex; font-size: 40rpx;
+  font-weight: 700; height: 88rpx; justify-content: center; width: 88rpx;
+}
+.document-party-avatar.my { background: rgba(255,255,255,.18); }
+.document-party-avatar.counterparty { background: rgba(255,255,255,.28); }
+.document-party-name {
+  color: #fff; font-size: 26rpx; font-weight: 600; margin-top: 10rpx; max-width: 180rpx;
+  overflow: hidden; text-align: center; text-overflow: ellipsis; white-space: nowrap;
+}
+.document-party-tag {
+  background: rgba(255,255,255,.22); border-radius: 6rpx; color: #fff;
+  font-size: 20rpx; margin-top: 6rpx; padding: 2rpx 16rpx;
+}
+.document-party-vs image {
+  border: 2rpx solid rgba(255,255,255,.22); border-radius: 50%; height: 76rpx; width: 76rpx;
+}
+
+.document-edit-card {
+  background: #ffffff;
+  border-radius: 16rpx;
+  box-shadow: 0 1rpx 4rpx rgba(0,0,0,.03);
+  margin-bottom: 16rpx;
+  padding: 24rpx 28rpx;
+}
+
+.document-form-label { color: #999; font-size: 24rpx; margin-bottom: 12rpx; }
+.document-template-picker {
+  color: #3498ff;
+  font-size: 30rpx;
+  font-weight: 600;
+}
+.document-template-picker.placeholder { color: #a0aab6; }
+.document-name-input { color: #222; font-size: 30rpx; font-weight: 600; width: 100%; }
+.document-title-card { padding: 40rpx 28rpx; text-align: center; }
+.document-preview-title {
+  color: #162336; font-size: 40rpx; font-weight: 700; letter-spacing: 8rpx;
+  margin-bottom: 12rpx; overflow-wrap: anywhere;
+}
+.document-preview-no { color: #999; font-size: 24rpx; }
+.document-edit-section-title {
+  border-left: 6rpx solid #3498ff; color: #333; font-size: 28rpx; font-weight: 600;
+  margin-bottom: 16rpx; padding-left: 12rpx;
+}
+.document-field-row {
+  align-items: center; border-bottom: 1rpx solid #f0f0f0; display: flex; padding: 18rpx 0;
+}
+.document-field-row:last-child { border-bottom: 0; }
+.document-field-label { color: #666; flex-shrink: 0; font-size: 26rpx; width: 180rpx; }
+.document-field-input { color: #222; flex: 1; font-size: 28rpx; }
+.document-field-picker { flex: 1; }
+.document-field-value { color: #3498ff; font-size: 28rpx; }
+.document-edit-section-head {
+  align-items: flex-start; display: flex; justify-content: space-between;
+}
+.document-edit-hint { color: #9aa6b3; font-size: 19rpx; margin-top: 5rpx; }
+.document-row-add {
+  background: #eaf4ff; border: 1rpx dashed #3498ff; border-radius: 10rpx; color: #3498ff;
+  font-size: 26rpx; margin-top: 16rpx; padding: 14rpx; text-align: center;
+}
+.document-table-scroll { margin-top: 18rpx; width: 100%; }
+.document-edit-table { border-left: 1rpx solid #e0e8f1; border-top: 1rpx solid #e0e8f1; }
+.document-edit-table-row { display: flex; }
+.document-edit-cell {
+  align-items: center;
+  border-bottom: 1rpx solid #e0e8f1;
+  border-right: 1rpx solid #e0e8f1;
+  box-sizing: border-box;
+  display: flex;
+  flex: 0 0 190rpx;
+  justify-content: center;
+  min-height: 70rpx;
+  padding: 7rpx;
+}
+.document-edit-table-row.header .document-edit-cell {
+  background: #eaf4ff;
+  color: #3498ff;
+  font-size: 21rpx;
+  font-weight: 600;
+  min-height: 62rpx;
+  text-align: center;
+}
+.document-edit-cell.action { flex-basis: 78rpx; }
+.document-cell-input {
+  background: #fafafa;
+  border-radius: 6rpx;
+  box-sizing: border-box;
+  color: #333;
+  font-size: 24rpx;
+  min-height: 54rpx;
+  text-align: center;
+  width: 100%;
+}
+.document-row-delete {
+  align-items: center;
+  background: #fff0f1;
+  border-radius: 50%;
+  color: #db5865;
+  display: flex;
+  font-size: 25rpx;
+  height: 42rpx;
+  justify-content: center;
+  width: 42rpx;
+}
+.document-total-field {
+  align-items: center;
+  background: #fafafa;
+  border-radius: 10rpx;
+  display: flex;
+  margin-top: 20rpx;
+  padding: 20rpx;
+}
+.document-total-label { color: #666; font-size: 26rpx; width: 100rpx; }
+.document-total-value { color: #e53e3e; font-size: 30rpx; font-weight: 700; }
+.document-editor-empty { color: #8f9baa; font-size: 24rpx; padding: 110rpx 0; text-align: center; }
+.document-editor-empty-icon { color: #b7c5d5; font-size: 68rpx; margin-bottom: 14rpx; }
+.document-editor-safe { height: 140rpx; }
+.document-editor-actions {
+  background: #ffffff;
+  border-top: 1rpx solid #e1e9f2;
+  flex-shrink: 0;
+  padding: 20rpx 24rpx calc(20rpx + env(safe-area-inset-bottom));
+}
+.document-editor-button {
+  border: 0;
+  border-radius: 48rpx;
+  font-size: 32rpx;
+  font-weight: 600;
+  height: 96rpx;
+  line-height: 96rpx;
+  margin: 0;
+  width: 100%;
+}
+.document-editor-button::after { border: 0; }
+.document-editor-button.submit { background: linear-gradient(90deg,#3498ff,#45a8ff); color: #ffffff; }
 
 /* ===== 订单卡片 ===== */
 .order-card {

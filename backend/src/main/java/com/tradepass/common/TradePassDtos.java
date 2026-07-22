@@ -31,6 +31,15 @@ public final class TradePassDtos {
         }
     }
 
+    /** 企业搜索的最小响应，不包含法人、联系方式、开户地址或银行账号。 */
+    public record CompanySearchSummary(
+            String id,
+            String name,
+            String maskedCreditCode,
+            boolean verified
+    ) {
+    }
+
     /** 公司成员信息（角色 + 权限点 + 状态） */
     public record MemberInfo(String userId, String userName, String phone, String roleCode, String roleText, List<String> permissions, String memberStatus) {
     }
@@ -65,6 +74,7 @@ public final class TradePassDtos {
     public record UploadTokenPayload(String objectKey, String uploadUrl, String token, String expiresAt) {
     }
 
-    public record CounterpartyRelation(String id, String counterpartyName, String relationType, String status) {
+    public record CounterpartyRelation(String id, String counterpartyCompanyId, String counterpartyName,
+                                       String relationType, String status) {
     }
 }

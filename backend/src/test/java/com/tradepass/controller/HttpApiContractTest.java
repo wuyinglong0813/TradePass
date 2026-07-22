@@ -3,10 +3,14 @@ package com.tradepass.controller;
 import com.tradepass.common.BusinessException;
 import com.tradepass.common.GlobalExceptionHandler;
 import com.tradepass.common.TradePassDtos.CompanyProfile;
+import com.tradepass.common.TradePassDtos.CompanySearchSummary;
 import com.tradepass.common.TradePassDtos.LoginSession;
 import com.tradepass.common.TradePassDtos.UserProfile;
+import com.tradepass.config.AuthInterceptor;
+import com.tradepass.mapper.CompanyMemberMapper;
 import com.tradepass.dto.response.PagePayload;
 import com.tradepass.dto.response.TradeOrderPayload;
+import com.tradepass.service.AuthSessionService;
 import com.tradepass.service.AuthService;
 import com.tradepass.service.CompanyService;
 import com.tradepass.service.RankingService;
@@ -61,7 +65,7 @@ class HttpApiContractTest {
     }
 
     @Test
-    void wrapsSuccessfulLoginAndPublicCompanySearch() throws Exception {
+    void wrapsSuccessfulLoginAndMinimalCompanySearch() throws Exception {
         UserProfile profile = new UserProfile("7", "openid", "", "用户", null, "GUEST");
         when(authService.wechatLogin(org.mockito.ArgumentMatchers.any()))
                 .thenReturn(new LoginSession("token", profile));
@@ -73,12 +77,32 @@ class HttpApiContractTest {
                 .andExpect(jsonPath("$.data.token").value("token"))
                 .andExpect(jsonPath("$.data.user.currentRole").value("GUEST"));
 
-        CompanyProfile company = new CompanyProfile("3", "测试企业", "CODE", "法人",
-                "VERIFIED", "VERIFIED", "VERIFIED", "UPLOADED");
+        CompanySearchSummary company = new CompanySearchSummary(
+                "3", "测试企业", "9113**********4567", true);
         when(companyService.searchCompanies("测试")).thenReturn(List.of(company));
         mvc.perform(get("/api/companies/search").param("keyword", "测试"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data[0].name").value("测试企业"));
+                .andExpect(jsonPath("$.data[0].name").value("测试企业"))
+                .andExpect(jsonPath("$.data[0].maskedCreditCode").value("9113**********4567"))
+                .andExpect(jsonPath("$.data[0].verified").value(true))
+                .andExpect(jsonPath("$.data[0].legalPersonName").doesNotExist())
+                .andExpect(jsonPath("$.data[0].contactPhone").doesNotExist())
+                .andExpect(jsonPath("$.data[0].bankName").doesNotExist())
+                .andExpect(jsonPath("$.data[0].bankAccount").doesNotExist());
+    }
+
+    @Test
+    void companySearchRejectsMissingAuthenticationWhenInterceptorApplies() throws Exception {
+        AuthSessionService sessionService = mock(AuthSessionService.class);
+        CompanyMemberMapper memberMapper = mock(CompanyMemberMapper.class);
+        when(sessionService.resolveUserId(null)).thenReturn(null);
+        MockMvc protectedMvc = MockMvcBuilders.standaloneSetup(new CompanyController(companyService))
+                .addInterceptors(new AuthInterceptor(sessionService, memberMapper))
+                .build();
+
+        protectedMvc.perform(get("/api/companies/search").param("keyword", "测试"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value(401));
     }
 
     @Test

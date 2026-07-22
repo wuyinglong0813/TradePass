@@ -14,9 +14,13 @@ public class AuditLogService {
     }
 
     public void log(long companyId, String bizType, Object bizId, String action, String detail) {
+        logAs(companyId, AuthContext.userId(), bizType, bizId, action, detail);
+    }
+
+    public void logAs(long companyId, long userId, String bizType, Object bizId, String action, String detail) {
         AuditLog audit = new AuditLog();
         audit.setCompanyId(companyId);
-        audit.setUserId(AuthContext.userId());
+        audit.setUserId(userId);
         audit.setBizType(bizType);
         audit.setBizId(String.valueOf(bizId));
         audit.setAction(action);
