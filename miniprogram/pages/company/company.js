@@ -34,6 +34,7 @@ Page({
     member: {},
     canManage: false,
     canContractTemplate: false,
+    canInventory: false,
     memberCount: 0,
     roleCount: 0,
     templateCount: 0,
@@ -43,7 +44,6 @@ Page({
     todos: [],
     showJoinModal: false,
     joinCode: '',
-    showInventoryModal: false,
     showCompanySwitcher: false,
     switchingCompanyId: ''
   },
@@ -75,6 +75,7 @@ Page({
       const certStatus = company.certificationStatus || '';
       const permissions = member.permissions || [];
       const canContractTemplate = canManage && (permissions.includes('all') || permissions.includes('contract_template') || hasPerm('contract_template'));
+      const canInventory = permissions.includes('all') || permissions.includes('inventory_view') || hasPerm('inventory_view');
       const currentCompanyId = (payload.user && payload.user.currentCompanyId) || '';
       const companyItems = companies.map(item => ({ ...item, initial: companyAbbr(item.companyName) }));
 
@@ -84,6 +85,7 @@ Page({
         companyAbbr: companyAbbr(company.name),
         maskedCreditCode: maskCreditCode(company.creditCode),
         canContractTemplate,
+        canInventory,
         certBadge: dict.certification(certStatus),
         certCompleted: certStatus === 'VERIFIED',
         member,
@@ -183,10 +185,7 @@ Page({
   goRoleManage() { wx.navigateTo({ url: '/pages/role-manage/role-manage' }); },
   goContractTemplate() { wx.navigateTo({ url: '/pages/contract-template/contract-template' }); },
   goDocumentTemplate() { wx.navigateTo({ url: '/pages/document-template/document-template' }); },
-  goInventory() {
-    this.setData({ showInventoryModal: true });
-  },
-  closeInventoryModal() { this.setData({ showInventoryModal: false }); },
+  goInventory() { wx.navigateTo({ url: '/pages/inventory/inventory' }); },
 
   openJoin() { this.setData({ showCompanySwitcher: false, showJoinModal: true, joinCode: '' }); },
   closeJoin() { this.setData({ showJoinModal: false }); },

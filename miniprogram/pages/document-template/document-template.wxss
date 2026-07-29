@@ -7,7 +7,7 @@ page { background: #f4f8fd; }
 }
 .hero-title { font-size: 35rpx; font-weight: 700; }
 .hero-desc { color: rgba(255,255,255,.78); font-size: 22rpx; margin-top: 8rpx; }
-.upload-grid { display: grid; gap: 16rpx; grid-template-columns: 1fr 1fr; margin-top: 28rpx; }
+.upload-grid { margin-top: 28rpx; }
 .upload-btn {
   border-radius: 20rpx; font-size: 25rpx; font-weight: 600; height: 78rpx;
   line-height: 78rpx; margin: 0; padding: 0;
@@ -17,7 +17,7 @@ page { background: #f4f8fd; }
 .upload-btn.secondary { background: rgba(255,255,255,.16); border: 1rpx solid rgba(255,255,255,.38); color: #fff; }
 .type-tabs {
   background: #fff; border-bottom: 1rpx solid #e5edf6; display: grid;
-  grid-template-columns: 1fr 1fr; padding: 0 24rpx;
+  grid-template-columns: 1fr; padding: 0 24rpx;
 }
 .type-tab { color: #7e8b9b; font-size: 26rpx; padding: 25rpx 0 21rpx; position: relative; text-align: center; }
 .type-tab.active { color: #3498ff; font-weight: 700; }

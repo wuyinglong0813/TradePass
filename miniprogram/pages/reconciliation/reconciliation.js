@@ -1,90 +1,170 @@
 const { request } = require('../../utils/request');
 
+function currentPeriod() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
 Page({
   data: {
     counterpartyName: '',
+    counterpartyCompanyId: '',
     isGlobal: false,
     role: 'supplier',
-    pageTitle: '应收对账',
+    pageTitle: '客户对账',
     loading: false,
-    page: 1,
-    size: 20,
-    hasMore: false,
-    overview: {
-      totalSales: 0,
-      totalInvoiced: 0,
-      matched: 0,
-      unmatched: 0
-    },
-    items: []
+    uploading: false,
+    statementPeriod: currentPeriod(),
+    statements: []
   },
 
   onLoad(options) {
     const name = decodeURIComponent(options.counterpartyName || '');
+    const counterpartyCompanyId = decodeURIComponent(options.counterpartyCompanyId || '');
     const role = options.role === 'buyer' ? 'buyer' : 'supplier';
     this.setData({
       counterpartyName: name,
-      isGlobal: !name,
+      counterpartyCompanyId,
+      isGlobal: !counterpartyCompanyId,
       role,
-      pageTitle: role === 'buyer' ? '应付对账' : '应收对账'
+      pageTitle: role === 'buyer' ? '供应商对账' : '客户对账'
     });
-    wx.setNavigationBarTitle({ title: name ? '对账情况' : '对账中心' });
-    this.loadData(true);
+    wx.setNavigationBarTitle({ title: counterpartyCompanyId ? '对账情况' : '对账中心' });
+    this.loadStatements();
   },
 
-  onReachBottom() {
-    if (this.data.hasMore && !this.data.loading) this.loadData(false);
+  onPullDownRefresh() {
+    this.loadStatements().finally(() => wx.stopPullDownRefresh());
   },
 
-  async loadData(reset = true) {
+  formatFileSize(size) {
+    const bytes = Number(size || 0);
+    if (bytes < 1024) return `${bytes}B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
+    return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
+  },
+
+  async loadStatements() {
+    if (this.data.loading) return;
     this.setData({ loading: true });
     try {
-      const page = reset ? 1 : this.data.page + 1;
-      const direction = this.data.role === 'buyer' ? 'PURCHASE' : 'SALE';
-      const counterpartyQuery = this.data.counterpartyName
-        ? `&counterpartyName=${encodeURIComponent(this.data.counterpartyName)}`
+      const query = this.data.counterpartyCompanyId
+        ? `?counterpartyCompanyId=${encodeURIComponent(this.data.counterpartyCompanyId)}`
         : '';
-      const [payload, summaryPayload] = await Promise.all([
-        request({ url: `/orders?page=${page}&size=${this.data.size}&direction=${direction}${counterpartyQuery}` }),
-        reset
-          ? request({ url: `/orders/summary?direction=${direction}${counterpartyQuery}` })
-          : Promise.resolve(null)
-      ]);
-      const orders = Array.isArray(payload) ? payload : (payload.items || []);
-      const nextItems = (orders || []).map(order => ({
-        id: order.id,
-        counterpartyName: order.counterpartyName,
-        orderNo: order.orderNo || '—',
-        salesAmount: Number(order.amount || 0).toFixed(2),
-        invoiceNo: '发票数据未接入',
-        invoiceAmount: '—',
-        status: 'SOURCE_PENDING',
-        statusText: '发票待接入',
-        diff: null
-      }));
-      const items = reset ? nextItems : this.data.items.concat(nextItems);
-      const loadedTotal = items.reduce((sum, order) => sum + Number(order.salesAmount || 0), 0);
-      const total = summaryPayload ? Number(summaryPayload.amount || 0) : loadedTotal;
+      const list = await request({ url: `/reconciliation-statements${query}` });
       this.setData({
-        overview: reset ? {
-          totalSales: total.toFixed(2),
-          totalInvoiced: '—',
-          matched: '—',
-          unmatched: '—'
-        } : this.data.overview,
-        items,
-        page,
-        hasMore: !!payload.hasMore
+        statements: (list || []).map(item => ({
+          ...item,
+          fileSizeText: this.formatFileSize(item.fileSize),
+          dateText: String(item.createdAt || '').replace('T', ' ').slice(0, 16)
+        }))
       });
     } catch (error) {
-      this.setData({ items: [] });
-      wx.showToast({ title: error.message || '订单数据加载失败', icon: 'none' });
+      wx.showToast({ title: error.message || '对账单加载失败', icon: 'none' });
     } finally {
       this.setData({ loading: false });
     }
   },
 
-  onItemTap() {
-    wx.showToast({ title: '发票数据源接入后可进行逐笔核对', icon: 'none' });
+  onPeriodChange(e) {
+    this.setData({ statementPeriod: e.detail.value });
+  },
+
+  chooseStatement() {
+    if (!this.data.counterpartyCompanyId) {
+      wx.showToast({ title: '请从具体合作企业进入后上传', icon: 'none' });
+      return;
+    }
+    if (this.data.uploading) return;
+    wx.chooseMessageFile({
+      count: 1,
+      type: 'file',
+      extension: ['xlsx'],
+      success: result => {
+        const file = result.tempFiles && result.tempFiles[0];
+        if (!file || !file.path) return;
+        if (file.size && file.size > 10 * 1024 * 1024) {
+          wx.showToast({ title: '对账单不能超过10MB', icon: 'none' });
+          return;
+        }
+        this.uploadStatement(file);
+      }
+    });
+  },
+
+  uploadStatement(file) {
+    const app = getApp();
+    const token = app.globalData.token || wx.getStorageSync('tradepass_token') || '';
+    const companyId = app.globalData.currentCompanyId || wx.getStorageSync('tradepass_company_id') || '';
+    const header = {};
+    if (token) header.Authorization = token;
+    if (companyId) header['X-Company-Id'] = String(companyId);
+    this.setData({ uploading: true });
+    wx.showLoading({ title: '上传Excel中...' });
+    wx.uploadFile({
+      url: `${app.globalData.baseUrl}/reconciliation-statements`,
+      filePath: file.path,
+      name: 'file',
+      formData: {
+        counterpartyCompanyId: this.data.counterpartyCompanyId,
+        period: this.data.statementPeriod,
+        originalName: file.name || `客户对账单-${this.data.statementPeriod}.xlsx`
+      },
+      header,
+      timeout: 30000,
+      success: response => {
+        let body = null;
+        try { body = JSON.parse(response.data || '{}'); } catch (error) { /* 统一提示 */ }
+        if (response.statusCode >= 200 && response.statusCode < 300 && body && body.code === 0) {
+          wx.showToast({ title: '对账单已上传', icon: 'success' });
+          this.loadStatements();
+          return;
+        }
+        wx.showToast({ title: (body && body.message) || '上传失败', icon: 'none' });
+      },
+      fail: error => wx.showToast({ title: error.errMsg || '上传失败', icon: 'none' }),
+      complete: () => {
+        wx.hideLoading();
+        this.setData({ uploading: false });
+      }
+    });
+  },
+
+  viewStatement(e) {
+    this.downloadStatementFile(e.currentTarget.dataset.statement, false);
+  },
+
+  downloadStatement(e) {
+    this.downloadStatementFile(e.currentTarget.dataset.statement, true);
+  },
+
+  downloadStatementFile(statement, download) {
+    if (!statement || !statement.id) return;
+    const app = getApp();
+    const token = app.globalData.token || wx.getStorageSync('tradepass_token') || '';
+    const companyId = app.globalData.currentCompanyId || wx.getStorageSync('tradepass_company_id') || '';
+    const header = {};
+    if (token) header.Authorization = token;
+    if (companyId) header['X-Company-Id'] = String(companyId);
+    wx.showLoading({ title: download ? '下载中...' : '打开Excel中...' });
+    wx.downloadFile({
+      url: `${app.globalData.baseUrl}/reconciliation-statements/${statement.id}/content?download=${download}`,
+      header,
+      timeout: 30000,
+      success: response => {
+        if (response.statusCode !== 200) {
+          wx.showToast({ title: `文件获取失败（${response.statusCode}）`, icon: 'none' });
+          return;
+        }
+        wx.openDocument({
+          filePath: response.filePath || response.tempFilePath,
+          fileType: 'xlsx',
+          showMenu: true,
+          fail: () => wx.showToast({ title: 'Excel打开失败', icon: 'none' })
+        });
+      },
+      fail: error => wx.showToast({ title: error.errMsg || '文件获取失败', icon: 'none' }),
+      complete: () => wx.hideLoading()
+    });
   }
 });

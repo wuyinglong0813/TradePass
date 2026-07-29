@@ -76,8 +76,11 @@ class BusinessDocumentServiceTest {
         TradeContract contract = new TradeContract();
         contract.setId(21L);
         contract.setCompanyId(3L);
+        contract.setCounterpartyCompanyId(4L);
         contract.setCounterpartyName("原往来单位");
         contract.setContractNo("HT-21");
+        contract.setDirection("SALE");
+        contract.setStatus("ACTIVE");
         contract.setAmount(new BigDecimal("99.00"));
         contract.setTerms("{\"sections\":[]}");
         when(contractMapper.selectById(21L)).thenReturn(contract);
@@ -117,6 +120,9 @@ class BusinessDocumentServiceTest {
         assertThat(result).containsEntry("id", 31L).containsEntry("templateName", "标准销售单");
         BusinessDocument document = inserted.get();
         assertThat(document.getTemplateId()).isEqualTo(11L);
+        assertThat(document.getRecipientCompanyId()).isEqualTo(4L);
+        assertThat(document.getStatus()).isEqualTo("ISSUED");
+        assertThat(document.getSourceType()).isEqualTo("TEMPLATE");
         JsonNode content = objectMapper.readTree(document.getContent());
         assertThat(content.path("title").asText()).isEqualTo("七月销售单");
         assertThat(content.path("companyName").asText()).isEqualTo("河北测试公司");
@@ -124,5 +130,90 @@ class BusinessDocumentServiceTest {
         assertThat(content.path("rows").get(0).get(1).asText()).isEqualTo("测试商品");
         assertThat(content.path("totalAmount").asText()).isEqualTo("88.5");
         assertThat(content.path("templateName").asText()).isEqualTo("标准销售单");
+    }
+
+    @Test
+    void pendingContractCreatesSupplierOnlyDraft() {
+        BusinessDocumentTemplate template = new BusinessDocumentTemplate();
+        template.setId(11L);
+        template.setCompanyId(3L);
+        template.setDocumentType(BusinessDocumentService.SALES_ORDER);
+        template.setName("标准销售单");
+        template.setContent("{\"columns\":[\"序号\",\"品名\",\"数量\",\"金额\"],\"blankRows\":8}");
+        when(templateMapper.selectOne(any())).thenReturn(template);
+
+        TradeContract contract = new TradeContract();
+        contract.setId(22L);
+        contract.setCompanyId(3L);
+        contract.setCounterpartyCompanyId(4L);
+        contract.setCounterpartyName("采购企业");
+        contract.setDirection("SALE");
+        contract.setStatus("PENDING");
+        contract.setAmount(new BigDecimal("20.00"));
+        contract.setTerms("{\"sections\":[{\"type\":\"table\",\"columns\":[\"品名\",\"数量\",\"金额\"],\"rows\":[[\"商品A\",\"2\",\"20\"]]}]}");
+        when(contractMapper.selectById(22L)).thenReturn(contract);
+
+        Company company = new Company();
+        company.setId(3L);
+        company.setName("供应企业");
+        when(companyMapper.selectById(3L)).thenReturn(company);
+
+        AtomicReference<BusinessDocument> inserted = new AtomicReference<>();
+        doAnswer(invocation -> {
+            BusinessDocument document = invocation.getArgument(0);
+            document.setId(32L);
+            inserted.set(document);
+            return 1;
+        }).when(documentMapper).insert(any(BusinessDocument.class));
+        when(documentMapper.selectById(32L)).thenAnswer(invocation -> inserted.get());
+
+        Map<String, Object> result = service.createDocument(22L, Map.of(
+                "documentType", BusinessDocumentService.SALES_ORDER,
+                "templateId", 11L
+        ));
+
+        assertThat(inserted.get().getStatus()).isEqualTo("DRAFT");
+        assertThat(result).containsEntry("statusText", "草稿")
+                .containsEntry("canEditDraft", true)
+                .containsEntry("canPublish", false);
+    }
+
+    @Test
+    void supplierCanEditAndPublishDraftAfterContractBecomesActive() throws Exception {
+        TradeContract contract = new TradeContract();
+        contract.setId(23L);
+        contract.setCompanyId(3L);
+        contract.setCounterpartyCompanyId(4L);
+        contract.setDirection("SALE");
+        contract.setStatus("ACTIVE");
+        when(contractMapper.selectById(23L)).thenReturn(contract);
+
+        BusinessDocument draft = new BusinessDocument();
+        draft.setId(33L);
+        draft.setCompanyId(3L);
+        draft.setRecipientCompanyId(4L);
+        draft.setContractId(23L);
+        draft.setDocumentType(BusinessDocumentService.SALES_ORDER);
+        draft.setStatus("DRAFT");
+        draft.setDocumentNo("XS-DRAFT-33");
+        draft.setTemplateId(11L);
+        draft.setTemplateName("标准销售单");
+        draft.setContent("{\"title\":\"销售单\",\"columns\":[\"品名\",\"数量\",\"金额\"],\"rows\":[[\"商品A\",\"1\",\"10\"]],\"blankRows\":8}");
+        when(documentMapper.selectById(33L)).thenReturn(draft);
+
+        Map<String, Object> edited = service.updateDraft(33L, Map.of("content", Map.of(
+                "title", "已修改草稿",
+                "columns", List.of("品名", "数量", "金额"),
+                "rows", List.of(List.of("商品A", "2", "20")),
+                "blankRows", 8,
+                "totalAmount", "20"
+        )));
+        assertThat(edited).containsEntry("canPublish", true);
+        assertThat(objectMapper.readTree(draft.getContent()).path("title").asText()).isEqualTo("已修改草稿");
+
+        Map<String, Object> published = service.publishDraft(33L);
+        assertThat(draft.getStatus()).isEqualTo("ISSUED");
+        assertThat(published).containsEntry("statusText", "已发布")
+                .containsEntry("canPublish", false);
     }
 }

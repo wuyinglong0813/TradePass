@@ -213,7 +213,7 @@ Page({
         break;
       case 'reconciliation':
         wx.navigateTo({
-          url: `/pages/reconciliation/reconciliation?counterpartyName=${encodeURIComponent(name)}&role=${this.data.role}`
+          url: `/pages/reconciliation/reconciliation?counterpartyName=${encodeURIComponent(name)}&counterpartyCompanyId=${encodeURIComponent(this.data.counterpartyCompanyId)}&role=${this.data.role}`
         });
         break;
     }

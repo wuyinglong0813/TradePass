@@ -1,0 +1,109 @@
+package com.tradepass.service;
+
+import com.tradepass.common.AuthContext;
+import com.tradepass.common.BusinessException;
+import com.tradepass.entity.BusinessDocument;
+import com.tradepass.entity.TradeContract;
+import com.tradepass.mapper.BusinessDocumentMapper;
+import com.tradepass.mapper.TradeContractMapper;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+
+@Service
+public class PersonalMemoService {
+    public static final String CONTRACT = "CONTRACT";
+    public static final String SALES_ORDER = "SALES_ORDER";
+
+    private final JdbcTemplate jdbc;
+    private final TradeContractMapper contractMapper;
+    private final BusinessDocumentMapper documentMapper;
+    private final AccessControlService accessControlService;
+    private final AuditLogService auditLogService;
+
+    public PersonalMemoService(JdbcTemplate jdbc,
+                               TradeContractMapper contractMapper,
+                               BusinessDocumentMapper documentMapper,
+                               AccessControlService accessControlService,
+                               AuditLogService auditLogService) {
+        this.jdbc = jdbc;
+        this.contractMapper = contractMapper;
+        this.documentMapper = documentMapper;
+        this.accessControlService = accessControlService;
+        this.auditLogService = auditLogService;
+    }
+
+    public Map<String, Object> get(String type, Long bizId) {
+        AccessTarget target = requireTarget(type, bizId);
+        List<Map<String, Object>> rows = jdbc.query("""
+                        SELECT content, updated_at FROM business_memo
+                        WHERE company_id = ? AND user_id = ? AND biz_type = ? AND biz_id = ?
+                        """, (rs, rowNum) -> {
+                    Map<String, Object> view = new LinkedHashMap<>();
+                    view.put("content", rs.getString("content"));
+                    view.put("updatedAt", rs.getTimestamp("updated_at").toLocalDateTime());
+                    return view;
+                }, target.companyId(), AuthContext.userId(), target.type(), bizId);
+        if (!rows.isEmpty()) return rows.get(0);
+        Map<String, Object> empty = new LinkedHashMap<>();
+        empty.put("content", "");
+        empty.put("updatedAt", null);
+        return empty;
+    }
+
+    @Transactional
+    public Map<String, Object> save(String type, Long bizId, String content) {
+        AccessTarget target = requireTarget(type, bizId);
+        String value = content == null ? "" : content.trim();
+        if (value.length() > 4000) throw new BusinessException("备忘录不能超过 4000 字");
+        jdbc.update("""
+                INSERT INTO business_memo (company_id, user_id, biz_type, biz_id, content)
+                VALUES (?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE content = VALUES(content), updated_at = CURRENT_TIMESTAMP
+                """, target.companyId(), AuthContext.userId(), target.type(), bizId, value);
+        auditLogService.log(target.companyId(), "PERSONAL_MEMO", target.type() + ":" + bizId,
+                "UPDATE", "更新个人进展备忘录");
+        return get(target.type(), bizId);
+    }
+
+    private AccessTarget requireTarget(String type, Long bizId) {
+        long companyId = AuthContext.requireCompanyId();
+        accessControlService.requireAnyPermission(companyId,
+                "contract_view", "contract_sign", "order_create", "sales_order_receive");
+        String normalized = type == null ? "" : type.trim().toUpperCase(Locale.ROOT);
+        if (CONTRACT.equals(normalized)) {
+            TradeContract contract = contractMapper.selectById(bizId);
+            requireContractParty(contract, companyId);
+            return new AccessTarget(companyId, CONTRACT);
+        }
+        if (SALES_ORDER.equals(normalized)) {
+            BusinessDocument document = documentMapper.selectById(bizId);
+            if (document == null || !"SALES_ORDER".equals(document.getDocumentType())) {
+                throw new BusinessException("销售单不存在");
+            }
+            TradeContract contract = contractMapper.selectById(document.getContractId());
+            requireContractParty(contract, companyId);
+            if ("DRAFT".equals(document.getStatus())
+                    && !Long.valueOf(companyId).equals(document.getCompanyId())) {
+                throw new BusinessException("销售单不存在");
+            }
+            return new AccessTarget(companyId, SALES_ORDER);
+        }
+        throw new BusinessException("备忘录类型不正确");
+    }
+
+    private void requireContractParty(TradeContract contract, long companyId) {
+        if (contract == null || (!Long.valueOf(companyId).equals(contract.getCompanyId())
+                && !Long.valueOf(companyId).equals(contract.getCounterpartyCompanyId()))) {
+            throw new BusinessException("合同不存在");
+        }
+    }
+
+    private record AccessTarget(long companyId, String type) {
+    }
+}

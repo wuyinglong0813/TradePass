@@ -1,0 +1,278 @@
+package com.tradepass.service;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.tradepass.common.AuthContext;
+import com.tradepass.common.BusinessException;
+import com.tradepass.entity.BusinessDocument;
+import com.tradepass.entity.TradeContract;
+import com.tradepass.mapper.BusinessDocumentMapper;
+import com.tradepass.mapper.TradeContractMapper;
+import com.tradepass.support.MybatisTestSupport;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.ResultSetExtractor;
+import org.springframework.jdbc.core.RowMapper;
+
+import java.math.BigDecimal;
+import java.util.List;
+import java.util.Map;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+class SalesOrderInventoryServiceTest {
+    private JdbcTemplate jdbc;
+    private BusinessDocumentMapper documentMapper;
+    private TradeContractMapper contractMapper;
+    private AccessControlService accessControlService;
+    private SalesOrderInventoryService service;
+    private BusinessDocument document;
+    private TradeContract contract;
+    private Map<String, Object> item;
+
+    @BeforeEach
+    void setUp() {
+        MybatisTestSupport.initialize(BusinessDocument.class, TradeContract.class);
+        jdbc = mock(JdbcTemplate.class);
+        documentMapper = mock(BusinessDocumentMapper.class);
+        contractMapper = mock(TradeContractMapper.class);
+        accessControlService = mock(AccessControlService.class);
+        when(accessControlService.hasPermission(4L, "sales_order_receive")).thenReturn(true);
+        when(accessControlService.hasPermission(4L, "inventory_receive")).thenReturn(true);
+        service = new SalesOrderInventoryService(jdbc, documentMapper, contractMapper,
+                accessControlService, mock(AuditLogService.class), new ObjectMapper());
+
+        document = new BusinessDocument();
+        document.setId(31L);
+        document.setCompanyId(3L);
+        document.setRecipientCompanyId(4L);
+        document.setContractId(12L);
+        document.setDocumentType("SALES_ORDER");
+        document.setDocumentNo("XS-31");
+        document.setTemplateName("标准销售单");
+        document.setSourceType("CONTRACT_DEFAULT");
+        document.setStatus("ISSUED");
+        document.setContent("""
+                {"title":"销售单","columns":["序号","品名","规格","单位","数量","单价","金额","备注"],
+                 "rows":[["1","商品A","A-1","件","2","3.5","7",""]]}
+                """);
+        when(documentMapper.selectById(31L)).thenReturn(document);
+
+        contract = new TradeContract();
+        contract.setId(12L);
+        contract.setCompanyId(3L);
+        contract.setCounterpartyCompanyId(4L);
+        when(contractMapper.selectById(12L)).thenReturn(contract);
+
+        item = Map.of(
+                "id", 41L,
+                "lineNo", 1,
+                "productName", "商品A",
+                "specification", "A-1",
+                "baseUnit", "件",
+                "quantity", new BigDecimal("2.0000"),
+                "unitPrice", new BigDecimal("3.500000"),
+                "amount", new BigDecimal("7.00"),
+                "remark", ""
+        );
+        AuthContext.set(8L, 4L);
+    }
+
+    @AfterEach
+    void clearContext() {
+        AuthContext.clear();
+    }
+
+    @Test
+    void snapshotsStructuredItemsAndValidatesProductRows() {
+        service.saveDocumentItems(document);
+        verify(jdbc, atLeastOnce()).update(anyString(), any(Object[].class));
+
+        BusinessDocument calculated = copyDocument();
+        calculated.setContent("""
+                {"columns":["产品名称","数量","单价","备注"],
+                 "rows":[["商品B","3","2.25","自动计算"],["","0","0",""]]}
+                """);
+        service.saveDocumentItems(calculated);
+
+        BusinessDocument invalid = copyDocument();
+        invalid.setContent("{" +
+                "\"columns\":[\"品名\",\"数量\"],\"rows\":[[\"\",\"2\"]]}" );
+        assertThatThrownBy(() -> service.saveDocumentItems(invalid))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("销售单商品名称不能为空");
+
+        invalid.setContent("{\"columns\":[\"品名\",\"数量\"],\"rows\":[[\"商品\",\"0\"]]}");
+        assertThatThrownBy(() -> service.saveDocumentItems(invalid))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("销售单商品数量必须大于 0");
+
+        invalid.setContent("bad-json");
+        assertThatThrownBy(() -> service.saveDocumentItems(invalid))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("销售单商品明细格式不正确");
+
+        BusinessDocument noRecipient = copyDocument();
+        noRecipient.setRecipientCompanyId(null);
+        service.saveDocumentItems(noRecipient);
+    }
+
+    @Test
+    void exposesSharedSalesOrderDetailAndStateFlags() {
+        doReturn(List.of(item)).when(jdbc).query(anyString(), any(RowMapper.class), any(Object[].class));
+
+        Map<String, Object> detail = service.documentDetail(31L);
+        assertThat(detail).containsEntry("statusText", "已发布")
+                .containsEntry("canReceive", true)
+                .containsEntry("canInbound", true);
+        assertThat((List<?>) detail.get("items")).hasSize(1);
+
+        document.setStatus("ACKNOWLEDGED");
+        detail = service.documentDetail(31L);
+        assertThat(detail).containsEntry("statusText", "已接收待入库")
+                .containsEntry("canReceive", false)
+                .containsEntry("canInbound", true);
+
+        document.setStatus("INBOUNDED");
+        assertThat(service.documentDetail(31L)).containsEntry("statusText", "已入库");
+
+        document.setContent("bad-json");
+        assertThat(service.documentDetail(31L).get("content")).isEqualTo(Map.of());
+    }
+
+    @Test
+    void rejectsMissingNonSalesAndForeignDocuments() {
+        when(documentMapper.selectById(99L)).thenReturn(null);
+        assertThatThrownBy(() -> service.documentDetail(99L))
+                .isInstanceOf(BusinessException.class).hasMessage("销售单不存在");
+
+        BusinessDocument other = copyDocument();
+        other.setDocumentType("OTHER");
+        when(documentMapper.selectById(98L)).thenReturn(other);
+        assertThatThrownBy(() -> service.documentDetail(98L))
+                .isInstanceOf(BusinessException.class).hasMessage("销售单不存在");
+
+        AuthContext.set(9L, 6L);
+        assertThatThrownBy(() -> service.documentDetail(31L))
+                .isInstanceOf(BusinessException.class).hasMessage("销售单不存在");
+    }
+
+    @Test
+    void draftIsVisibleToSupplierOnlyAndCannotBeReceived() {
+        document.setStatus("DRAFT");
+        contract.setStatus("PENDING");
+
+        assertThatThrownBy(() -> service.documentDetail(31L))
+                .isInstanceOf(BusinessException.class).hasMessage("销售单不存在");
+        assertThatThrownBy(() -> service.receive(31L, "RECEIVE_ONLY", null))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("销售单尚未发布，不能接收或入库");
+
+        AuthContext.set(9L, 3L);
+        doReturn(List.of(item)).when(jdbc).query(anyString(), any(RowMapper.class), any(Object[].class));
+        assertThat(service.documentDetail(31L))
+                .containsEntry("statusText", "草稿")
+                .containsEntry("canEditDraft", true)
+                .containsEntry("canPublish", false);
+    }
+
+    @Test
+    void listsInventoryAndCreatesWarehouse() {
+        Map<String, Object> warehouse = Map.of("id", 55L, "name", "一号仓");
+        Map<String, Object> balance = Map.of("id", 66L, "productName", "商品A");
+        doReturn(List.of(warehouse), List.of(balance), List.of(warehouse))
+                .when(jdbc).query(anyString(), any(RowMapper.class), any(Object[].class));
+        when(jdbc.queryForObject(anyString(), eq(Long.class), any(Object[].class))).thenReturn(1L);
+        when(jdbc.queryForObject(anyString(), eq(Long.class))).thenReturn(55L);
+
+        assertThat(service.listWarehouses()).containsExactly(warehouse);
+        Map<String, Object> overview = service.inventoryOverview();
+        assertThat(overview).containsEntry("warehouseCount", 1L).containsEntry("productCount", 1);
+        assertThat(service.createWarehouse(" 一号仓 ", " 河北 ")).containsEntry("id", 55L);
+
+        assertThatThrownBy(() -> service.createWarehouse("", ""))
+                .isInstanceOf(BusinessException.class).hasMessageContaining("仓库名称不能为空");
+        assertThatThrownBy(() -> service.createWarehouse("仓", "x".repeat(257)))
+                .isInstanceOf(BusinessException.class).hasMessage("仓库地址不能超过 256 字");
+    }
+
+    @Test
+    void reportsDuplicateWarehouseName() {
+        doThrow(new DuplicateKeyException("duplicate"))
+                .when(jdbc).update(anyString(), any(Object[].class));
+        assertThatThrownBy(() -> service.createWarehouse("重复仓", ""))
+                .isInstanceOf(BusinessException.class).hasMessage("仓库名称已存在");
+    }
+
+    @Test
+    void receivesSalesOrderWithoutChangingInventory() {
+        document.setStatus("ISSUED");
+        doReturn(null).when(jdbc).query(anyString(), any(ResultSetExtractor.class), any(Object[].class));
+        doReturn(List.of(item)).when(jdbc).query(anyString(), any(RowMapper.class), any(Object[].class));
+        when(jdbc.queryForObject(anyString(), eq(Long.class))).thenReturn(60L);
+
+        Map<String, Object> result = service.receive(31L, "receive_only", null);
+        assertThat(result).containsEntry("status", "ACKNOWLEDGED")
+                .containsEntry("canInbound", true);
+        assertThat(document.getAcknowledgedBy()).isEqualTo(8L);
+
+        assertThatThrownBy(() -> service.receive(31L, "bad", null))
+                .isInstanceOf(BusinessException.class).hasMessage("接收方式不正确");
+    }
+
+    @Test
+    void receivesAndInboundsEverySalesItemExactlyOnce() {
+        document.setStatus("ISSUED");
+        doReturn((Object) null).when(jdbc)
+                .query(anyString(), any(ResultSetExtractor.class), any(Object[].class));
+        doReturn(List.of(item), List.of(), List.of(item)).when(jdbc)
+                .query(anyString(), any(RowMapper.class), any(Object[].class));
+        when(jdbc.queryForObject(anyString(), eq(Long.class))).thenReturn(60L, 70L, 80L);
+        when(jdbc.queryForObject(anyString(), eq(Long.class), any(Object[].class))).thenReturn(1L);
+        when(jdbc.queryForObject(anyString(), eq(BigDecimal.class), any(Object[].class)))
+                .thenReturn(new BigDecimal("2.0000"));
+
+        Map<String, Object> result = service.receive(31L, "INBOUND", 55L);
+        assertThat(result).containsEntry("status", "INBOUNDED")
+                .containsEntry("canInbound", false);
+        verify(accessControlService).requirePermission(4L, "inventory_receive");
+    }
+
+    @Test
+    void rejectsWrongRecipientAndMissingWarehouse() {
+        AuthContext.set(9L, 3L);
+        assertThatThrownBy(() -> service.receive(31L, "RECEIVE_ONLY", null))
+                .isInstanceOf(BusinessException.class).hasMessage("待接收销售单不存在");
+
+        AuthContext.set(8L, 4L);
+        doReturn(null).when(jdbc).query(anyString(), any(ResultSetExtractor.class), any(Object[].class));
+        when(jdbc.queryForObject(anyString(), eq(Long.class))).thenReturn(60L);
+        assertThatThrownBy(() -> service.receive(31L, "INBOUND", null))
+                .isInstanceOf(BusinessException.class).hasMessage("请选择入库仓库");
+    }
+
+    private BusinessDocument copyDocument() {
+        BusinessDocument copy = new BusinessDocument();
+        copy.setId(document.getId());
+        copy.setCompanyId(document.getCompanyId());
+        copy.setRecipientCompanyId(document.getRecipientCompanyId());
+        copy.setContractId(document.getContractId());
+        copy.setDocumentType(document.getDocumentType());
+        copy.setDocumentNo(document.getDocumentNo());
+        copy.setStatus(document.getStatus());
+        copy.setContent(document.getContent());
+        return copy;
+    }
+}

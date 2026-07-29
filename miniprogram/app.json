@@ -14,6 +14,8 @@
     "pages/contract-template/contract-template",
     "pages/contract-template-detail/contract-template-detail",
     "pages/document-template/document-template",
+    "pages/sales-order-detail/sales-order-detail",
+    "pages/inventory/inventory",
     "pages/sign-contract/sign-contract",
     "pages/reconciliation/reconciliation",
     "pages/contract-approval/contract-approval",

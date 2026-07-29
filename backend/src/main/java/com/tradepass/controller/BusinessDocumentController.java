@@ -59,6 +59,17 @@ public class BusinessDocumentController {
         return ApiResponse.ok(businessDocumentService.createDocument(contractId, body));
     }
 
+    @PostMapping("/trade-documents/{id}/draft")
+    public ApiResponse<Map<String, Object>> updateDraft(@PathVariable Long id,
+                                                        @RequestBody Map<String, Object> body) {
+        return ApiResponse.ok(businessDocumentService.updateDraft(id, body));
+    }
+
+    @PostMapping("/trade-documents/{id}/publish")
+    public ApiResponse<Map<String, Object>> publishDraft(@PathVariable Long id) {
+        return ApiResponse.ok(businessDocumentService.publishDraft(id));
+    }
+
     @GetMapping(value = "/trade-documents/{id}/pdf", produces = MediaType.APPLICATION_PDF_VALUE)
     public ResponseEntity<byte[]> downloadPdf(@PathVariable Long id) {
         BusinessDocument document = businessDocumentService.getDocument(id);

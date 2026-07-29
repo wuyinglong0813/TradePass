@@ -7,11 +7,9 @@ Page({
     contract: null,
     // Tab
     tabs: [
-      { key: 'detail', label: '合同详情' },
+      { key: 'detail', label: '合同' },
       { key: 'sales', label: '销售单' },
-      { key: 'logistics', label: '物流单' },
-      { key: 'delivery', label: '送货单' },
-      { key: 'invoice', label: '发票浏览' }
+      { key: 'fulfillment', label: '履约资料' }
     ],
     activeTab: 'detail',
     // 列表
@@ -19,7 +17,12 @@ Page({
     logisticsLoading: false,
     logisticsUploading: false,
     salesDocuments: [],
-    deliveryDocuments: [],
+    paymentAttachments: [],
+    otherAttachments: [],
+    attachmentLoading: false,
+    attachmentUploading: false,
+    fulfillmentLoading: false,
+    fulfillmentCount: 0,
     invoiceList: [],
     loading: false,
     pdfLoading: false,
@@ -32,11 +35,21 @@ Page({
     // 结构化合同
     hasStructured: false,
     sData: null,
+    canCreateSalesOrder: false,
+    createAsDraft: false,
+    salesOrderCreateText: '创建销售单',
+    salesOrderEmptyHint: '等待合同供方创建销售单',
+    personalMemo: '',
+    memoDraft: '',
+    memoPreview: '尚未记录，点击添加',
+    memoUpdatedAt: '',
+    memoSaving: false,
+    showMemoEditor: false,
     // 详情面板
     showDetail: false,
     detailTitle: '',
     detailFields: [],
-    // 销售单 / 送货单创建编辑器
+    // 销售单创建编辑器
     showDocumentEditor: false,
     documentEditorType: '',
     documentEditorLabel: '',
@@ -70,10 +83,8 @@ Page({
     this.setData({ activeTab: tab });
     if (tab === 'sales') {
       this.loadBusinessDocuments('SALES_ORDER');
-    } else if (tab === 'delivery') {
-      this.loadBusinessDocuments('DELIVERY_NOTE');
-    } else if (tab === 'logistics') {
-      this.loadLogisticsDocuments();
+    } else if (tab === 'fulfillment') {
+      this.loadFulfillmentData();
     }
   },
 
@@ -113,6 +124,11 @@ Page({
       const pdfDate = fieldValue('signDate')
         || contract.startDate
         || String(contract.createdAt || '').slice(0, 10);
+      const viewerDirection = contract.viewerDirection || contract.direction;
+      const isSupplier = viewerDirection === 'SALE';
+      const canCreateSalesOrder = isSupplier
+        && (contract.status === 'PENDING' || contract.status === 'ACTIVE');
+      const createAsDraft = contract.status === 'PENDING';
 
       this.setData({
         contract: {
@@ -124,10 +140,20 @@ Page({
         counterpartyName: viewerCounterpartyName || this.data.counterpartyName,
         hasStructured: !!sData,
         sData,
+        canCreateSalesOrder,
+        createAsDraft,
+        salesOrderCreateText: createAsDraft ? '创建草稿' : '创建销售单',
+        salesOrderEmptyHint: canCreateSalesOrder
+          ? (createAsDraft ? '合同待签署，可先按合同产品准备销售单草稿' : '按合同产品生成并发布销售单')
+          : '等待合同供方创建销售单',
         pdfTitle,
         pdfSupplier: pdfSupplier || '—',
         pdfBuyer: pdfBuyer || '—',
         pdfDate: pdfDate || '—'
+      }, () => {
+        this.loadContractMemo();
+        this.loadBusinessDocuments('SALES_ORDER');
+        this.loadFulfillmentData();
       });
       wx.setNavigationBarTitle({ title: '合同详情' });
     } catch (e) {
@@ -237,7 +263,7 @@ Page({
         dateText: String(item.createdAt || '').slice(0, 10),
         fileSizeText: this.formatFileSize(item.fileSize)
       }));
-      this.setData({ logisticsList });
+      this.setData({ logisticsList }, () => this.updateFulfillmentCount());
     } catch (error) {
       wx.showToast({ title: error.message || '物流单加载失败', icon: 'none' });
     } finally {
@@ -383,6 +409,273 @@ Page({
     return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
   },
 
+  async loadFulfillmentData() {
+    if (this.data.fulfillmentLoading || !this.data.contractId) return;
+    const { request } = require('../../utils/request');
+    this.setData({ fulfillmentLoading: true });
+    try {
+      const [logistics, payments, others] = await Promise.all([
+        request({ url: `/contracts/${this.data.contractId}/logistics-documents` }),
+        request({ url: `/contracts/${this.data.contractId}/attachments?category=PAYMENT_VOUCHER` }),
+        request({ url: `/contracts/${this.data.contractId}/attachments?category=OTHER` })
+      ]);
+      const logisticsList = (logistics || []).map(item => ({
+        ...item,
+        dateText: String(item.createdAt || '').slice(0, 10),
+        fileSizeText: this.formatFileSize(item.fileSize)
+      }));
+      const mapAttachment = item => ({
+        ...item,
+        fileSizeText: this.formatFileSize(item.fileSize),
+        dateText: String(item.createdAt || '').replace('T', ' ').slice(0, 16),
+        isImage: String(item.contentType || '').indexOf('image/') === 0
+      });
+      const paymentAttachments = (payments || []).map(mapAttachment);
+      const otherAttachments = (others || []).map(mapAttachment);
+      this.setData({
+        logisticsList,
+        paymentAttachments,
+        otherAttachments,
+        fulfillmentCount: logisticsList.length + paymentAttachments.length + otherAttachments.length
+      });
+    } catch (error) {
+      wx.showToast({ title: error.message || '履约资料加载失败', icon: 'none' });
+    } finally {
+      this.setData({ fulfillmentLoading: false });
+    }
+  },
+
+  updateFulfillmentCount() {
+    this.setData({
+      fulfillmentCount: this.data.logisticsList.length
+        + this.data.paymentAttachments.length
+        + this.data.otherAttachments.length
+        + this.data.invoiceList.length
+    });
+  },
+
+  async loadContractMemo() {
+    if (!this.data.contractId) return;
+    const { request } = require('../../utils/request');
+    try {
+      const memo = await request({ url: `/contracts/${this.data.contractId}/memo` });
+      this.setData({
+        personalMemo: (memo && memo.content) || '',
+        memoDraft: (memo && memo.content) || '',
+        memoPreview: this.memoPreviewText((memo && memo.content) || ''),
+        memoUpdatedAt: memo && memo.updatedAt ? String(memo.updatedAt).replace('T', ' ').slice(0, 16) : ''
+      });
+    } catch (error) {
+      wx.showToast({ title: error.message || '备忘录加载失败', icon: 'none' });
+    }
+  },
+
+  onMemoInput(e) {
+    this.setData({ memoDraft: e.detail.value });
+  },
+
+  memoPreviewText(content) {
+    const text = String(content || '').replace(/\s+/g, ' ').trim();
+    if (!text) return '尚未记录，点击添加';
+    return text.length > 54 ? `${text.slice(0, 54)}…` : text;
+  },
+
+  openMemoEditor() {
+    this.setData({ showMemoEditor: true, memoDraft: this.data.personalMemo });
+  },
+
+  closeMemoEditor() {
+    if (this.data.memoSaving) return;
+    this.setData({ showMemoEditor: false, memoDraft: this.data.personalMemo });
+  },
+
+  async saveContractMemo() {
+    if (this.data.memoSaving) return;
+    const { request } = require('../../utils/request');
+    try {
+      this.setData({ memoSaving: true });
+      const memo = await request({
+        url: `/contracts/${this.data.contractId}/memo`,
+        method: 'POST',
+        data: { content: this.data.memoDraft }
+      });
+      this.setData({
+        personalMemo: (memo && memo.content) || '',
+        memoDraft: (memo && memo.content) || '',
+        memoPreview: this.memoPreviewText((memo && memo.content) || ''),
+        showMemoEditor: false,
+        memoUpdatedAt: memo && memo.updatedAt ? String(memo.updatedAt).replace('T', ' ').slice(0, 16) : ''
+      });
+      wx.showToast({ title: '个人备忘录已保存', icon: 'success' });
+    } catch (error) {
+      wx.showToast({ title: error.message || '备忘录保存失败', icon: 'none' });
+    } finally {
+      this.setData({ memoSaving: false });
+    }
+  },
+
+  async loadAttachments(category) {
+    if (this.data.attachmentLoading) return;
+    const { request } = require('../../utils/request');
+    this.setData({ attachmentLoading: true });
+    try {
+      const list = await request({
+        url: `/contracts/${this.data.contractId}/attachments?category=${category}`
+      });
+      const attachments = (list || []).map(item => ({
+        ...item,
+        fileSizeText: this.formatFileSize(item.fileSize),
+        dateText: String(item.createdAt || '').replace('T', ' ').slice(0, 16),
+        isImage: String(item.contentType || '').indexOf('image/') === 0
+      }));
+      this.setData({
+        [category === 'PAYMENT_VOUCHER' ? 'paymentAttachments' : 'otherAttachments']: attachments
+      }, () => this.updateFulfillmentCount());
+    } catch (error) {
+      wx.showToast({ title: error.message || '资料加载失败', icon: 'none' });
+    } finally {
+      this.setData({ attachmentLoading: false });
+    }
+  },
+
+  chooseAttachment(e) {
+    if (this.data.attachmentUploading) return;
+    const category = e.currentTarget.dataset.category;
+    wx.showActionSheet({
+      itemList: ['拍照或从相册选择图片', '从聊天文件选择'],
+      success: result => {
+        if (result.tapIndex === 0) {
+          this.chooseAttachmentImage(category);
+        } else {
+          this.chooseAttachmentFile(category);
+        }
+      }
+    });
+  },
+
+  chooseAttachmentImage(category) {
+    wx.chooseMedia({
+      count: 1,
+      mediaType: ['image'],
+      sourceType: ['album', 'camera'],
+      sizeType: ['compressed'],
+      success: result => {
+        const file = result.tempFiles && result.tempFiles[0];
+        if (!file || !file.tempFilePath) return;
+        if (file.size && file.size > 10 * 1024 * 1024) {
+          wx.showToast({ title: '文件不能超过10MB', icon: 'none' });
+          return;
+        }
+        this.uploadAttachment(category, file.tempFilePath, this.attachmentFileName(file.tempFilePath, 'jpg', category));
+      }
+    });
+  },
+
+  chooseAttachmentFile(category) {
+    wx.chooseMessageFile({
+      count: 1,
+      type: 'file',
+      extension: category === 'PAYMENT_VOUCHER' ? ['pdf'] : ['pdf', 'doc', 'docx'],
+      success: result => {
+        const file = result.tempFiles && result.tempFiles[0];
+        if (!file || !file.path) return;
+        if (file.size && file.size > 10 * 1024 * 1024) {
+          wx.showToast({ title: '文件不能超过10MB', icon: 'none' });
+          return;
+        }
+        this.uploadAttachment(category, file.path, file.name || this.attachmentFileName(file.path, 'pdf', category));
+      }
+    });
+  },
+
+  attachmentFileName(filePath, fallbackExtension, category) {
+    const matched = String(filePath || '').match(/\.([a-zA-Z0-9]+)$/);
+    const extension = matched ? matched[1].toLowerCase() : fallbackExtension;
+    const prefix = category === 'PAYMENT_VOUCHER' ? '转款凭证' : '其它资料';
+    return `${prefix}-${Date.now()}.${extension}`;
+  },
+
+  uploadAttachment(category, filePath, originalName) {
+    const app = getApp();
+    const token = app.globalData.token || wx.getStorageSync('tradepass_token') || '';
+    const companyId = app.globalData.currentCompanyId || wx.getStorageSync('tradepass_company_id') || '';
+    const header = {};
+    if (token) header.Authorization = token;
+    if (companyId) header['X-Company-Id'] = String(companyId);
+    this.setData({ attachmentUploading: true });
+    wx.showLoading({ title: '上传资料中...' });
+    wx.uploadFile({
+      url: `${app.globalData.baseUrl}/contracts/${this.data.contractId}/attachments`,
+      filePath,
+      name: 'file',
+      formData: { category, originalName },
+      header,
+      timeout: 30000,
+      success: response => {
+        let body = null;
+        try { body = JSON.parse(response.data || '{}'); } catch (error) { /* 统一提示 */ }
+        if (response.statusCode >= 200 && response.statusCode < 300 && body && body.code === 0) {
+          wx.showToast({ title: '资料已上传', icon: 'success' });
+          this.loadAttachments(category);
+          return;
+        }
+        wx.showToast({
+          title: (body && body.message) || `上传失败（${response.statusCode || '未知状态'}）`,
+          icon: 'none'
+        });
+      },
+      fail: error => wx.showToast({ title: error.errMsg || '资料上传失败', icon: 'none' }),
+      complete: () => {
+        wx.hideLoading();
+        this.setData({ attachmentUploading: false });
+      }
+    });
+  },
+
+  viewAttachment(e) {
+    this.downloadAttachmentFile(e.currentTarget.dataset.attachment, false);
+  },
+
+  downloadAttachment(e) {
+    this.downloadAttachmentFile(e.currentTarget.dataset.attachment, true);
+  },
+
+  downloadAttachmentFile(attachment, download) {
+    if (!attachment || !attachment.id) return;
+    const app = getApp();
+    const token = app.globalData.token || wx.getStorageSync('tradepass_token') || '';
+    const companyId = app.globalData.currentCompanyId || wx.getStorageSync('tradepass_company_id') || '';
+    const header = {};
+    if (token) header.Authorization = token;
+    if (companyId) header['X-Company-Id'] = String(companyId);
+    wx.showLoading({ title: download ? '下载中...' : '打开中...' });
+    wx.downloadFile({
+      url: `${app.globalData.baseUrl}/contract-attachments/${attachment.id}/content?download=${download}`,
+      header,
+      timeout: 30000,
+      success: response => {
+        if (response.statusCode !== 200) {
+          wx.showToast({ title: `文件获取失败（${response.statusCode}）`, icon: 'none' });
+          return;
+        }
+        const path = response.filePath || response.tempFilePath;
+        if (attachment.isImage) {
+          wx.previewImage({ current: path, urls: [path] });
+          return;
+        }
+        const extension = String(attachment.originalName || '').split('.').pop().toLowerCase();
+        wx.openDocument({
+          filePath: path,
+          fileType: ['pdf', 'doc', 'docx'].includes(extension) ? extension : undefined,
+          showMenu: true,
+          fail: () => wx.showToast({ title: '文件打开失败', icon: 'none' })
+        });
+      },
+      fail: error => wx.showToast({ title: error.errMsg || '文件获取失败', icon: 'none' }),
+      complete: () => wx.hideLoading()
+    });
+  },
+
   async loadBusinessDocuments(documentType) {
     const { request } = require('../../utils/request');
     try {
@@ -393,11 +686,7 @@ Page({
         ...item,
         dateText: String(item.createdAt || '').slice(0, 10)
       }));
-      if (documentType === 'SALES_ORDER') {
-        this.setData({ salesDocuments: documents });
-      } else {
-        this.setData({ deliveryDocuments: documents });
-      }
+      this.setData({ salesDocuments: documents });
     } catch (error) {
       wx.showToast({ title: error.message || '单据加载失败', icon: 'none' });
     }
@@ -405,7 +694,7 @@ Page({
 
   async createBusinessDocument(e) {
     const documentType = e.currentTarget.dataset.type;
-    const label = documentType === 'SALES_ORDER' ? '销售单' : '送货单';
+    const label = '销售单';
     const { request } = require('../../utils/request');
     try {
       wx.showLoading({ title: '加载模板中...' });
@@ -415,16 +704,26 @@ Page({
       if (!templates || templates.length === 0) {
         wx.showModal({
           title: `暂无${label}模板`,
-          content: `请先到“企业 - 销售与送货单模板”上传${label}模板。`,
+          content: `请先到“企业 - 销售单模板”上传${label}模板。`,
           showCancel: false
         });
         return;
       }
+      const contract = this.data.contract || {};
+      const defaultTemplate = {
+        ...templates[0],
+        name: `合同默认销售单（${contract.contractNo || contract.id || this.data.contractId}）`,
+        sourceType: 'CONTRACT_DEFAULT'
+      };
+      const selectableTemplates = [defaultTemplate].concat(templates.map(item => ({
+        ...item,
+        sourceType: 'TEMPLATE'
+      })));
       this.setData({
         showDocumentEditor: true,
         documentEditorType: documentType,
         documentEditorLabel: label,
-        documentTemplates: templates,
+        documentTemplates: selectableTemplates,
         documentTemplateIndex: -1,
         documentTitle: label,
         documentCompanyName: this.currentCompanyName(),
@@ -433,7 +732,7 @@ Page({
         documentDate: this.todayText(),
         documentColumns: [],
         documentRows: [],
-        documentBlankRows: documentType === 'SALES_ORDER' ? 8 : 10,
+        documentBlankRows: 8,
         documentTotalAmount: '0',
         documentEditorReady: false,
         documentEditorSubmitting: false
@@ -484,7 +783,7 @@ Page({
         documentRows: rows,
         documentBlankRows: Math.max(
           rows.length,
-          Number(templateContent.blankRows) || (this.data.documentEditorType === 'SALES_ORDER' ? 8 : 10)
+          Number(templateContent.blankRows) || 8
         ),
         documentTotalAmount: totalAmount,
         documentEditorReady: true
@@ -641,7 +940,7 @@ Page({
       documentEditorType, documentEditorLabel, documentTemplates, documentTemplateIndex,
       documentTitle, documentCompanyName, documentCounterpartyName, documentContractNo,
       documentDate, documentColumns, documentRows, documentBlankRows,
-      documentTotalAmount
+      documentTotalAmount, createAsDraft
     } = this.data;
     if (documentTemplateIndex < 0 || !documentTemplates[documentTemplateIndex]) {
       wx.showToast({ title: `请选择${documentEditorLabel}模板`, icon: 'none' });
@@ -653,8 +952,10 @@ Page({
     }
     const confirmed = await new Promise(resolve => {
       wx.showModal({
-        title: `确认创建${documentEditorLabel}`,
-        content: `模板：${documentTemplates[documentTemplateIndex].name}\n创建后可在列表中查看或下载 PDF`,
+        title: createAsDraft ? '确认保存销售单草稿' : `确认创建${documentEditorLabel}`,
+        content: createAsDraft
+          ? `模板：${documentTemplates[documentTemplateIndex].name}\n合同生效后再发布给需方，发布前仍可编辑。`
+          : `模板：${documentTemplates[documentTemplateIndex].name}\n创建后将作为正式销售单发布给需方。`,
         success: result => resolve(!!result.confirm),
         fail: () => resolve(false)
       });
@@ -671,6 +972,7 @@ Page({
         data: {
           documentType: documentEditorType,
           templateId: documentTemplates[documentTemplateIndex].id,
+          sourceType: documentTemplates[documentTemplateIndex].sourceType || 'TEMPLATE',
           content: {
             title: documentTitle.trim(),
             companyName: documentCompanyName.trim(),
@@ -686,7 +988,7 @@ Page({
       });
       await this.loadBusinessDocuments(documentEditorType);
       this.setData({ showDocumentEditor: false });
-      wx.showToast({ title: `${documentEditorLabel}已创建`, icon: 'success' });
+      wx.showToast({ title: createAsDraft ? '销售单草稿已保存' : `${documentEditorLabel}已发布`, icon: 'success' });
     } catch (error) {
       wx.showToast({ title: error.message || '单据生成失败', icon: 'none' });
     } finally {
@@ -708,7 +1010,7 @@ Page({
     const app = getApp();
     const token = app.globalData.token || wx.getStorageSync('tradepass_token') || '';
     const companyId = app.globalData.currentCompanyId || wx.getStorageSync('tradepass_company_id') || '';
-    const label = document.documentType === 'SALES_ORDER' ? '销售单' : '送货单';
+    const label = '销售单';
     const safeNo = String(document.documentNo || document.id).replace(/[\\/:*?"<>|\r\n]/g, '_');
     const filePath = `${wx.env.USER_DATA_PATH}/${label}-${safeNo}.pdf`;
     const header = {};
@@ -740,6 +1042,14 @@ Page({
         wx.showToast({ title: error.errMsg || 'PDF下载失败', icon: 'none' });
       },
       complete: () => wx.hideLoading()
+    });
+  },
+
+  openSalesOrderDetail(e) {
+    const document = e.currentTarget.dataset.document;
+    if (!document || !document.id) return;
+    wx.navigateTo({
+      url: `/pages/sales-order-detail/sales-order-detail?id=${document.id}&documentNo=${encodeURIComponent(document.documentNo || '')}`
     });
   },
 

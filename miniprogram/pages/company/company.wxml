@@ -41,7 +41,7 @@
       </view>
       <view class="list-row" bindtap="goPhoneLogin">
         <view class="row-icon"><image src="/images/icons/template.svg" mode="aspectFit"/></view>
-        <view class="row-copy"><view class="row-title">业务模板</view><view class="row-desc">合同、销售单与送货单模板</view></view>
+        <view class="row-copy"><view class="row-title">业务模板</view><view class="row-desc">合同与销售单模板</view></view>
         <view class="state-pill muted">未登录</view><view class="row-arrow">›</view>
       </view>
     </view>
@@ -150,15 +150,15 @@
             </view>
             <view class="list-row" wx:if="{{canContractTemplate}}" bindtap="goDocumentTemplate">
               <view class="row-icon"><image src="/images/icons/contracts.svg" mode="aspectFit"/></view>
-              <view class="row-copy"><view class="row-title">销售与送货单模板</view><view class="row-desc">独立管理销售单、送货单 PDF 模板</view></view>
+              <view class="row-copy"><view class="row-title">销售单模板</view><view class="row-desc">管理销售单 PDF 表格模板</view></view>
               <view class="state-pill">单据</view><view class="row-arrow">›</view>
             </view>
-            <view class="list-row" bindtap="goInventory">
-              <view class="row-icon"><image src="/images/icons/inventory.svg" mode="aspectFit"/></view>
-              <view class="row-copy"><view class="row-title">库存管理</view><view class="row-desc">库存数据源尚未接入</view></view>
-              <view class="state-pill muted">未接入</view><view class="row-arrow">›</view>
-            </view>
           </block>
+          <view class="list-row" wx:if="{{canInventory}}" bindtap="goInventory">
+            <view class="row-icon"><image src="/images/icons/inventory.svg" mode="aspectFit"/></view>
+            <view class="row-copy"><view class="row-title">库存管理</view><view class="row-desc">仓库、商品库存与销售单入库</view></view>
+            <view class="state-pill">库存</view><view class="row-arrow">›</view>
+          </view>
         </view>
 
         <view class="readonly-card management-readonly" wx:if="{{!canManage}}">
@@ -200,6 +200,5 @@
       <view class="enterprise-switch-tip">切换后，企业数据和业务权限会同步更新</view>
     </view>
   </view>
-  <view class="mask" wx:if="{{showInventoryModal}}" bindtap="closeInventoryModal"><view class="modal" catchtap="noop"><image src="/images/icons/inventory.svg" mode="aspectFit"/><view class="modal-title">库存数据未接入</view><view class="modal-body">当前不展示模拟库存或虚假的库存状态，待对接真实仓储数据后开放。</view><button class="primary-button" bindtap="closeInventoryModal">我知道了</button></view></view>
   <view class="mask" wx:if="{{showJoinModal}}" bindtap="closeJoin"><view class="sheet" catchtap="noop"><view class="sheet-title">加入企业</view><view class="sheet-desc">输入企业管理员提供的邀请码</view><input class="sheet-input" placeholder="请输入邀请码" value="{{joinCode}}" bindinput="onJoinInput"/><button class="primary-button" bindtap="submitJoin">提交申请</button></view></view>
 </view>

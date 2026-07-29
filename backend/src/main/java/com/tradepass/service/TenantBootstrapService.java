@@ -59,8 +59,6 @@ public class TenantBootstrapService {
         seedContractTemplate(companyId, operatorUserId);
         seedDocumentTemplate(companyId, operatorUserId, "SALES_ORDER", "标准销售单模板",
                 "{\"columns\":[\"序号\",\"品名\",\"规格\",\"单位\",\"数量\",\"单价\",\"金额\",\"备注\"],\"blankRows\":8}");
-        seedDocumentTemplate(companyId, operatorUserId, "DELIVERY_NOTE", "标准送货单模板",
-                "{\"columns\":[\"序号\",\"品名\",\"规格\",\"数量\",\"单位\",\"备注\"],\"blankRows\":10}");
     }
 
     public Map<String, SeedRole> standardRolesView() {
@@ -142,9 +140,9 @@ public class TenantBootstrapService {
         Map<String, SeedRole> roles = new LinkedHashMap<>();
         roles.put("LEGAL", new SeedRole("法人", List.of("all")));
         roles.put("ADMIN", new SeedRole("管理员", List.of("member_manage", "auth_manage", "company_manage", "seal_manage", "contract_template")));
-        roles.put("SALES", new SeedRole("销售员", List.of("supplier_view", "counterparty_manage", "order_view", "order_create", "contract_sign", "contract_view", "reconciliation")));
-        roles.put("PURCHASER", new SeedRole("采购员", List.of("buyer_view", "order_create", "contract_view", "order_view", "contract_sign", "reconciliation")));
-        roles.put("FINANCE", new SeedRole("财务", List.of("invoice_view", "reconciliation")));
+        roles.put("SALES", new SeedRole("销售员", List.of("supplier_view", "counterparty_manage", "order_view", "order_create", "contract_sign", "contract_view", "reconciliation", "contract_attachment_upload")));
+        roles.put("PURCHASER", new SeedRole("采购员", List.of("buyer_view", "order_create", "contract_view", "order_view", "contract_sign", "reconciliation", "contract_attachment_upload", "sales_order_receive", "inventory_view", "inventory_receive")));
+        roles.put("FINANCE", new SeedRole("财务", List.of("invoice_view", "reconciliation", "contract_attachment_upload")));
         return Map.copyOf(roles);
     }
 

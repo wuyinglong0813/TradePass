@@ -60,6 +60,14 @@ public class BusinessDocumentPdfService {
             title.setSpacingAfter(10);
             document.add(title);
 
+            if ("DRAFT".equals(businessDocument.getStatus())) {
+                Font draftFont = new Font(baseFont, 10, Font.NORMAL, new Color(180, 106, 0));
+                Paragraph draft = new Paragraph("销售单草稿 · 合同生效并发布后方为正式单据", draftFont);
+                draft.setAlignment(Element.ALIGN_CENTER);
+                draft.setSpacingAfter(10);
+                document.add(draft);
+            }
+
             addDocumentHeader(document, businessDocument, snapshot, bodyFont);
             addProductTable(document, snapshot, headerFont, bodyFont);
             addFooter(document, businessDocument.getDocumentType(), snapshot, footerFont);
@@ -72,8 +80,7 @@ public class BusinessDocumentPdfService {
     }
 
     public String fileName(BusinessDocument document) {
-        String title = BusinessDocumentService.SALES_ORDER.equals(document.getDocumentType())
-                ? "销售单" : "送货单";
+        String title = "DRAFT".equals(document.getStatus()) ? "销售单草稿" : "销售单";
         return (title + "-" + document.getDocumentNo())
                 .replaceAll("[\\\\/:*?\"<>|\\r\\n]+", "_") + ".pdf";
     }
@@ -122,22 +129,16 @@ public class BusinessDocumentPdfService {
 
     private void addFooter(Document document, String type, Snapshot snapshot,
                            Font font) throws DocumentException {
-        if (BusinessDocumentService.SALES_ORDER.equals(type)) {
-            Paragraph total = new Paragraph("合计金额（元）：" + snapshot.totalAmount(), font);
-            total.setAlignment(Element.ALIGN_RIGHT);
-            total.setSpacingBefore(8);
-            document.add(total);
-        }
+        Paragraph total = new Paragraph("合计金额（元）：" + snapshot.totalAmount(), font);
+        total.setAlignment(Element.ALIGN_RIGHT);
+        total.setSpacingBefore(8);
+        document.add(total);
         PdfPTable signatures = new PdfPTable(3);
         signatures.setWidthPercentage(100);
         signatures.setSpacingBefore(28);
         signatures.addCell(borderlessCell("制单人：", font, Element.ALIGN_LEFT));
-        signatures.addCell(borderlessCell(
-                BusinessDocumentService.SALES_ORDER.equals(type) ? "审核人：" : "送货人：",
-                font, Element.ALIGN_CENTER));
-        signatures.addCell(borderlessCell(
-                BusinessDocumentService.SALES_ORDER.equals(type) ? "客户确认：" : "收货人：",
-                font, Element.ALIGN_RIGHT));
+        signatures.addCell(borderlessCell("审核人：", font, Element.ALIGN_CENTER));
+        signatures.addCell(borderlessCell("客户确认：", font, Element.ALIGN_RIGHT));
         document.add(signatures);
     }
 
@@ -156,7 +157,7 @@ public class BusinessDocumentPdfService {
                 rows.add(row);
             }
             return new Snapshot(
-                    root.path("title").asText("送货单"),
+                    root.path("title").asText("销售单"),
                     root.path("companyName").asText("本方企业"),
                     root.path("counterpartyName").asText(""),
                     root.path("contractNo").asText(""),

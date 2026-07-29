@@ -69,7 +69,7 @@
       <view class="guest-section guest-capability">
         <view class="guest-section-head"><view><view class="guest-section-title">平台能力</view><view class="guest-section-sub">未登录也可以先了解商签通</view></view></view>
         <view class="capability-row"><view class="capability-no">01</view><view><view class="capability-title">合同全流程协同</view><view class="capability-desc">从模板、发起、签署到履约凭证统一管理</view></view></view>
-        <view class="capability-row"><view class="capability-no">02</view><view><view class="capability-title">标准 A4 PDF 凭证</view><view class="capability-desc">合同、销售单和送货单可随时查看下载</view></view></view>
+        <view class="capability-row"><view class="capability-no">02</view><view><view class="capability-title">标准 A4 PDF 凭证</view><view class="capability-desc">合同与销售单可随时查看下载</view></view></view>
         <view class="capability-row"><view class="capability-no">03</view><view><view class="capability-title">企业角色与权限</view><view class="capability-desc">按法人、管理员和业务角色安全协作</view></view></view>
       </view>
       <view class="page-end">商签通 · 安全连接每一次企业交易</view>

@@ -6,25 +6,14 @@ const TYPE_META = {
     empty: '暂无销售单模板',
     columns: ['序号', '品名', '规格', '单位', '数量', '单价', '金额', '备注'],
     blankRows: 8
-  },
-  DELIVERY_NOTE: {
-    label: '送货单',
-    empty: '暂无送货单模板',
-    columns: ['序号', '品名', '规格', '数量', '单位', '备注'],
-    blankRows: 10
   }
 };
 
 Page({
   data: {
-    tabs: [
-      { key: 'SALES_ORDER', label: '销售单模板' },
-      { key: 'DELIVERY_NOTE', label: '送货单模板' }
-    ],
     activeType: 'SALES_ORDER',
     templates: [],
     salesCount: 0,
-    deliveryCount: 0,
     loading: false,
     emptyText: TYPE_META.SALES_ORDER.empty
   },
@@ -37,35 +26,19 @@ Page({
     this.loadTemplates().finally(() => wx.stopPullDownRefresh());
   },
 
-  switchType(e) {
-    const activeType = e.currentTarget.dataset.type;
-    if (activeType === this.data.activeType) return;
-    this.setData({
-      activeType,
-      templates: [],
-      emptyText: TYPE_META[activeType].empty
-    });
-    this.loadTemplates();
-  },
-
   async loadTemplates() {
     if (this.data.loading) return;
     this.setData({ loading: true });
     try {
-      const [sales, delivery] = await Promise.all([
-        request({ url: '/document-templates?type=SALES_ORDER' }),
-        request({ url: '/document-templates?type=DELIVERY_NOTE' })
-      ]);
-      const source = this.data.activeType === 'SALES_ORDER' ? sales : delivery;
-      const templates = (source || []).map(item => ({
+      const sales = await request({ url: '/document-templates?type=SALES_ORDER' });
+      const templates = (sales || []).map(item => ({
         ...item,
         dateText: String(item.updatedAt || item.createdAt || '').slice(0, 10),
         sourceText: item.sourceFileName || '标准版式'
       }));
       this.setData({
         templates,
-        salesCount: (sales || []).length,
-        deliveryCount: (delivery || []).length
+        salesCount: (sales || []).length
       });
     } catch (error) {
       wx.showToast({ title: error.message || '模板加载失败', icon: 'none' });
@@ -78,15 +51,11 @@ Page({
     this.chooseTemplateFile('SALES_ORDER');
   },
 
-  uploadDeliveryTemplate() {
-    this.chooseTemplateFile('DELIVERY_NOTE');
-  },
-
   chooseTemplateFile(documentType) {
     wx.chooseMessageFile({
       count: 1,
       type: 'file',
-      extension: ['json', 'pdf', 'doc', 'docx', 'xls', 'xlsx'],
+      extension: ['json'],
       success: async result => {
         const file = result.tempFiles && result.tempFiles[0];
         if (!file) return;

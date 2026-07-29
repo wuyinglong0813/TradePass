@@ -17,6 +17,7 @@ import com.tradepass.mapper.CompanyMapper;
 import com.tradepass.mapper.TradeContractMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -30,7 +31,6 @@ import java.util.UUID;
 @Service
 public class BusinessDocumentService {
     public static final String SALES_ORDER = "SALES_ORDER";
-    public static final String DELIVERY_NOTE = "DELIVERY_NOTE";
 
     private final BusinessDocumentTemplateMapper templateMapper;
     private final BusinessDocumentMapper documentMapper;
@@ -39,14 +39,17 @@ public class BusinessDocumentService {
     private final AccessControlService accessControlService;
     private final AuditLogService auditLogService;
     private final ObjectMapper objectMapper;
+    private final SalesOrderInventoryService inventoryService;
 
+    @Autowired
     public BusinessDocumentService(BusinessDocumentTemplateMapper templateMapper,
                                    BusinessDocumentMapper documentMapper,
                                    TradeContractMapper contractMapper,
                                    CompanyMapper companyMapper,
                                    AccessControlService accessControlService,
                                    AuditLogService auditLogService,
-                                   ObjectMapper objectMapper) {
+                                   ObjectMapper objectMapper,
+                                   SalesOrderInventoryService inventoryService) {
         this.templateMapper = templateMapper;
         this.documentMapper = documentMapper;
         this.contractMapper = contractMapper;
@@ -54,6 +57,18 @@ public class BusinessDocumentService {
         this.accessControlService = accessControlService;
         this.auditLogService = auditLogService;
         this.objectMapper = objectMapper;
+        this.inventoryService = inventoryService;
+    }
+
+    BusinessDocumentService(BusinessDocumentTemplateMapper templateMapper,
+                            BusinessDocumentMapper documentMapper,
+                            TradeContractMapper contractMapper,
+                            CompanyMapper companyMapper,
+                            AccessControlService accessControlService,
+                            AuditLogService auditLogService,
+                            ObjectMapper objectMapper) {
+        this(templateMapper, documentMapper, contractMapper, companyMapper,
+                accessControlService, auditLogService, objectMapper, null);
     }
 
     public List<Map<String, Object>> listTemplates(String type) {
@@ -111,15 +126,16 @@ public class BusinessDocumentService {
     public List<Map<String, Object>> listDocuments(Long contractId, String type) {
         long companyId = AuthContext.requireCompanyId();
         accessControlService.requireAnyPermission(companyId, "contract_view", "contract_sign");
-        requireContractParty(contractId, companyId);
+        TradeContract contract = requireContractParty(contractId, companyId);
         String normalizedType = normalizeType(type);
         return documentMapper.selectList(new LambdaQueryWrapper<BusinessDocument>()
-                        .eq(BusinessDocument::getCompanyId, companyId)
                         .eq(BusinessDocument::getContractId, contractId)
                         .eq(BusinessDocument::getDocumentType, normalizedType)
+                        .and(wrapper -> wrapper.ne(BusinessDocument::getStatus, "DRAFT")
+                                .or().eq(BusinessDocument::getCompanyId, companyId))
                         .orderByDesc(BusinessDocument::getCreatedAt)
                         .orderByDesc(BusinessDocument::getId))
-                .stream().map(this::documentView).toList();
+                .stream().map(document -> documentView(document, contract, companyId)).toList();
     }
 
     @Transactional
@@ -132,6 +148,17 @@ public class BusinessDocumentService {
             throw new BusinessException("请选择单据模板");
         }
         TradeContract contract = requireContractParty(contractId, companyId);
+        if (!"PENDING".equals(contract.getStatus()) && !"ACTIVE".equals(contract.getStatus())) {
+            throw new BusinessException("当前合同状态不能创建销售单");
+        }
+        long supplierCompanyId = supplierCompanyId(contract);
+        if (supplierCompanyId != companyId) {
+            throw new BusinessException("仅合同供方可以创建销售单");
+        }
+        Long recipientCompanyId = buyerCompanyId(contract);
+        if (recipientCompanyId == null) {
+            throw new BusinessException("合同需方企业信息不完整");
+        }
         BusinessDocumentTemplate template = templateMapper.selectOne(
                 new LambdaQueryWrapper<BusinessDocumentTemplate>()
                         .eq(BusinessDocumentTemplate::getId, templateId)
@@ -145,8 +172,11 @@ public class BusinessDocumentService {
         Company company = companyMapper.selectById(companyId);
         BusinessDocument document = new BusinessDocument();
         document.setCompanyId(companyId);
+        document.setRecipientCompanyId(recipientCompanyId);
         document.setContractId(contractId);
         document.setDocumentType(type);
+        document.setSourceType(normalizeSourceType(string(body.get("sourceType"))));
+        document.setStatus("PENDING".equals(contract.getStatus()) ? "DRAFT" : "ISSUED");
         document.setDocumentNo(createDocumentNo(type));
         document.setTemplateId(template.getId());
         document.setTemplateName(template.getName());
@@ -154,38 +184,79 @@ public class BusinessDocumentService {
         document.setContent(applySnapshotEdits(snapshot, body.get("content")));
         document.setCreatedBy(AuthContext.userId());
         documentMapper.insert(document);
+        if (inventoryService != null) {
+            inventoryService.saveDocumentItems(document);
+        }
         auditLogService.log(companyId, "BUSINESS_DOCUMENT", document.getId(), "CREATE",
-                "按模板 " + template.getName() + " 生成" + typeLabel(type));
-        return documentView(documentMapper.selectById(document.getId()));
+                "按模板 " + template.getName() + ("DRAFT".equals(document.getStatus())
+                        ? " 创建销售单草稿" : " 发布销售单"));
+        return documentView(documentMapper.selectById(document.getId()), contract, companyId);
+    }
+
+    @Transactional
+    public Map<String, Object> updateDraft(Long id, Map<String, Object> body) {
+        long companyId = AuthContext.requireCompanyId();
+        accessControlService.requireAnyPermission(companyId, "contract_sign", "order_create");
+        BusinessDocument document = requireOwnedDraft(id, companyId);
+        TradeContract contract = requireContractParty(document.getContractId(), companyId);
+        if (!"PENDING".equals(contract.getStatus()) && !"ACTIVE".equals(contract.getStatus())) {
+            throw new BusinessException("当前合同状态不能编辑销售单草稿");
+        }
+        document.setContent(applySnapshotEdits(document.getContent(), body.get("content")));
+        documentMapper.updateById(document);
+        if (inventoryService != null) {
+            inventoryService.saveDocumentItems(document);
+        }
+        auditLogService.log(companyId, "BUSINESS_DOCUMENT", document.getId(),
+                "UPDATE", "编辑销售单草稿 " + document.getDocumentNo());
+        return documentView(documentMapper.selectById(document.getId()), contract, companyId);
+    }
+
+    @Transactional
+    public Map<String, Object> publishDraft(Long id) {
+        long companyId = AuthContext.requireCompanyId();
+        accessControlService.requireAnyPermission(companyId, "contract_sign", "order_create");
+        BusinessDocument document = requireOwnedDraft(id, companyId);
+        TradeContract contract = requireContractParty(document.getContractId(), companyId);
+        if (!"ACTIVE".equals(contract.getStatus())) {
+            throw new BusinessException("合同生效后才能发布销售单");
+        }
+        if (supplierCompanyId(contract) != companyId) {
+            throw new BusinessException("仅合同供方可以发布销售单");
+        }
+        document.setStatus("ISSUED");
+        documentMapper.updateById(document);
+        auditLogService.log(companyId, "BUSINESS_DOCUMENT", document.getId(),
+                "PUBLISH", "发布销售单 " + document.getDocumentNo());
+        return documentView(documentMapper.selectById(document.getId()), contract, companyId);
     }
 
     public BusinessDocument getDocument(Long id) {
         long companyId = AuthContext.requireCompanyId();
         accessControlService.requireAnyPermission(companyId, "contract_view", "contract_sign");
-        BusinessDocument document = documentMapper.selectOne(new LambdaQueryWrapper<BusinessDocument>()
-                .eq(BusinessDocument::getId, id)
-                .eq(BusinessDocument::getCompanyId, companyId)
-                .last("LIMIT 1"));
+        BusinessDocument document = documentMapper.selectById(id);
         if (document == null) {
             throw new BusinessException("单据不存在");
         }
         requireContractParty(document.getContractId(), companyId);
+        if ("DRAFT".equals(document.getStatus())
+                && !Long.valueOf(companyId).equals(document.getCompanyId())) {
+            throw new BusinessException("销售单草稿不存在");
+        }
         return document;
     }
 
     public String typeLabel(String type) {
-        return SALES_ORDER.equals(type) ? "销售单" : "送货单";
+        return "销售单";
     }
 
     public String defaultTemplateContent(String type) {
-        String normalizedType = normalizeType(type);
+        normalizeType(type);
         ObjectNode content = objectMapper.createObjectNode();
         ArrayNode columns = content.putArray("columns");
-        List<String> defaults = SALES_ORDER.equals(normalizedType)
-                ? List.of("序号", "品名", "规格", "单位", "数量", "单价", "金额", "备注")
-                : List.of("序号", "品名", "规格", "数量", "单位", "备注");
+        List<String> defaults = List.of("序号", "品名", "规格", "单位", "数量", "单价", "金额", "备注");
         defaults.forEach(columns::add);
-        content.put("blankRows", SALES_ORDER.equals(normalizedType) ? 8 : 10);
+        content.put("blankRows", 8);
         return content.toString();
     }
 
@@ -223,7 +294,7 @@ public class BusinessDocumentService {
             snapshot.put("date", LocalDate.now().toString());
             snapshot.put("templateName", template.getName());
             snapshot.put("blankRows", Math.max(
-                    SALES_ORDER.equals(type) ? 8 : 10,
+                    8,
                     templateContent.path("blankRows").asInt(0)));
             ArrayNode columns = snapshot.putArray("columns");
             targetColumns.forEach(columns::add);
@@ -412,6 +483,16 @@ public class BusinessDocumentService {
         return contract;
     }
 
+    private BusinessDocument requireOwnedDraft(Long id, long companyId) {
+        BusinessDocument document = documentMapper.selectById(id);
+        if (document == null || !SALES_ORDER.equals(document.getDocumentType())
+                || !Long.valueOf(companyId).equals(document.getCompanyId())
+                || !"DRAFT".equals(document.getStatus())) {
+            throw new BusinessException("可编辑的销售单草稿不存在");
+        }
+        return document;
+    }
+
     private Map<String, Object> templateView(BusinessDocumentTemplate template) {
         Map<String, Object> view = new LinkedHashMap<>();
         view.put("id", template.getId());
@@ -425,31 +506,71 @@ public class BusinessDocumentService {
         return view;
     }
 
-    private Map<String, Object> documentView(BusinessDocument document) {
+    private Map<String, Object> documentView(BusinessDocument document,
+                                             TradeContract contract,
+                                             long viewerCompanyId) {
         Map<String, Object> view = new LinkedHashMap<>();
         view.put("id", document.getId());
         view.put("documentType", document.getDocumentType());
         view.put("typeLabel", typeLabel(document.getDocumentType()));
+        view.put("issuerCompanyId", document.getCompanyId());
+        view.put("recipientCompanyId", document.getRecipientCompanyId());
+        view.put("sourceType", document.getSourceType());
+        view.put("status", document.getStatus());
+        view.put("statusText", statusText(document.getStatus()));
         view.put("documentNo", document.getDocumentNo());
         view.put("templateId", document.getTemplateId());
         view.put("templateName", document.getTemplateName());
         view.put("createdAt", document.getCreatedAt());
+        boolean owner = Long.valueOf(viewerCompanyId).equals(document.getCompanyId());
+        boolean draft = "DRAFT".equals(document.getStatus());
+        view.put("contractStatus", contract.getStatus());
+        view.put("canEditDraft", owner && draft
+                && ("PENDING".equals(contract.getStatus()) || "ACTIVE".equals(contract.getStatus())));
+        view.put("canPublish", owner && draft && "ACTIVE".equals(contract.getStatus()));
         return view;
     }
 
     private String normalizeType(String type) {
         String normalized = type == null ? "" : type.trim().toUpperCase(Locale.ROOT);
-        if (!SALES_ORDER.equals(normalized) && !DELIVERY_NOTE.equals(normalized)) {
+        if (!SALES_ORDER.equals(normalized)) {
             throw new BusinessException("单据类型不正确");
         }
         return normalized;
     }
 
     private String createDocumentNo(String type) {
-        String prefix = SALES_ORDER.equals(type) ? "XS" : "SH";
+        String prefix = "XS";
         String date = LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE);
         String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 8).toUpperCase(Locale.ROOT);
         return prefix + "-" + date + "-" + suffix;
+    }
+
+    private String normalizeSourceType(String sourceType) {
+        String normalized = sourceType == null ? "" : sourceType.trim().toUpperCase(Locale.ROOT);
+        return "CONTRACT_DEFAULT".equals(normalized) ? "CONTRACT_DEFAULT" : "TEMPLATE";
+    }
+
+    private long supplierCompanyId(TradeContract contract) {
+        if ("PURCHASE".equalsIgnoreCase(contract.getDirection())) {
+            if (contract.getCounterpartyCompanyId() == null) {
+                throw new BusinessException("合同供方企业信息不完整");
+            }
+            return contract.getCounterpartyCompanyId();
+        }
+        return contract.getCompanyId();
+    }
+
+    private Long buyerCompanyId(TradeContract contract) {
+        return "PURCHASE".equalsIgnoreCase(contract.getDirection())
+                ? contract.getCompanyId() : contract.getCounterpartyCompanyId();
+    }
+
+    private String statusText(String status) {
+        if ("DRAFT".equals(status)) return "草稿";
+        if ("ACKNOWLEDGED".equals(status)) return "已接收待入库";
+        if ("INBOUNDED".equals(status)) return "已入库";
+        return "已发布";
     }
 
     private Long longValue(Object value) {

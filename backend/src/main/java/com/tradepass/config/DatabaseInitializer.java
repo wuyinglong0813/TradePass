@@ -250,6 +250,9 @@ public class DatabaseInitializer {
         seedPerm("auth_manage", "授权管理", 13);
         seedPerm("company_manage", "企业认证", 14);
         seedPerm("seal_manage", "电子章管理", 15);
+        seedPerm("contract_attachment_upload", "合同资料上传", 16);
+        seedPerm("sales_order_receive", "销售单接收", 17);
+        seedPerm("inventory_receive", "销售单入库", 18);
     }
 
     private void seedTemplateCategories() {
@@ -271,8 +274,6 @@ public class DatabaseInitializer {
     private void seedBusinessDocumentTemplates() {
         seedBusinessDocumentTemplate(1, "SALES_ORDER", "标准销售单模板",
                 "{\"columns\":[\"序号\",\"品名\",\"规格\",\"单位\",\"数量\",\"单价\",\"金额\",\"备注\"],\"blankRows\":8}");
-        seedBusinessDocumentTemplate(1, "DELIVERY_NOTE", "标准送货单模板",
-                "{\"columns\":[\"序号\",\"品名\",\"规格\",\"数量\",\"单位\",\"备注\"],\"blankRows\":10}");
     }
 
     private void seedRoles() {
@@ -281,10 +282,11 @@ public class DatabaseInitializer {
             seedRole(companyId, "管理员", List.of("member_manage", "auth_manage", "company_manage",
                     "seal_manage", "contract_template"));
             seedRole(companyId, "销售员", List.of("supplier_view", "counterparty_manage", "order_view", "order_create",
-                    "contract_sign", "contract_view", "reconciliation"));
+                    "contract_sign", "contract_view", "reconciliation", "contract_attachment_upload"));
             seedRole(companyId, "采购员", List.of("buyer_view", "order_create", "contract_view", "order_view",
-                    "contract_sign", "reconciliation"));
-            seedRole(companyId, "财务", List.of("invoice_view", "reconciliation"));
+                    "contract_sign", "reconciliation", "contract_attachment_upload", "sales_order_receive",
+                    "inventory_view", "inventory_receive"));
+            seedRole(companyId, "财务", List.of("invoice_view", "reconciliation", "contract_attachment_upload"));
         });
     }
 

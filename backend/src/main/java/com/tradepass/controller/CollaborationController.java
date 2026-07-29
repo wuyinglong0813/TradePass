@@ -1,0 +1,142 @@
+package com.tradepass.controller;
+
+import com.tradepass.common.ApiResponse;
+import com.tradepass.common.BusinessException;
+import com.tradepass.service.ContractAttachmentService;
+import com.tradepass.service.PersonalMemoService;
+import com.tradepass.service.ReconciliationStatementService;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api")
+public class CollaborationController {
+    private final ContractAttachmentService attachmentService;
+    private final PersonalMemoService memoService;
+    private final ReconciliationStatementService statementService;
+
+    public CollaborationController(ContractAttachmentService attachmentService,
+                                   PersonalMemoService memoService,
+                                   ReconciliationStatementService statementService) {
+        this.attachmentService = attachmentService;
+        this.memoService = memoService;
+        this.statementService = statementService;
+    }
+
+    @GetMapping("/contracts/{contractId}/attachments")
+    public ApiResponse<List<Map<String, Object>>> listAttachments(@PathVariable Long contractId,
+                                                                  @RequestParam String category) {
+        return ApiResponse.ok(attachmentService.list(contractId, category));
+    }
+
+    @PostMapping(value = "/contracts/{contractId}/attachments", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<Map<String, Object>> uploadAttachment(
+            @PathVariable Long contractId,
+            @RequestParam String category,
+            @RequestParam(required = false) String originalName,
+            @RequestParam(required = false) String voucherDate,
+            @RequestParam(required = false) String voucherAmount,
+            @RequestParam MultipartFile file) {
+        try {
+            String name = originalName == null || originalName.isBlank()
+                    ? file.getOriginalFilename() : originalName;
+            return ApiResponse.ok(attachmentService.upload(contractId, category, name,
+                    file.getBytes(), voucherDate, voucherAmount));
+        } catch (BusinessException exception) {
+            throw exception;
+        } catch (Exception exception) {
+            throw new BusinessException("文件读取失败，请重新选择");
+        }
+    }
+
+    @GetMapping("/contract-attachments/{id}/content")
+    public ResponseEntity<byte[]> attachmentContent(@PathVariable Long id,
+                                                     @RequestParam(defaultValue = "false") boolean download) {
+        ContractAttachmentService.FilePayload file = attachmentService.getFile(id);
+        return fileResponse(file.originalName(), file.contentType(), file.data(), download);
+    }
+
+    @GetMapping("/contracts/{id}/memo")
+    public ApiResponse<Map<String, Object>> contractMemo(@PathVariable Long id) {
+        return ApiResponse.ok(memoService.get(PersonalMemoService.CONTRACT, id));
+    }
+
+    @PostMapping("/contracts/{id}/memo")
+    public ApiResponse<Map<String, Object>> saveContractMemo(@PathVariable Long id,
+                                                             @RequestBody Map<String, Object> body) {
+        return ApiResponse.ok(memoService.save(PersonalMemoService.CONTRACT, id,
+                String.valueOf(body.getOrDefault("content", ""))));
+    }
+
+    @GetMapping("/trade-documents/{id}/memo")
+    public ApiResponse<Map<String, Object>> salesOrderMemo(@PathVariable Long id) {
+        return ApiResponse.ok(memoService.get(PersonalMemoService.SALES_ORDER, id));
+    }
+
+    @PostMapping("/trade-documents/{id}/memo")
+    public ApiResponse<Map<String, Object>> saveSalesOrderMemo(@PathVariable Long id,
+                                                               @RequestBody Map<String, Object> body) {
+        return ApiResponse.ok(memoService.save(PersonalMemoService.SALES_ORDER, id,
+                String.valueOf(body.getOrDefault("content", ""))));
+    }
+
+    @GetMapping("/reconciliation-statements")
+    public ApiResponse<List<Map<String, Object>>> statements(
+            @RequestParam(required = false) Long counterpartyCompanyId) {
+        return ApiResponse.ok(statementService.list(counterpartyCompanyId));
+    }
+
+    @PostMapping(value = "/reconciliation-statements", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<Map<String, Object>> uploadStatement(
+            @RequestParam Long counterpartyCompanyId,
+            @RequestParam String period,
+            @RequestParam(required = false) String remark,
+            @RequestParam(required = false) String originalName,
+            @RequestParam MultipartFile file) {
+        try {
+            String name = originalName == null || originalName.isBlank()
+                    ? file.getOriginalFilename() : originalName;
+            return ApiResponse.ok(statementService.upload(counterpartyCompanyId, period, remark,
+                    name, file.getBytes()));
+        } catch (BusinessException exception) {
+            throw exception;
+        } catch (Exception exception) {
+            throw new BusinessException("Excel 文件读取失败，请重新选择");
+        }
+    }
+
+    @GetMapping("/reconciliation-statements/{id}/content")
+    public ResponseEntity<byte[]> statementContent(@PathVariable Long id,
+                                                    @RequestParam(defaultValue = "false") boolean download) {
+        ReconciliationStatementService.FilePayload file = statementService.getFile(id);
+        return fileResponse(file.originalName(), file.contentType(), file.data(), download);
+    }
+
+    private ResponseEntity<byte[]> fileResponse(String fileName, String contentType,
+                                                byte[] data, boolean download) {
+        ContentDisposition disposition = (download ? ContentDisposition.attachment() : ContentDisposition.inline())
+                .filename(fileName, StandardCharsets.UTF_8)
+                .build();
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+                .header(HttpHeaders.CACHE_CONTROL, "private, no-store")
+                .header("X-Content-Type-Options", "nosniff")
+                .contentType(MediaType.parseMediaType(contentType))
+                .contentLength(data.length)
+                .body(data);
+    }
+}

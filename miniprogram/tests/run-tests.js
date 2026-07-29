@@ -305,6 +305,50 @@ test('business documents require an editable template flow and do not auto-open 
   assert.ok(!script.includes('this.downloadBusinessDocumentFile(document, false)'));
 });
 
+test('contract collaboration uses three visible tabs and keeps other fulfillment files last', () => {
+  const pageDir = path.join(__dirname, '..', 'pages', 'contract-preview');
+  const script = fs.readFileSync(path.join(pageDir, 'contract-preview.js'), 'utf8');
+  const template = fs.readFileSync(path.join(pageDir, 'contract-preview.wxml'), 'utf8');
+  assert.ok(script.includes("{ key: 'detail', label: '合同' }"));
+  assert.ok(script.includes("{ key: 'sales', label: '销售单' }"));
+  assert.ok(script.includes("{ key: 'fulfillment', label: '履约资料' }"));
+  assert.ok(!script.includes("{ key: 'payment'"));
+  assert.ok(template.indexOf('>发票<') < template.indexOf('>其它<'));
+  assert.ok(!script.includes('DELIVERY_NOTE'));
+  assert.ok(!template.includes('送货单'));
+  assert.ok(template.includes('我的进展'));
+  assert.ok(template.includes('仅当前账号可见'));
+});
+
+test('pending contracts create editable sales-order drafts before publishing', () => {
+  const contractPreview = fs.readFileSync(
+    path.join(__dirname, '..', 'pages', 'contract-preview', 'contract-preview.js'), 'utf8'
+  );
+  const salesDetail = fs.readFileSync(
+    path.join(__dirname, '..', 'pages', 'sales-order-detail', 'sales-order-detail.js'), 'utf8'
+  );
+  assert.ok(contractPreview.includes("contract.status === 'PENDING'"));
+  assert.ok(contractPreview.includes("salesOrderCreateText: createAsDraft ? '创建草稿' : '创建销售单'"));
+  assert.ok(salesDetail.includes('/trade-documents/${this.data.id}/draft'));
+  assert.ok(salesDetail.includes('/trade-documents/${this.data.id}/publish'));
+});
+
+test('xlsx reconciliation and sales-order inbound pages are wired', () => {
+  const appConfig = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'app.json'), 'utf8'));
+  const reconciliation = fs.readFileSync(
+    path.join(__dirname, '..', 'pages', 'reconciliation', 'reconciliation.js'), 'utf8'
+  );
+  const salesDetail = fs.readFileSync(
+    path.join(__dirname, '..', 'pages', 'sales-order-detail', 'sales-order-detail.js'), 'utf8'
+  );
+  assert.ok(appConfig.pages.includes('pages/sales-order-detail/sales-order-detail'));
+  assert.ok(appConfig.pages.includes('pages/inventory/inventory'));
+  assert.ok(reconciliation.includes("extension: ['xlsx']"));
+  assert.ok(reconciliation.includes('/reconciliation-statements'));
+  assert.ok(salesDetail.includes("this.submitReceive('RECEIVE_ONLY')"));
+  assert.ok(salesDetail.includes("this.submitReceive('INBOUND', warehouse.id)"));
+});
+
 test('home company switching uses the custom switcher instead of a native action sheet', () => {
   const script = fs.readFileSync(path.join(__dirname, '..', 'pages', 'index', 'index.js'), 'utf8');
   const template = fs.readFileSync(path.join(__dirname, '..', 'pages', 'index', 'index.wxml'), 'utf8');

@@ -1,24 +1,19 @@
 <view class="page">
   <view class="hero">
-    <view class="hero-title">销售与送货单模板</view>
-    <view class="hero-desc">单据模板与合同模板独立管理，生成后统一输出 A4 PDF</view>
+    <view class="hero-title">销售单模板</view>
+    <view class="hero-desc">维护销售单表格列，创建后统一输出 A4 PDF</view>
     <view class="upload-grid">
-      <button class="upload-btn primary" bindtap="uploadSalesTemplate">＋ 上传销售单</button>
-      <button class="upload-btn secondary" bindtap="uploadDeliveryTemplate">＋ 上传送货单</button>
+      <button class="upload-btn primary" bindtap="uploadSalesTemplate">＋ 上传销售单模板</button>
     </view>
   </view>
 
   <view class="type-tabs">
-    <view class="type-tab {{activeType === item.key ? 'active' : ''}}"
-      wx:for="{{tabs}}" wx:key="key" data-type="{{item.key}}" bindtap="switchType">
-      {{item.label}}
-      <text class="tab-count">{{item.key === 'SALES_ORDER' ? salesCount : deliveryCount}}</text>
-    </view>
+    <view class="type-tab active">销售单模板 <text class="tab-count">{{salesCount}}</text></view>
   </view>
 
   <view class="format-tip">
     <view class="tip-dot"></view>
-    <view>支持 JSON、PDF、Word、Excel 文件；非 JSON 文件会按参考图的标准表格版式生成。</view>
+    <view>上传 JSON 模板定义销售单列和空白行；合同默认销售单会自动带入合同产品，并允许创建前修改。</view>
   </view>
 
   <view class="loading" wx:if="{{loading && templates.length === 0}}">加载中...</view>
@@ -30,7 +25,7 @@
 
   <view class="template-list" wx:else>
     <view class="template-card" wx:for="{{templates}}" wx:key="id">
-      <view class="template-icon">{{item.documentType === 'SALES_ORDER' ? '销' : '送'}}</view>
+      <view class="template-icon">销</view>
       <view class="template-copy">
         <view class="template-name">{{item.name}}</view>
         <view class="template-meta">{{item.sourceText}}<text wx:if="{{item.dateText}}"> · {{item.dateText}}</text></view>
@@ -40,5 +35,5 @@
     </view>
   </view>
 
-  <view class="page-end">生成单据时会先选择对应类型的模板</view>
+  <view class="page-end">生成销售单时可选择合同默认模板或企业模板</view>
 </view>

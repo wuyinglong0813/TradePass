@@ -1,15 +1,34 @@
 <view class="page">
   <!-- 合同信息头 -->
   <view class="contract-header">
+    <view class="ch-status-row">
+      <view class="ch-status">{{contract ? contract.statusText : '加载中'}}</view>
+      <view class="ch-number" wx:if="{{contract}}">{{contract.contractNo || contract.id}}</view>
+    </view>
     <view class="ch-name">{{contractName}}</view>
     <view class="ch-party">与 {{counterpartyName}} 的合同</view>
   </view>
 
-  <!-- Tab 切换 -->
+  <!-- 当前账号的合同进展入口始终显示，避免埋在长合同底部。 -->
+  <view class="memo-summary" bindtap="openMemoEditor">
+    <view class="memo-summary-icon">记</view>
+    <view class="memo-summary-body">
+      <view class="memo-summary-head"><text>我的进展</text><text wx:if="{{memoUpdatedAt}}">{{memoUpdatedAt}}</text></view>
+      <view class="memo-summary-text {{personalMemo ? '' : 'empty'}}">{{memoPreview}}</view>
+      <view class="memo-summary-private">仅当前账号可见</view>
+    </view>
+    <view class="memo-summary-arrow">›</view>
+  </view>
+
+  <!-- 三个一级入口完整展示，不再依赖横向滑动。 -->
   <view class="tabs">
     <view class="tab-item {{activeTab === item.key ? 'active' : ''}}"
       wx:for="{{tabs}}" wx:key="key"
-      data-tab="{{item.key}}" bindtap="switchTab">{{item.label}}</view>
+      data-tab="{{item.key}}" bindtap="switchTab">
+      <text>{{item.label}}</text>
+      <text class="tab-count" wx:if="{{item.key === 'sales' && salesDocuments.length > 0}}">{{salesDocuments.length}}</text>
+      <text class="tab-count" wx:if="{{item.key === 'fulfillment' && fulfillmentCount > 0}}">{{fulfillmentCount}}</text>
+    </view>
   </view>
 
   <!-- ====== 合同详情 Tab ====== -->
@@ -60,88 +79,109 @@
         <button class="pdf-button secondary" loading="{{pdfLoading}}" disabled="{{pdfLoading}}" bindtap="downloadContractPdf">下载 PDF</button>
       </view>
       <view class="pdf-tip">PDF 按 A4 固定版式生成，手机端会整页等比例缩放；打开后可通过右上角菜单保存或转发。</view>
+
     </view>
   </block>
 
-  <!-- 销售单 / 物流单 / 送货单 / 发票浏览 -->
+  <!-- 销售单 / 物流单 / 转款凭证 / 发票 / 其它 -->
   <block wx:if="{{activeTab === 'sales'}}">
     <view class="document-bar">
-      <view><view class="document-title">销售单 PDF</view><view class="document-sub">选择模板并编辑本次单据内容</view></view>
-      <button class="document-create" data-type="SALES_ORDER" bindtap="createBusinessDocument">＋ 创建销售单</button>
+      <view><view class="document-title">合同销售单</view><view class="document-sub">待签可准备草稿，生效后发布给需方</view></view>
+      <button class="document-create" wx:if="{{canCreateSalesOrder}}" data-type="SALES_ORDER" bindtap="createBusinessDocument">＋ {{salesOrderCreateText}}</button>
     </view>
     <view class="document-list" wx:if="{{salesDocuments.length > 0}}">
-      <view class="document-card" wx:for="{{salesDocuments}}" wx:key="id">
-        <view class="document-badge">销</view>
-        <view class="document-info"><view class="document-no">{{item.documentNo}}</view><view class="document-meta">{{item.templateName}} · {{item.dateText}}</view></view>
-        <view class="document-actions"><view data-document="{{item}}" bindtap="viewBusinessDocument">查看</view><view data-document="{{item}}" bindtap="downloadBusinessDocument">下载</view></view>
+      <view class="document-card" wx:for="{{salesDocuments}}" wx:key="id" data-document="{{item}}" bindtap="openSalesOrderDetail">
+        <view class="document-badge {{item.status === 'DRAFT' ? 'draft' : ''}}">{{item.status === 'DRAFT' ? '稿' : '销'}}</view>
+        <view class="document-info"><view class="document-no">{{item.documentNo}}</view><view class="document-meta">{{item.statusText}} · {{item.templateName}} · {{item.dateText}}</view></view>
+        <view class="document-actions"><view data-document="{{item}}" catchtap="viewBusinessDocument">{{item.status === 'DRAFT' ? '预览' : '查看'}}</view><view data-document="{{item}}" catchtap="downloadBusinessDocument">下载</view><view>{{item.status === 'DRAFT' ? '编辑' : '详情'}}</view></view>
       </view>
     </view>
     <view class="list-empty compact" wx:if="{{salesDocuments.length === 0}}">
       <view class="empty-icon">📦</view><view class="empty-text">暂无销售单</view>
-      <view class="empty-sub">点击上方按钮，为当前合同生成销售单</view>
+      <view class="empty-sub">{{salesOrderEmptyHint}}</view>
     </view>
   </block>
 
-  <block wx:if="{{activeTab === 'logistics'}}">
-    <view class="document-bar">
-      <view><view class="document-title">物流单图片</view><view class="document-sub">支持拍照或从相册选择，上传后按图片查看</view></view>
-      <button class="document-create" loading="{{logisticsUploading}}" disabled="{{logisticsUploading}}" bindtap="chooseLogisticsImage">＋ 上传物流单</button>
+  <block wx:if="{{activeTab === 'fulfillment'}}">
+    <view class="fulfillment-intro">
+      <view class="document-title">履约资料</view>
+      <view class="document-sub">物流、付款、发票和其它资料集中展示，无需横向寻找</view>
     </view>
-    <view class="document-list" wx:if="{{logisticsList.length > 0}}">
-      <view class="document-card" wx:for="{{logisticsList}}" wx:key="id" data-document="{{item}}" bindtap="previewLogisticsImage">
+
+    <view class="fulfillment-section">
+      <view class="fulfillment-head">
+        <view><view class="fulfillment-title"><text class="section-mark logistics">物</text>物流单<text class="section-count">{{logisticsList.length}}</text></view><view class="document-sub">拍照或从相册上传</view></view>
+        <button class="section-upload" loading="{{logisticsUploading}}" disabled="{{logisticsUploading}}" bindtap="chooseLogisticsImage">上传</button>
+      </view>
+      <view class="document-card inner" wx:for="{{logisticsList}}" wx:key="id" data-document="{{item}}" bindtap="previewLogisticsImage">
         <view class="document-badge logistics">图</view>
         <view class="document-info"><view class="document-no">{{item.originalName}}</view><view class="document-meta">{{item.fileSizeText}} · {{item.dateText}}</view></view>
-        <view class="document-actions"><view>查看图片</view></view>
+        <view class="document-actions"><view>查看</view></view>
       </view>
+      <view class="section-empty" wx:if="{{!fulfillmentLoading && logisticsList.length === 0}}">暂无物流单，点击上传添加</view>
     </view>
-    <view class="list-empty compact" wx:if="{{!logisticsLoading && logisticsList.length === 0}}">
-      <view class="empty-icon">🖼️</view><view class="empty-text">暂无物流单图片</view>
-      <view class="empty-sub">点击上方按钮拍照或从相册上传</view>
-    </view>
-    <view class="list-empty compact" wx:if="{{logisticsLoading}}">
-      <view class="empty-text">物流单加载中...</view>
-    </view>
-  </block>
 
-  <block wx:if="{{activeTab === 'delivery'}}">
-    <view class="document-bar">
-      <view><view class="document-title">送货单 PDF</view><view class="document-sub">选择模板并编辑本次单据内容</view></view>
-      <button class="document-create" data-type="DELIVERY_NOTE" bindtap="createBusinessDocument">＋ 创建送货单</button>
-    </view>
-    <view class="document-list" wx:if="{{deliveryDocuments.length > 0}}">
-      <view class="document-card" wx:for="{{deliveryDocuments}}" wx:key="id">
-        <view class="document-badge delivery">送</view>
-        <view class="document-info"><view class="document-no">{{item.documentNo}}</view><view class="document-meta">{{item.templateName}} · {{item.dateText}}</view></view>
-        <view class="document-actions"><view data-document="{{item}}" bindtap="viewBusinessDocument">查看</view><view data-document="{{item}}" bindtap="downloadBusinessDocument">下载</view></view>
+    <view class="fulfillment-section">
+      <view class="fulfillment-head">
+        <view><view class="fulfillment-title"><text class="section-mark payment">款</text>转款凭证<text class="section-count">{{paymentAttachments.length}}</text></view><view class="document-sub">支持图片或 PDF，合同双方可查看下载</view></view>
+        <button class="section-upload" loading="{{attachmentUploading}}" disabled="{{attachmentUploading}}" data-category="PAYMENT_VOUCHER" bindtap="chooseAttachment">上传</button>
       </view>
+      <view class="document-card inner" wx:for="{{paymentAttachments}}" wx:key="id">
+        <view class="document-badge payment">款</view>
+        <view class="document-info"><view class="document-no">{{item.originalName}}</view><view class="document-meta">{{item.uploaderCompanyName}} · {{item.fileSizeText}} · {{item.dateText}}</view></view>
+        <view class="document-actions"><view data-attachment="{{item}}" bindtap="viewAttachment">查看</view><view data-attachment="{{item}}" bindtap="downloadAttachment">下载</view></view>
+      </view>
+      <view class="section-empty" wx:if="{{!fulfillmentLoading && paymentAttachments.length === 0}}">暂无转款凭证，点击上传添加</view>
     </view>
-    <view class="list-empty compact" wx:if="{{deliveryDocuments.length === 0}}">
-      <view class="empty-icon">📄</view><view class="empty-text">暂无送货单</view>
-      <view class="empty-sub">点击上方按钮，选择送货单模板生成</view>
-    </view>
-  </block>
 
-  <block wx:if="{{activeTab === 'invoice'}}">
-    <view class="list-empty" wx:if="{{invoiceList.length === 0}}">
-      <view class="empty-icon">🧾</view><view class="empty-text">发票数据源尚未接入</view>
-      <view class="empty-sub">当前不生成或展示模拟发票</view>
-    </view>
-    <view class="list" wx:else>
-      <view class="order-card" wx:for="{{invoiceList}}" wx:key="id" data-type="发票" data-item="{{item}}" bindtap="onItemTap">
+    <view class="fulfillment-section">
+      <view class="fulfillment-head">
+        <view><view class="fulfillment-title"><text class="section-mark invoice">票</text>发票<text class="section-count">{{invoiceList.length}}</text></view><view class="document-sub">发票数据源接入后将在这里集中展示</view></view>
+      </view>
+      <view class="order-card inner" wx:for="{{invoiceList}}" wx:key="id" data-type="发票" data-item="{{item}}" bindtap="onItemTap">
         <view class="oc-top"><view class="oc-no">{{item.invoiceNo}}</view><view class="oc-status {{item.status === '已开票' ? 'done' : 'pending'}}">{{item.status}}</view></view>
         <view class="oc-body"><view class="oc-product">{{item.type}}</view><view class="oc-qty">税率{{item.taxRate}}</view></view>
         <view class="oc-bottom"><view class="oc-date">{{item.date}}</view><view class="oc-amount">¥{{item.amount}}</view></view>
       </view>
+      <view class="section-empty" wx:if="{{invoiceList.length === 0}}">发票数据源尚未接入</view>
+    </view>
+
+    <!-- 其它始终放在履约资料最后。 -->
+    <view class="fulfillment-section">
+      <view class="fulfillment-head">
+        <view><view class="fulfillment-title"><text class="section-mark other">资</text>其它<text class="section-count">{{otherAttachments.length}}</text></view><view class="document-sub">支持图片、PDF、Word，合同双方可查看下载</view></view>
+        <button class="section-upload" loading="{{attachmentUploading}}" disabled="{{attachmentUploading}}" data-category="OTHER" bindtap="chooseAttachment">上传</button>
+      </view>
+      <view class="document-card inner" wx:for="{{otherAttachments}}" wx:key="id">
+        <view class="document-badge other">资</view>
+        <view class="document-info"><view class="document-no">{{item.originalName}}</view><view class="document-meta">{{item.uploaderCompanyName}} · {{item.fileSizeText}} · {{item.dateText}}</view></view>
+        <view class="document-actions"><view data-attachment="{{item}}" bindtap="viewAttachment">查看</view><view data-attachment="{{item}}" bindtap="downloadAttachment">下载</view></view>
+      </view>
+      <view class="section-empty" wx:if="{{!fulfillmentLoading && otherAttachments.length === 0}}">暂无其它资料，点击上传添加</view>
     </view>
   </block>
 
   <view class="page-end" wx:if="{{activeTab !== 'detail'}}">— 已经到底了 —</view>
 
-  <!-- 销售单 / 送货单创建编辑器 -->
+  <!-- 个人进展从顶部卡片进入，在底部面板编辑。 -->
+  <view class="memo-mask" wx:if="{{showMemoEditor}}" bindtap="closeMemoEditor">
+    <view class="memo-sheet" catchtap="noop">
+      <view class="memo-sheet-handle"></view>
+      <view class="memo-head">
+        <view><view class="memo-title">我的合同进展</view><view class="memo-tip">仅当前账号可见，不与同事或合同对方共享</view></view>
+        <view class="memo-close" bindtap="closeMemoEditor">×</view>
+      </view>
+      <textarea class="memo-input" maxlength="4000" value="{{memoDraft}}" bindinput="onMemoInput" placeholder="记录跟进进展、待办事项或沟通结论…" focus="{{showMemoEditor}}"/>
+      <view class="memo-sheet-meta"><text>{{memoDraft.length}} / 4000</text><text wx:if="{{memoUpdatedAt}}">上次保存 {{memoUpdatedAt}}</text></view>
+      <button class="memo-save" loading="{{memoSaving}}" disabled="{{memoSaving}}" bindtap="saveContractMemo">保存我的进展</button>
+    </view>
+  </view>
+
+  <!-- 销售单创建编辑器 -->
   <view class="document-editor-page" wx:if="{{showDocumentEditor}}">
     <view class="document-editor-header">
       <view class="document-editor-close" bindtap="closeDocumentEditor">取消</view>
-      <view class="document-editor-title">创建{{documentEditorLabel}}</view>
+      <view class="document-editor-title">{{createAsDraft ? '创建销售单草稿' : '创建销售单'}}</view>
       <view class="document-editor-close placeholder">取消</view>
     </view>
 
@@ -236,7 +276,7 @@
     </scroll-view>
 
     <view class="document-editor-actions" wx:if="{{documentEditorReady}}">
-      <button class="document-editor-button submit" loading="{{documentEditorSubmitting}}" disabled="{{documentEditorSubmitting}}" bindtap="submitBusinessDocument">创建{{documentEditorLabel}}</button>
+      <button class="document-editor-button submit" loading="{{documentEditorSubmitting}}" disabled="{{documentEditorSubmitting}}" bindtap="submitBusinessDocument">{{createAsDraft ? '保存草稿' : '创建并发布'}}</button>
     </view>
   </view>
 
