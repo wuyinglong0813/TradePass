@@ -28,7 +28,9 @@ App({
     userInfo: null,
     memberInfo: null,
     companies: [],
-    pendingInvite: null
+    pendingInvite: null,
+    activeTabIndex: null,
+    tabBarTransition: null
   },
 
   onLaunch() {

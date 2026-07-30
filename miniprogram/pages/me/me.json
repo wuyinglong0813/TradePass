@@ -2,8 +2,5 @@
   "enablePullDownRefresh": true,
   "navigationBarTitleText": "我的",
   "navigationBarBackgroundColor": "#f5f9ff",
-  "navigationBarTextStyle": "black",
-  "usingComponents": {
-    "login-guard": "/components/login-guard/login-guard"
-  }
+  "navigationBarTextStyle": "black"
 }

@@ -83,14 +83,6 @@ test('shared components emit stable UI events', () => {
   assert.strictEqual(tapped, true);
 });
 
-test('login guard opens the phone quick-login page', () => {
-  const loginGuard = loadComponent('../components/login-guard/login-guard');
-  let url;
-  wx.navigateTo = options => { url = options.url; };
-  loginGuard.methods.goLogin();
-  assert.strictEqual(url, '/pages/login/login');
-});
-
 function loadPage(relativePath) {
   let definition;
   global.Page = value => { definition = value; };
@@ -168,6 +160,30 @@ const app = {
 global.getApp = () => app;
 global.wx = {};
 const { request } = require('../utils/request');
+const { syncTabBar, tabIndicatorTransform } = require('../utils/tabBar');
+
+test('custom tab bar moves its indicator by one slot per navigation item', () => {
+  assert.strictEqual(tabIndicatorTransform(0), 'translate3d(0%, 0, 0)');
+  assert.strictEqual(tabIndicatorTransform(1), 'translate3d(100%, 0, 0)');
+  assert.strictEqual(tabIndicatorTransform(2), 'translate3d(200%, 0, 0)');
+
+  app.globalData.activeTabIndex = 2;
+  let movement;
+  syncTabBar({
+    getTabBar: () => ({
+      moveTo() {},
+      moveFromTo: (from, to) => { movement = { from, to }; }
+    })
+  }, 1);
+  assert.deepStrictEqual(movement, { from: 2, to: 1 });
+  assert.strictEqual(app.globalData.activeTabIndex, 1);
+
+  const componentScript = fs.readFileSync(
+    path.join(__dirname, '..', 'custom-tab-bar', 'index.js'),
+    'utf8'
+  );
+  assert.ok(!componentScript.includes('setTimeout'));
+});
 
 test('request injects auth and tenant headers and unwraps API data', async () => {
   let captured;

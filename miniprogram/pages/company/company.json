@@ -2,8 +2,5 @@
   "navigationBarTitleText": "企业中心",
   "navigationBarBackgroundColor": "#f5f9ff",
   "navigationBarTextStyle": "black",
-  "enablePullDownRefresh": true,
-  "usingComponents": {
-    "login-guard": "/components/login-guard/login-guard"
-  }
+  "enablePullDownRefresh": true
 }

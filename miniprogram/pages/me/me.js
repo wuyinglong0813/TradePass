@@ -1,5 +1,6 @@
 const { request } = require('../../utils/request');
 const dict = require('../../utils/dict');
+const { syncTabBar } = require('../../utils/tabBar');
 const app = getApp();
 
 function companyAbbr(name) {
@@ -29,6 +30,7 @@ Page({
   },
 
   onShow() {
+    syncTabBar(this, 2);
     const loggedIn = !!(app.globalData.token || wx.getStorageSync('tradepass_token'));
     const isDev = !!app.globalData.isLocalDevelopment;
     this.setData({ isLoggedIn: loggedIn, isDev });

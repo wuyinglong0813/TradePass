@@ -1,5 +1,6 @@
 const { request } = require('../../utils/request');
 const dict = require('../../utils/dict');
+const { syncTabBar } = require('../../utils/tabBar');
 const app = getApp();
 
 function hasPerm(perm) {
@@ -49,6 +50,7 @@ Page({
   },
 
   onShow() {
+    syncTabBar(this, 1);
     const loggedIn = !!(app.globalData.token || wx.getStorageSync('tradepass_token'));
     this.setData({ isLoggedIn: loggedIn });
     if (!loggedIn) return;

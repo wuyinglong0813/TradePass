@@ -2,8 +2,5 @@
   "navigationBarTitleText": "商签通",
   "navigationBarBackgroundColor": "#f5f9ff",
   "navigationBarTextStyle": "black",
-  "enablePullDownRefresh": true,
-  "usingComponents": {
-    "empty-state": "/components/empty-state/empty-state"
-  }
+  "enablePullDownRefresh": true
 }

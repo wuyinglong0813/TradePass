@@ -1,4 +1,5 @@
 const { request } = require('../../utils/request');
+const { syncTabBar } = require('../../utils/tabBar');
 const app = getApp();
 
 Page({
@@ -59,6 +60,7 @@ Page({
   },
 
   async onShow() {
+    syncTabBar(this, 0);
     await app.ensureSessionReady();
     const loggedIn = !!app.globalData.token;
     const user = app.globalData.userInfo;
