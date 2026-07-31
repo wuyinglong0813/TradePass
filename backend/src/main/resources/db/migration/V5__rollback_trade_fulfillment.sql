@@ -16,9 +16,12 @@ SET @phase2_delivery_id = (
 );
 
 DELETE FROM audit_log
-WHERE (biz_type = 'CONTRACT' AND biz_id = CAST(@phase2_contract_id AS CHAR))
-   OR (biz_type = 'ORDER' AND biz_id = CAST(@phase2_order_id AS CHAR))
-   OR (biz_type = 'DELIVERY' AND biz_id = CAST(@phase2_delivery_id AS CHAR));
+WHERE (biz_type = 'CONTRACT'
+    AND biz_id = CAST(@phase2_contract_id AS CHAR) COLLATE utf8mb4_general_ci)
+   OR (biz_type = 'ORDER'
+    AND biz_id = CAST(@phase2_order_id AS CHAR) COLLATE utf8mb4_general_ci)
+   OR (biz_type = 'DELIVERY'
+    AND biz_id = CAST(@phase2_delivery_id AS CHAR) COLLATE utf8mb4_general_ci);
 
 DROP TABLE IF EXISTS delivery_receipt_item;
 DROP TABLE IF EXISTS delivery_receipt;
