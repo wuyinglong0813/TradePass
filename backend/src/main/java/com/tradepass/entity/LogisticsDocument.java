@@ -16,6 +16,13 @@ public class LogisticsDocument {
     private String contentType;
     private Long fileSize;
     private byte[] imageData;
+    private String sha256;
+    private String storageProvider;
+    private String storageBucket;
+    private String objectKey;
+    private String objectVersionId;
+    private String etag;
+    private String encryptionAlgorithm;
     private Long createdBy;
     private LocalDateTime createdAt;
 
@@ -33,6 +40,20 @@ public class LogisticsDocument {
     public void setFileSize(Long fileSize) { this.fileSize = fileSize; }
     public byte[] getImageData() { return imageData; }
     public void setImageData(byte[] imageData) { this.imageData = imageData; }
+    public String getSha256() { return sha256; }
+    public void setSha256(String sha256) { this.sha256 = sha256; }
+    public String getStorageProvider() { return storageProvider; }
+    public void setStorageProvider(String storageProvider) { this.storageProvider = storageProvider; }
+    public String getStorageBucket() { return storageBucket; }
+    public void setStorageBucket(String storageBucket) { this.storageBucket = storageBucket; }
+    public String getObjectKey() { return objectKey; }
+    public void setObjectKey(String objectKey) { this.objectKey = objectKey; }
+    public String getObjectVersionId() { return objectVersionId; }
+    public void setObjectVersionId(String objectVersionId) { this.objectVersionId = objectVersionId; }
+    public String getEtag() { return etag; }
+    public void setEtag(String etag) { this.etag = etag; }
+    public String getEncryptionAlgorithm() { return encryptionAlgorithm; }
+    public void setEncryptionAlgorithm(String encryptionAlgorithm) { this.encryptionAlgorithm = encryptionAlgorithm; }
     public Long getCreatedBy() { return createdBy; }
     public void setCreatedBy(Long createdBy) { this.createdBy = createdBy; }
     public LocalDateTime getCreatedAt() { return createdAt; }

@@ -26,6 +26,7 @@ import com.tradepass.mapper.CounterpartyRelationMapper;
 import com.tradepass.mapper.TemplateCategoryMapper;
 import com.tradepass.mapper.TradeContractMapper;
 import com.tradepass.mapper.TradeOrderMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.dao.DuplicateKeyException;
@@ -48,8 +49,11 @@ public class TradeService {
     private final CompanyMapper companyMapper;
     private final AccessControlService accessControlService;
     private final AuditLogService auditLogService;
+    private final RankingCacheService rankingCache;
+    private final ContractArchiveService contractArchiveService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    @Autowired
     public TradeService(TradeOrderMapper tradeOrderMapper,
                         CounterpartyRelationMapper counterpartyRelationMapper,
                         TemplateCategoryMapper templateCategoryMapper,
@@ -57,7 +61,9 @@ public class TradeService {
                         TradeContractMapper tradeContractMapper,
                         CompanyMapper companyMapper,
                         AccessControlService accessControlService,
-                        AuditLogService auditLogService) {
+                        AuditLogService auditLogService,
+                        RankingCacheService rankingCache,
+                        ContractArchiveService contractArchiveService) {
         this.tradeOrderMapper = tradeOrderMapper;
         this.counterpartyRelationMapper = counterpartyRelationMapper;
         this.templateCategoryMapper = templateCategoryMapper;
@@ -66,6 +72,34 @@ public class TradeService {
         this.companyMapper = companyMapper;
         this.accessControlService = accessControlService;
         this.auditLogService = auditLogService;
+        this.rankingCache = rankingCache;
+        this.contractArchiveService = contractArchiveService;
+    }
+
+    TradeService(TradeOrderMapper tradeOrderMapper,
+                 CounterpartyRelationMapper counterpartyRelationMapper,
+                 TemplateCategoryMapper templateCategoryMapper,
+                 ContractTemplateMapper contractTemplateMapper,
+                 TradeContractMapper tradeContractMapper,
+                 CompanyMapper companyMapper,
+                 AccessControlService accessControlService,
+                 AuditLogService auditLogService,
+                 RankingCacheService rankingCache) {
+        this(tradeOrderMapper, counterpartyRelationMapper, templateCategoryMapper, contractTemplateMapper,
+                tradeContractMapper, companyMapper, accessControlService, auditLogService,
+                rankingCache, null);
+    }
+
+    TradeService(TradeOrderMapper tradeOrderMapper,
+                 CounterpartyRelationMapper counterpartyRelationMapper,
+                 TemplateCategoryMapper templateCategoryMapper,
+                 ContractTemplateMapper contractTemplateMapper,
+                 TradeContractMapper tradeContractMapper,
+                 CompanyMapper companyMapper,
+                 AccessControlService accessControlService,
+                 AuditLogService auditLogService) {
+        this(tradeOrderMapper, counterpartyRelationMapper, templateCategoryMapper, contractTemplateMapper,
+                tradeContractMapper, companyMapper, accessControlService, auditLogService, null, null);
     }
 
     public List<TradeOrderPayload> listOrders(String counterpartyName) {
@@ -139,6 +173,9 @@ public class TradeService {
         order.setStatus("CONFIRMED");
         order.setCreatedBy(AuthContext.userId());
         tradeOrderMapper.insert(order);
+        if (rankingCache != null) {
+            rankingCache.evict(companyId, request.direction().toUpperCase());
+        }
         auditLogService.log(companyId, "ORDER", order.getId(), "CREATE",
                 "创建订单 " + order.getOrderNo() + "，金额 " + amount);
         return toOrderPayload(order);
@@ -426,12 +463,20 @@ public class TradeService {
         long companyId = AuthContext.requireCompanyId();
         accessControlService.requirePermission(companyId, "contract_sign");
         TradeContract contract = ensurePendingIncomingContract(id, companyId);
+        LocalDateTime approvedAt = LocalDateTime.now();
         tradeContractMapper.update(new LambdaUpdateWrapper<TradeContract>()
                 .eq(TradeContract::getId, id)
                 .eq(TradeContract::getStatus, "PENDING")
                 .set(TradeContract::getStatus, "ACTIVE")
                 .set(TradeContract::getApprovedBy, AuthContext.userId())
-                .set(TradeContract::getApprovedAt, LocalDateTime.now()));
+                .set(TradeContract::getApprovedAt, approvedAt));
+        contract.setStatus("ACTIVE");
+        contract.setApprovedBy(AuthContext.userId());
+        contract.setApprovedAt(approvedAt);
+        if (contractArchiveService != null) {
+            contractArchiveService.archiveOnApproval(
+                    toContractPayload(contract, companyId), AuthContext.userId());
+        }
         auditLogService.log(companyId, "CONTRACT", id, "APPROVE",
                 "签署合同 " + contract.getContractNo());
         return "合同已签署生效";

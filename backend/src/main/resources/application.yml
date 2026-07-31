@@ -17,10 +17,37 @@ tradepass:
   verification:
     auto-approve: ${TRADEPASS_VERIFICATION_AUTO_APPROVE:false}
     callback-token: ${TRADEPASS_VERIFICATION_CALLBACK_TOKEN:}
+  redis:
+    enabled: ${TRADEPASS_REDIS_ENABLED:true}
+    key-prefix: ${TRADEPASS_REDIS_KEY_PREFIX:tradepass}
+    auth-cache-ttl: ${TRADEPASS_REDIS_AUTH_CACHE_TTL:60s}
+    ranking-cache-ttl: ${TRADEPASS_REDIS_RANKING_CACHE_TTL:30s}
+    wechat-local-cache-ttl: ${TRADEPASS_REDIS_WECHAT_LOCAL_CACHE_TTL:5m}
+  oss:
+    enabled: ${TRADEPASS_OSS_ENABLED:false}
+    required: ${TRADEPASS_OSS_REQUIRED:false}
+    migrate-legacy-blobs: ${TRADEPASS_OSS_MIGRATE_LEGACY_BLOBS:false}
+    endpoint: ${OSS_ENDPOINT:}
+    bucket: ${OSS_BUCKET:}
+    access-key-id: ${OSS_ACCESS_KEY_ID:}
+    access-key-secret: ${OSS_ACCESS_KEY_SECRET:}
+    security-token: ${OSS_SECURITY_TOKEN:}
+    server-side-encryption: ${OSS_SERVER_SIDE_ENCRYPTION:AES256}
+    kms-key-id: ${OSS_KMS_KEY_ID:}
+    key-prefix: ${TRADEPASS_OSS_KEY_PREFIX:tradepass}
+    connection-timeout-millis: ${OSS_CONNECTION_TIMEOUT_MILLIS:5000}
+    socket-timeout-millis: ${OSS_SOCKET_TIMEOUT_MILLIS:30000}
 
 spring:
   application:
     name: tradepass
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:1119}
+      password: ${REDIS_PASSWORD:}
+      connect-timeout: ${REDIS_CONNECT_TIMEOUT:1s}
+      timeout: ${REDIS_TIMEOUT:1s}
   servlet:
     multipart:
       max-file-size: 10MB

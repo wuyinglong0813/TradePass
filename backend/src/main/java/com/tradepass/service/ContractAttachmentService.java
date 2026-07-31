@@ -5,6 +5,7 @@ import com.tradepass.common.BusinessException;
 import com.tradepass.entity.TradeContract;
 import com.tradepass.mapper.TradeContractMapper;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,6 +15,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.UUID;
+import com.tradepass.config.OssProperties;
 
 @Service
 public class ContractAttachmentService {
@@ -24,15 +27,29 @@ public class ContractAttachmentService {
     private final TradeContractMapper contractMapper;
     private final AccessControlService accessControlService;
     private final AuditLogService auditLogService;
+    private final ObjectStorageService objectStorageService;
+    private final OssProperties ossProperties;
 
+    @Autowired
     public ContractAttachmentService(JdbcTemplate jdbc,
                                      TradeContractMapper contractMapper,
                                      AccessControlService accessControlService,
-                                     AuditLogService auditLogService) {
+                                     AuditLogService auditLogService,
+                                     ObjectStorageService objectStorageService,
+                                     OssProperties ossProperties) {
         this.jdbc = jdbc;
         this.contractMapper = contractMapper;
         this.accessControlService = accessControlService;
         this.auditLogService = auditLogService;
+        this.objectStorageService = objectStorageService;
+        this.ossProperties = ossProperties;
+    }
+
+    ContractAttachmentService(JdbcTemplate jdbc,
+                              TradeContractMapper contractMapper,
+                              AccessControlService accessControlService,
+                              AuditLogService auditLogService) {
+        this(jdbc, contractMapper, accessControlService, auditLogService, null, null);
     }
 
     public List<Map<String, Object>> list(Long contractId, String category) {
@@ -84,14 +101,28 @@ public class ContractAttachmentService {
         LocalDate parsedDate = parseDate(voucherDate);
         BigDecimal parsedAmount = parseAmount(voucherAmount);
         String safeName = FileTypeInspector.sanitizeFileName(originalName, contentType);
-        jdbc.update("""
-                INSERT INTO contract_attachment
-                (contract_id, uploader_company_id, category, original_name, content_type,
-                 file_size, file_data, sha256, voucher_date, voucher_amount, created_by)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, contractId, companyId, normalized, safeName, contentType,
-                data.length, data, FileTypeInspector.sha256(data), parsedDate, parsedAmount,
-                AuthContext.userId());
+        String sha256 = FileTypeInspector.sha256(data);
+        ObjectStorageService.StoredObject stored = store(companyId, contractId, normalized,
+                contentType, data, sha256);
+        if (stored == null) {
+            jdbc.update("""
+                    INSERT INTO contract_attachment
+                    (contract_id, uploader_company_id, category, original_name, content_type,
+                     file_size, file_data, sha256, voucher_date, voucher_amount, created_by)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, contractId, companyId, normalized, safeName, contentType,
+                    data.length, data, sha256, parsedDate, parsedAmount, AuthContext.userId());
+        } else {
+            jdbc.update("""
+                    INSERT INTO contract_attachment
+                    (contract_id, uploader_company_id, category, original_name, content_type,
+                     file_size, file_data, sha256, storage_provider, storage_bucket, object_key,
+                     object_version_id, etag, encryption_algorithm, voucher_date, voucher_amount, created_by)
+                    VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, contractId, companyId, normalized, safeName, contentType, data.length,
+                    sha256, stored.provider(), stored.bucket(), stored.objectKey(), stored.versionId(),
+                    stored.etag(), stored.encryptionAlgorithm(), parsedDate, parsedAmount, AuthContext.userId());
+        }
         Long id = jdbc.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
         auditLogService.log(companyId, "CONTRACT_ATTACHMENT", id,
                 "UPLOAD", "上传" + categoryLabel(normalized) + " " + safeName);
@@ -105,16 +136,45 @@ public class ContractAttachmentService {
         accessControlService.requireAnyPermission(companyId,
                 "contract_view", "contract_sign", "reconciliation");
         List<FilePayload> files = jdbc.query("""
-                        SELECT id, contract_id, original_name, content_type, file_data
+                        SELECT id, contract_id, original_name, content_type, file_size, file_data, sha256,
+                               storage_bucket, object_key, object_version_id
                         FROM contract_attachment WHERE id = ?
                         """, (rs, rowNum) -> new FilePayload(
                         rs.getLong("id"), rs.getLong("contract_id"),
                         rs.getString("original_name"), rs.getString("content_type"),
-                        rs.getBytes("file_data")), id);
+                        rs.getBytes("file_data"), rs.getString("storage_bucket"),
+                        rs.getString("object_key"), rs.getString("object_version_id"),
+                        rs.getLong("file_size"), rs.getString("sha256")), id);
         if (files.isEmpty()) throw new BusinessException("附件不存在");
         FilePayload payload = files.get(0);
         requireContractParty(payload.contractId(), companyId);
-        return payload;
+        if (payload.data() != null) return payload;
+        if (objectStorageService == null || !objectStorageService.isEnabled()
+                || payload.objectKey() == null) {
+            throw new BusinessException("附件内容暂不可用，请联系管理员");
+        }
+        byte[] data = objectStorageService.get(new ObjectStorageService.ObjectReference(
+                payload.storageBucket(), payload.objectKey(), payload.objectVersionId(),
+                payload.fileSize(), payload.sha256()));
+        return payload.withData(data);
+    }
+
+    private ObjectStorageService.StoredObject store(long companyId, Long contractId, String category,
+                                                     String contentType, byte[] data, String sha256) {
+        if (objectStorageService == null || !objectStorageService.isEnabled()) return null;
+        LocalDate today = LocalDate.now();
+        String fileType = PAYMENT_VOUCHER.equals(category) ? "payment-voucher" : "attachment";
+        String key = keyPrefix() + "/file/" + companyId + "/" + contractId + "/"
+                + fileType + "/" + today.getYear() + "/" + String.format("%02d", today.getMonthValue())
+                + "/" + UUID.randomUUID() + "-" + sha256 + "."
+                + FileTypeInspector.extension(contentType);
+        return objectStorageService.putImmutable(key, data, contentType, sha256);
+    }
+
+    private String keyPrefix() {
+        String value = ossProperties == null ? "tradepass" : ossProperties.getKeyPrefix();
+        value = value == null ? "" : value.trim().replaceAll("^/+|/+$", "");
+        return value.isBlank() ? "tradepass" : value;
     }
 
     private TradeContract requireContractParty(Long contractId, long companyId) {
@@ -176,7 +236,19 @@ public class ContractAttachmentService {
         return PAYMENT_VOUCHER.equals(category) ? "转款凭证" : "其它资料";
     }
 
-    public record FilePayload(Long id, Long contractId, String originalName,
-                              String contentType, byte[] data) {
+    public record FilePayload(Long id, Long contractId, String originalName, String contentType,
+                              byte[] data, String storageBucket, String objectKey,
+                              String objectVersionId, Long fileSize, String sha256) {
+        public FilePayload(Long id, Long contractId, String originalName,
+                           String contentType, byte[] data) {
+            this(id, contractId, originalName, contentType, data,
+                    null, null, null, data == null ? null : (long) data.length,
+                    data == null ? null : FileTypeInspector.sha256(data));
+        }
+
+        FilePayload withData(byte[] value) {
+            return new FilePayload(id, contractId, originalName, contentType, value,
+                    storageBucket, objectKey, objectVersionId, fileSize, sha256);
+        }
     }
 }

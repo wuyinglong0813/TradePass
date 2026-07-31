@@ -2,9 +2,15 @@ package com.tradepass.service;
 
 import com.tradepass.common.BusinessException;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
+
+import java.time.Duration;
+import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class WechatServiceTest {
 
@@ -28,5 +34,19 @@ class WechatServiceTest {
         assertThatThrownBy(() -> service.resolvePhoneByCode("phone-code"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("未配置 WECHAT_APP_SECRET，无法获取 access_token");
+    }
+
+    @Test
+    void reusesSharedAccessTokenFromRedis() {
+        RedisCacheService redisCache = mock(RedisCacheService.class);
+        long expiresAt = Instant.now().plusSeconds(600).getEpochSecond();
+        when(redisCache.get("wechat:access-token:app"))
+                .thenReturn(expiresAt + "\nshared-token");
+        WechatService service = new WechatService(
+                "app", "secret", false, redisCache, Duration.ofMinutes(5));
+
+        String token = ReflectionTestUtils.invokeMethod(service, "getAccessToken");
+
+        assertThat(token).isEqualTo("shared-token");
     }
 }

@@ -9,11 +9,11 @@
   </view>
 
   <!-- 协议（在快捷登录按钮上方） -->
-  <view class="agree-row">
-    <view class="agree-check {{agreed ? 'on' : ''}}" bindtap="toggleAgree">
+  <view class="agree-row {{shaking ? 'shaking' : ''}}">
+    <view class="agree-check {{agreed ? 'on' : ''}} {{shaking ? 'error' : ''}}" bindtap="toggleAgree">
       <text wx:if="{{agreed}}">✓</text>
     </view>
-    <view class="agree-label">
+    <view class="agree-label {{shaking ? 'error' : ''}}">
       已阅读并同意
       <text class="agree-link" catchtap="openUserAgreement">《用户许可使用协议》</text>
       和
@@ -25,7 +25,7 @@
   <!-- 手机号快捷登录（主入口） -->
   <button
     class="btn-quick-login"
-    open-type="{{quickPhoneEnabled ? 'getPhoneNumber' : ''}}"
+    open-type="{{quickPhoneEnabled && agreed ? 'getPhoneNumber' : ''}}"
     bindgetphonenumber="quickPhoneLogin"
     bindtap="onWechatPhoneTap">
     手机号快捷登录

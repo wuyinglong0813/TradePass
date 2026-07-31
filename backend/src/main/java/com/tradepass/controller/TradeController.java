@@ -9,7 +9,9 @@ import com.tradepass.dto.response.ContractPayload;
 import com.tradepass.dto.response.PagePayload;
 import com.tradepass.dto.response.TradeOrderPayload;
 import com.tradepass.service.ContractPdfService;
+import com.tradepass.service.ContractArchiveService;
 import com.tradepass.service.TradeService;
+import com.tradepass.common.AuthContext;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ContentDisposition;
@@ -33,11 +35,20 @@ import java.util.Map;
 public class TradeController {
     private final TradeService tradeService;
     private final ContractPdfService contractPdfService;
+    private final ContractArchiveService contractArchiveService;
 
     @Autowired
-    public TradeController(TradeService tradeService, ContractPdfService contractPdfService) {
+    public TradeController(TradeService tradeService, ContractPdfService contractPdfService,
+                           ContractArchiveService contractArchiveService) {
         this.tradeService = tradeService;
         this.contractPdfService = contractPdfService;
+        this.contractArchiveService = contractArchiveService;
+    }
+
+    TradeController(TradeService tradeService, ContractPdfService contractPdfService) {
+        this.tradeService = tradeService;
+        this.contractPdfService = contractPdfService;
+        this.contractArchiveService = null;
     }
 
     TradeController(TradeService tradeService) {
@@ -131,9 +142,12 @@ public class TradeController {
     @GetMapping(value = "/contracts/{id:\\d+}/pdf", produces = MediaType.APPLICATION_PDF_VALUE)
     public ResponseEntity<byte[]> downloadContractPdf(@PathVariable Long id) {
         ContractPayload contract = tradeService.getContract(id);
-        byte[] pdf = contractPdfService.generate(contract);
+        ContractArchiveService.PdfPayload archived = contractArchiveService == null
+                ? null : contractArchiveService.getPdf(contract, AuthContext.userId());
+        byte[] pdf = archived == null ? contractPdfService.generate(contract) : archived.data();
+        String fileName = archived == null ? contractPdfService.fileName(contract) : archived.fileName();
         ContentDisposition disposition = ContentDisposition.attachment()
-                .filename(contractPdfService.fileName(contract), StandardCharsets.UTF_8)
+                .filename(fileName, StandardCharsets.UTF_8)
                 .build();
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())

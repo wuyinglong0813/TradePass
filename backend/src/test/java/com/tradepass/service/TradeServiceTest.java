@@ -48,6 +48,8 @@ class TradeServiceTest {
     private CompanyMapper companyMapper;
     private AccessControlService accessControl;
     private AuditLogService auditLogService;
+    private RankingCacheService rankingCache;
+    private ContractArchiveService contractArchiveService;
     private TradeService service;
 
     @BeforeEach
@@ -64,8 +66,11 @@ class TradeServiceTest {
         companyMapper = mock(CompanyMapper.class);
         accessControl = mock(AccessControlService.class);
         auditLogService = mock(AuditLogService.class);
+        rankingCache = mock(RankingCacheService.class);
+        contractArchiveService = mock(ContractArchiveService.class);
         service = new TradeService(orderMapper, relationMapper, categoryMapper, templateMapper,
-                contractMapper, companyMapper, accessControl, auditLogService);
+                contractMapper, companyMapper, accessControl, auditLogService,
+                rankingCache, contractArchiveService);
         AuthContext.set(7L, 3L);
     }
 
@@ -89,6 +94,7 @@ class TradeServiceTest {
         assertThat(created.id()).isEqualTo("12");
         assertThat(created.status()).isEqualTo("CONFIRMED");
         assertThat(created.amount()).isEqualByComparingTo("88.50");
+        verify(rankingCache).evict(3L, "SALE");
 
         TradeOrder order = new TradeOrder();
         order.setId(12L);
@@ -262,6 +268,8 @@ class TradeServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("合同不存在或状态不是待审批");
         assertThat(service.approveContract(20L)).isEqualTo("合同已签署生效");
+        verify(contractArchiveService).archiveOnApproval(any(ContractPayload.class),
+                org.mockito.ArgumentMatchers.eq(7L));
         assertThat(service.rejectContract(20L)).isEqualTo("合同已拒绝");
     }
 

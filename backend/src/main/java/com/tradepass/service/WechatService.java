@@ -3,6 +3,7 @@ package com.tradepass.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tradepass.common.BusinessException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -26,15 +27,26 @@ public class WechatService {
     private final String wechatAppId;
     private final String wechatAppSecret;
     private final boolean devEnabled;
+    private final RedisCacheService redisCache;
+    private final Duration localCacheTtl;
     private volatile String cachedAccessToken;
     private volatile Instant accessTokenExpiresAt = Instant.EPOCH;
 
+    @Autowired
     public WechatService(@Value("${wechat.app-id}") String wechatAppId,
                          @Value("${wechat.app-secret}") String wechatAppSecret,
-                         @Value("${tradepass.dev.enabled:false}") boolean devEnabled) {
+                         @Value("${tradepass.dev.enabled:false}") boolean devEnabled,
+                         RedisCacheService redisCache,
+                         @Value("${tradepass.redis.wechat-local-cache-ttl:5m}") Duration localCacheTtl) {
         this.wechatAppId = wechatAppId;
         this.wechatAppSecret = wechatAppSecret;
         this.devEnabled = devEnabled;
+        this.redisCache = redisCache;
+        this.localCacheTtl = localCacheTtl;
+    }
+
+    WechatService(String wechatAppId, String wechatAppSecret, boolean devEnabled) {
+        this(wechatAppId, wechatAppSecret, devEnabled, null, Duration.ofMinutes(5));
     }
 
     public String resolveOpenid(String code) {
@@ -95,6 +107,10 @@ public class WechatService {
             now = Instant.now();
             if (cachedAccessToken != null && now.isBefore(accessTokenExpiresAt)) return cachedAccessToken;
             requireWechatSecret("无法获取 access_token");
+            String sharedToken = sharedAccessToken(now);
+            if (sharedToken != null) {
+                return sharedToken;
+            }
             try {
                 String query = "grant_type=client_credential&appid=" + encode(wechatAppId)
                         + "&secret=" + encode(wechatAppSecret);
@@ -109,6 +125,11 @@ public class WechatService {
                 long expiresIn = Math.max(120, node.path("expires_in").asLong(7200));
                 cachedAccessToken = token;
                 accessTokenExpiresAt = now.plusSeconds(expiresIn - 60);
+                if (redisCache != null) {
+                    redisCache.put(accessTokenCacheKey(),
+                            accessTokenExpiresAt.getEpochSecond() + "\n" + token,
+                            Duration.ofSeconds(expiresIn - 60));
+                }
                 return token;
             } catch (BusinessException e) {
                 throw e;
@@ -116,6 +137,39 @@ public class WechatService {
                 throw new BusinessException("微信凭证服务暂时不可用");
             }
         }
+    }
+
+    private String sharedAccessToken(Instant now) {
+        if (redisCache == null) {
+            return null;
+        }
+        String cached = redisCache.get(accessTokenCacheKey());
+        if (cached == null) {
+            return null;
+        }
+        int separator = cached.indexOf('\n');
+        if (separator <= 0 || separator == cached.length() - 1) {
+            redisCache.delete(accessTokenCacheKey());
+            return null;
+        }
+        try {
+            Instant sharedExpiry = Instant.ofEpochSecond(Long.parseLong(cached.substring(0, separator)));
+            if (!now.isBefore(sharedExpiry)) {
+                redisCache.delete(accessTokenCacheKey());
+                return null;
+            }
+            cachedAccessToken = cached.substring(separator + 1);
+            Instant localExpiry = now.plus(localCacheTtl);
+            accessTokenExpiresAt = localExpiry.isBefore(sharedExpiry) ? localExpiry : sharedExpiry;
+            return cachedAccessToken;
+        } catch (RuntimeException invalidCacheValue) {
+            redisCache.delete(accessTokenCacheKey());
+            return null;
+        }
+    }
+
+    private String accessTokenCacheKey() {
+        return "wechat:access-token:" + wechatAppId;
     }
 
     private JsonNode sendJson(HttpRequest request) throws Exception {

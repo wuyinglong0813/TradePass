@@ -62,14 +62,36 @@ page { background: #fff; }
   border-color: #3498ff;
 }
 
+.agree-check.error {
+  border-color: #d34a4a;
+}
+
 .agree-label {
   color: #999;
   font-size: 24rpx;
   line-height: 1.5;
 }
 
+.agree-label.error {
+  color: #d34a4a;
+}
+
+.agree-row.shaking {
+  animation: shake .35s ease;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  30% { transform: translateX(-8rpx); }
+  60% { transform: translateX(8rpx); }
+}
+
 .agree-link {
   color: #3498ff;
+}
+
+.agree-label.error .agree-link {
+  color: #d34a4a;
 }
 
 .agree-hint {

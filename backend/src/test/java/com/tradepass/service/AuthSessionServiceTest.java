@@ -10,8 +10,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
+import java.time.Duration;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -72,6 +75,18 @@ class AuthSessionServiceTest {
 
         when(sessionMapper.selectOne(any(Wrapper.class))).thenReturn(null);
         assertThat(service.resolveUserId("expired")).isNull();
+    }
+
+    @Test
+    void resolvesCachedSessionWithoutQueryingMysql() {
+        RedisCacheService redisCache = mock(RedisCacheService.class);
+        AuthSessionService cachedService = new AuthSessionService(
+                sessionMapper, userMapper, 12L, redisCache, Duration.ofSeconds(60));
+        when(redisCache.get(anyString())).thenReturn("42");
+
+        assertThat(cachedService.resolveUserId("Bearer cached-token")).isEqualTo(42L);
+        verify(sessionMapper, never()).selectOne(any(Wrapper.class));
+        verify(userMapper, never()).selectById(any());
     }
 
     @Test

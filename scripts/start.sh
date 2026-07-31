@@ -3,9 +3,17 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+ENV_FILE="${TRADEPASS_ENV_FILE:-$ROOT_DIR/.env}"
 PID_FILE="$ROOT_DIR/.runtime/tradepass.pid"
 LOG_FILE="$ROOT_DIR/.runtime/tradepass.log"
 JAR="$ROOT_DIR/backend/target/tradepass-server-0.1.0-SNAPSHOT.jar"
+
+if [[ -f "$ENV_FILE" ]]; then
+  set -a
+  source "$ENV_FILE"
+  set +a
+fi
+
 SPRING_PROFILE="${SPRING_PROFILES_ACTIVE:-dev}"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; NC='\033[0m'
@@ -14,7 +22,7 @@ log_err()  { echo -e "${RED}[ERROR]${NC} $*"; }
 
 # ---------- infra ----------
 start_infra() {
-  log_info "启动 Docker 基础设施 (MySQL)..."
+  log_info "启动 Docker 基础设施 (MySQL + Redis)..."
   if ! docker info >/dev/null 2>&1; then
     log_err "Docker 未运行"
     return 1

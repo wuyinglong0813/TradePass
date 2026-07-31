@@ -3,6 +3,7 @@ package com.tradepass.service;
 import com.tradepass.common.AuthContext;
 import com.tradepass.common.BusinessException;
 import com.tradepass.entity.TradeContract;
+import com.tradepass.config.OssProperties;
 import com.tradepass.mapper.TradeContractMapper;
 import com.tradepass.support.MybatisTestSupport;
 import org.junit.jupiter.api.AfterEach;
@@ -22,9 +23,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
 
 class ContractAttachmentServiceTest {
     private JdbcTemplate jdbc;
@@ -118,6 +121,41 @@ class ContractAttachmentServiceTest {
         assertThatThrownBy(() -> service.getFile(88L))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("附件不存在");
+    }
+
+    @Test
+    void storesNewAttachmentInOssAndReadsItBackWithRecordedVersion() {
+        ObjectStorageService storage = mock(ObjectStorageService.class);
+        when(storage.isEnabled()).thenReturn(true);
+        byte[] data = "%PDF-1.7".getBytes();
+        String sha256 = FileTypeInspector.sha256(data);
+        when(storage.putImmutable(anyString(), any(byte[].class), anyString(), anyString()))
+                .thenReturn(new ObjectStorageService.StoredObject(
+                        "ALIYUN_OSS", "bucket", "tradepass/file/3/12/attachment/file.pdf",
+                        "v1", "etag", "AES256", data.length, sha256));
+        OssProperties properties = new OssProperties();
+        properties.setKeyPrefix("tradepass");
+        ContractAttachmentService ossService = new ContractAttachmentService(
+                jdbc, contractMapper, mock(AccessControlService.class), mock(AuditLogService.class),
+                storage, properties);
+        when(jdbc.queryForObject(anyString(), eq(Long.class))).thenReturn(8L);
+        doReturn(List.of(Map.of("id", 8L))).when(jdbc)
+                .query(anyString(), any(RowMapper.class), any(Object[].class));
+
+        assertThat(ossService.upload(12L, "OTHER", "资料.pdf", data, null, null))
+                .containsEntry("id", 8L);
+        verify(storage).putImmutable(argThat(key -> key.startsWith(
+                        "tradepass/file/3/12/attachment/")), any(byte[].class),
+                eq("application/pdf"), eq(sha256));
+
+        ContractAttachmentService.FilePayload reference = new ContractAttachmentService.FilePayload(
+                8L, 12L, "资料.pdf", "application/pdf", null,
+                "bucket", "tradepass/file/3/12/attachment/file.pdf", "v1",
+                (long) data.length, sha256);
+        doReturn(List.of(reference)).when(jdbc)
+                .query(anyString(), any(RowMapper.class), any(Object[].class));
+        when(storage.get(any(ObjectStorageService.ObjectReference.class))).thenReturn(data);
+        assertThat(ossService.getFile(8L).data()).containsExactly(data);
     }
 
     private byte[] ooxml(String partName) throws Exception {

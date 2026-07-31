@@ -6,6 +6,7 @@ import com.tradepass.entity.AuthSession;
 import com.tradepass.entity.SysUser;
 import com.tradepass.mapper.AuthSessionMapper;
 import com.tradepass.mapper.SysUserMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -13,6 +14,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Base64;
 import java.util.HexFormat;
@@ -24,13 +26,26 @@ public class AuthSessionService {
     private final AuthSessionMapper authSessionMapper;
     private final SysUserMapper sysUserMapper;
     private final long sessionHours;
+    private final RedisCacheService redisCache;
+    private final Duration authCacheTtl;
 
+    @Autowired
     public AuthSessionService(AuthSessionMapper authSessionMapper,
                               SysUserMapper sysUserMapper,
-                              @Value("${tradepass.auth.session-hours:168}") long sessionHours) {
+                              @Value("${tradepass.auth.session-hours:168}") long sessionHours,
+                              RedisCacheService redisCache,
+                              @Value("${tradepass.redis.auth-cache-ttl:60s}") Duration authCacheTtl) {
         this.authSessionMapper = authSessionMapper;
         this.sysUserMapper = sysUserMapper;
         this.sessionHours = sessionHours;
+        this.redisCache = redisCache;
+        this.authCacheTtl = authCacheTtl;
+    }
+
+    AuthSessionService(AuthSessionMapper authSessionMapper,
+                       SysUserMapper sysUserMapper,
+                       long sessionHours) {
+        this(authSessionMapper, sysUserMapper, sessionHours, null, Duration.ofSeconds(60));
     }
 
     public String issue(long userId) {
@@ -52,8 +67,13 @@ public class AuthSessionService {
         if (token == null) {
             return null;
         }
+        String tokenHash = hash(token);
+        Long cachedUserId = cachedUserId(tokenHash);
+        if (cachedUserId != null) {
+            return cachedUserId;
+        }
         AuthSession session = authSessionMapper.selectOne(new LambdaQueryWrapper<AuthSession>()
-                .eq(AuthSession::getTokenHash, hash(token))
+                .eq(AuthSession::getTokenHash, tokenHash)
                 .eq(AuthSession::getRevoked, false)
                 .gt(AuthSession::getExpiresAt, LocalDateTime.now())
                 .last("LIMIT 1"));
@@ -61,7 +81,14 @@ public class AuthSessionService {
             return null;
         }
         SysUser user = sysUserMapper.selectById(session.getUserId());
-        return user != null && "ACTIVE".equals(user.getStatus()) ? user.getId() : null;
+        if (user == null || !"ACTIVE".equals(user.getStatus())) {
+            return null;
+        }
+        Duration remaining = session.getExpiresAt() == null
+                ? authCacheTtl
+                : Duration.between(LocalDateTime.now(), session.getExpiresAt());
+        cacheUserId(tokenHash, user.getId(), shorter(authCacheTtl, remaining));
+        return user.getId();
     }
 
     public void revoke(String authorization) {
@@ -69,9 +96,49 @@ public class AuthSessionService {
         if (token == null) {
             return;
         }
+        String tokenHash = hash(token);
+        if (redisCache != null) {
+            redisCache.delete(cacheKey(tokenHash));
+        }
         authSessionMapper.update(new LambdaUpdateWrapper<AuthSession>()
-                .eq(AuthSession::getTokenHash, hash(token))
+                .eq(AuthSession::getTokenHash, tokenHash)
                 .set(AuthSession::getRevoked, true));
+    }
+
+    private Long cachedUserId(String tokenHash) {
+        if (redisCache == null) {
+            return null;
+        }
+        String value = redisCache.get(cacheKey(tokenHash));
+        if (value == null) {
+            return null;
+        }
+        try {
+            return Long.parseLong(value);
+        } catch (NumberFormatException ignored) {
+            redisCache.delete(cacheKey(tokenHash));
+            return null;
+        }
+    }
+
+    private void cacheUserId(String tokenHash, long userId, Duration ttl) {
+        if (redisCache != null && ttl != null && !ttl.isZero() && !ttl.isNegative()) {
+            redisCache.put(cacheKey(tokenHash), String.valueOf(userId), ttl);
+        }
+    }
+
+    private String cacheKey(String tokenHash) {
+        return "auth:session:" + tokenHash;
+    }
+
+    private Duration shorter(Duration first, Duration second) {
+        if (first == null) {
+            return second;
+        }
+        if (second == null) {
+            return first;
+        }
+        return first.compareTo(second) <= 0 ? first : second;
     }
 
     private String extractToken(String authorization) {

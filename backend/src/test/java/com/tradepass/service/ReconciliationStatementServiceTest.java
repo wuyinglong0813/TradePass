@@ -3,6 +3,7 @@ package com.tradepass.service;
 import com.tradepass.common.AuthContext;
 import com.tradepass.common.BusinessException;
 import com.tradepass.entity.CounterpartyRelationEntity;
+import com.tradepass.config.OssProperties;
 import com.tradepass.mapper.CounterpartyRelationMapper;
 import com.tradepass.support.MybatisTestSupport;
 import org.junit.jupiter.api.AfterEach;
@@ -22,9 +23,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
 
 class ReconciliationStatementServiceTest {
     private JdbcTemplate jdbc;
@@ -106,6 +109,40 @@ class ReconciliationStatementServiceTest {
         assertThatThrownBy(() -> service.getFile(99L))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("对账单不存在");
+    }
+
+    @Test
+    void storesAndReadsStatementThroughOss() throws Exception {
+        ObjectStorageService storage = mock(ObjectStorageService.class);
+        when(storage.isEnabled()).thenReturn(true);
+        byte[] data = ooxml("xl/workbook.xml");
+        String sha256 = FileTypeInspector.sha256(data);
+        when(storage.putImmutable(anyString(), any(byte[].class), anyString(), anyString()))
+                .thenReturn(new ObjectStorageService.StoredObject(
+                        "ALIYUN_OSS", "bucket", "tradepass/file/3/reconciliation/4/2026-07/file.xlsx",
+                        "v1", "etag", "AES256", data.length, sha256));
+        ReconciliationStatementService ossService = new ReconciliationStatementService(
+                jdbc, relationMapper, mock(AccessControlService.class), mock(AuditLogService.class),
+                storage, new OssProperties());
+        when(jdbc.queryForObject(anyString(), eq(Long.class))).thenReturn(18L);
+        doReturn(List.of(Map.of("id", 18L))).when(jdbc)
+                .query(anyString(), any(RowMapper.class), any(Object[].class));
+
+        assertThat(ossService.upload(4L, "2026-07", "", "账单.xlsx", data))
+                .containsEntry("id", 18L);
+        verify(storage).putImmutable(argThat(key -> key.startsWith(
+                        "tradepass/file/3/reconciliation/4/2026-07/")), any(byte[].class),
+                eq("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"), eq(sha256));
+
+        ReconciliationStatementService.FilePayload reference =
+                new ReconciliationStatementService.FilePayload(18L, 3L, 4L, "账单.xlsx",
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", null,
+                        "bucket", "tradepass/file/3/reconciliation/4/2026-07/file.xlsx", "v1",
+                        (long) data.length, sha256);
+        doReturn(List.of(reference)).when(jdbc)
+                .query(anyString(), any(RowMapper.class), any(Object[].class));
+        when(storage.get(any(ObjectStorageService.ObjectReference.class))).thenReturn(data);
+        assertThat(ossService.getFile(18L).data()).containsExactly(data);
     }
 
     private byte[] ooxml(String partName) throws Exception {

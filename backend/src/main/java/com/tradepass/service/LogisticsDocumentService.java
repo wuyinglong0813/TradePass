@@ -7,6 +7,8 @@ import com.tradepass.entity.LogisticsDocument;
 import com.tradepass.entity.TradeContract;
 import com.tradepass.mapper.LogisticsDocumentMapper;
 import com.tradepass.mapper.TradeContractMapper;
+import com.tradepass.config.OssProperties;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,6 +16,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 @Service
 public class LogisticsDocumentService {
@@ -23,15 +26,29 @@ public class LogisticsDocumentService {
     private final TradeContractMapper contractMapper;
     private final AccessControlService accessControlService;
     private final AuditLogService auditLogService;
+    private final ObjectStorageService objectStorageService;
+    private final OssProperties ossProperties;
 
+    @Autowired
     public LogisticsDocumentService(LogisticsDocumentMapper documentMapper,
                                     TradeContractMapper contractMapper,
                                     AccessControlService accessControlService,
-                                    AuditLogService auditLogService) {
+                                    AuditLogService auditLogService,
+                                    ObjectStorageService objectStorageService,
+                                    OssProperties ossProperties) {
         this.documentMapper = documentMapper;
         this.contractMapper = contractMapper;
         this.accessControlService = accessControlService;
         this.auditLogService = auditLogService;
+        this.objectStorageService = objectStorageService;
+        this.ossProperties = ossProperties;
+    }
+
+    LogisticsDocumentService(LogisticsDocumentMapper documentMapper,
+                             TradeContractMapper contractMapper,
+                             AccessControlService accessControlService,
+                             AuditLogService auditLogService) {
+        this(documentMapper, contractMapper, accessControlService, auditLogService, null, null);
     }
 
     public List<Map<String, Object>> listDocuments(Long contractId) {
@@ -77,7 +94,20 @@ public class LogisticsDocumentService {
         document.setOriginalName(normalizeFileName(originalName, contentType));
         document.setContentType(contentType);
         document.setFileSize((long) imageData.length);
-        document.setImageData(imageData);
+        String sha256 = FileTypeInspector.sha256(imageData);
+        document.setSha256(sha256);
+        ObjectStorageService.StoredObject stored = store(companyId, contractId,
+                contentType, imageData, sha256);
+        if (stored == null) {
+            document.setImageData(imageData);
+        } else {
+            document.setStorageProvider(stored.provider());
+            document.setStorageBucket(stored.bucket());
+            document.setObjectKey(stored.objectKey());
+            document.setObjectVersionId(stored.versionId());
+            document.setEtag(stored.etag());
+            document.setEncryptionAlgorithm(stored.encryptionAlgorithm());
+        }
         document.setCreatedBy(AuthContext.userId());
         documentMapper.insert(document);
         auditLogService.log(companyId, "LOGISTICS_DOCUMENT", document.getId(),
@@ -95,7 +125,34 @@ public class LogisticsDocumentService {
             throw new BusinessException("物流单图片不存在");
         }
         requireContractParty(document.getContractId(), companyId);
+        if (document.getImageData() == null) {
+            if (objectStorageService == null || !objectStorageService.isEnabled()
+                    || document.getObjectKey() == null) {
+                throw new BusinessException("物流单图片暂不可用，请联系管理员");
+            }
+            document.setImageData(objectStorageService.get(new ObjectStorageService.ObjectReference(
+                    document.getStorageBucket(), document.getObjectKey(), document.getObjectVersionId(),
+                    document.getFileSize(), document.getSha256())));
+        }
         return document;
+    }
+
+    private ObjectStorageService.StoredObject store(long companyId, Long contractId, String contentType,
+                                                     byte[] data, String sha256) {
+        if (objectStorageService == null || !objectStorageService.isEnabled()) return null;
+        java.time.LocalDate today = java.time.LocalDate.now();
+        String key = keyPrefix() + "/file/" + companyId + "/" + contractId
+                + "/logistics/" + today.getYear() + "/"
+                + String.format("%02d", today.getMonthValue()) + "/"
+                + UUID.randomUUID() + "-" + sha256 + "."
+                + FileTypeInspector.extension(contentType);
+        return objectStorageService.putImmutable(key, data, contentType, sha256);
+    }
+
+    private String keyPrefix() {
+        String value = ossProperties == null ? "tradepass" : ossProperties.getKeyPrefix();
+        value = value == null ? "" : value.trim().replaceAll("^/+|/+$", "");
+        return value.isBlank() ? "tradepass" : value;
     }
 
     private TradeContract requireContractParty(Long contractId, long companyId) {

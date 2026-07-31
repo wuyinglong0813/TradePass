@@ -4,7 +4,7 @@
 
 后端是单个 Spring Boot 3 应用，运行端口为 `9999`。代码按 `controller`、`service`、`mapper`、`entity` 和 `dto` 分层，业务数据通过 MyBatis-Plus 持久化到 MySQL，数据库结构通过 Flyway 迁移维护。
 
-当前没有 API 网关、Nacos、Redis、消息队列或拆分后的微服务。`docs/microservice-architecture.md` 仅记录未来业务规模扩大时的备选演进方案，不代表仓库现状。
+当前没有 API 网关、Nacos、消息队列或拆分后的微服务。应用已使用 Redis 处理短时缓存与跨实例协调；`docs/microservice-architecture.md` 仅记录未来业务规模扩大时的备选演进方案，不代表仓库现状。
 
 ## 主要模块
 
@@ -17,6 +17,7 @@
 ## 数据与租户边界
 
 - 登录会话使用随机 token，数据库仅保存摘要；注销会撤销服务端会话。
+- Redis 短时缓存有效会话到用户 ID 的映射，缓存未命中或 Redis 不可用时回查 MySQL。
 - 小程序在 `Authorization` 中传 token，在 `X-Company-Id` 中传当前企业。
 - 受租户约束的查询由服务端读取并校验当前企业，不能依赖客户端默认企业 ID。
 - 订单、合同、模板和成员列表接口采用分页响应：`items`、`total`、`page`、`size`、`hasMore`。
@@ -27,4 +28,4 @@
 
 ## 基础设施
 
-`docker-compose.yml` 当前只启动 MySQL。应用在宿主机通过 `java -jar` 或 IDEA 运行。
+`docker-compose.yml` 当前启动 MySQL（`1118`）和 Redis（`1119`）。Redis 用于鉴权缓存、企业搜索限流、微信 `access_token` 共享缓存和首页排行短缓存；它不是核心业务数据源，故障时应用会降级。应用在宿主机通过 `java -jar` 或 IDEA 运行。

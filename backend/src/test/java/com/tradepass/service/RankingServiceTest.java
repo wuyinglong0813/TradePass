@@ -14,6 +14,7 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -59,5 +60,18 @@ class RankingServiceTest {
         assertThat(result.companyName()).isEqualTo("未知企业");
         assertThat(result.ranking()).isEmpty();
         verify(orderMapper).selectRanking(3L, "PURCHASE", "total");
+    }
+
+    @Test
+    void returnsCachedRankingWithoutRunningAggregateQuery() {
+        RankingCacheService rankingCache = mock(RankingCacheService.class);
+        RankingService cachedService = new RankingService(
+                orderMapper, companyMapper, accessControl, rankingCache);
+        List<RankingItem> cached = List.of(
+                new RankingItem(1, "缓存客户", new BigDecimal("99.00"), 3, "FLAT"));
+        when(rankingCache.get(3L, "SALE", "month")).thenReturn(cached);
+
+        assertThat(cachedService.salesRanking("month", "3")).isEqualTo(cached);
+        verify(orderMapper, never()).selectRanking(3L, "SALE", "month");
     }
 }

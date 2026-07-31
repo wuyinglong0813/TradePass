@@ -5,3 +5,5 @@ tradepass:
     enabled: false
   verification:
     auto-approve: false
+  oss:
+    required: true

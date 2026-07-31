@@ -5,6 +5,7 @@ import com.tradepass.common.TradePassDtos.RankingItem;
 import com.tradepass.entity.Company;
 import com.tradepass.mapper.CompanyMapper;
 import com.tradepass.mapper.TradeOrderMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -17,11 +18,23 @@ public class RankingService {
     private final TradeOrderMapper tradeOrderMapper;
     private final CompanyMapper companyMapper;
     private final AccessControlService accessControlService;
+    private final RankingCacheService rankingCache;
 
-    public RankingService(TradeOrderMapper tradeOrderMapper, CompanyMapper companyMapper, AccessControlService accessControlService) {
+    @Autowired
+    public RankingService(TradeOrderMapper tradeOrderMapper,
+                          CompanyMapper companyMapper,
+                          AccessControlService accessControlService,
+                          RankingCacheService rankingCache) {
         this.tradeOrderMapper = tradeOrderMapper;
         this.companyMapper = companyMapper;
         this.accessControlService = accessControlService;
+        this.rankingCache = rankingCache;
+    }
+
+    RankingService(TradeOrderMapper tradeOrderMapper,
+                   CompanyMapper companyMapper,
+                   AccessControlService accessControlService) {
+        this(tradeOrderMapper, companyMapper, accessControlService, null);
     }
 
     public HomePayload supplierHome(String period, String companyId) {
@@ -45,7 +58,14 @@ public class RankingService {
     }
 
     private List<RankingItem> rank(String direction, String period, long companyId) {
-        List<Map<String, Object>> rows = tradeOrderMapper.selectRanking(companyId, direction, normalizePeriod(period));
+        String normalizedPeriod = normalizePeriod(period);
+        if (rankingCache != null) {
+            List<RankingItem> cached = rankingCache.get(companyId, direction, normalizedPeriod);
+            if (cached != null) {
+                return cached;
+            }
+        }
+        List<Map<String, Object>> rows = tradeOrderMapper.selectRanking(companyId, direction, normalizedPeriod);
         List<RankingItem> ranked = new ArrayList<>();
         int rank = 1;
         for (Map<String, Object> row : rows) {
@@ -56,6 +76,9 @@ public class RankingService {
                     ((Number) row.get("orderCount")).intValue(),
                     "FLAT"
             ));
+        }
+        if (rankingCache != null) {
+            rankingCache.put(companyId, direction, normalizedPeriod, ranked);
         }
         return ranked;
     }

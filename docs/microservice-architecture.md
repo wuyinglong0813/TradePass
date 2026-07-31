@@ -1,6 +1,6 @@
 # 财源通天微服务架构设计（未来备选）
 
-> 本文是未来演进草案，不是当前部署说明。当前仓库是单个 Spring Boot 应用，仅依赖 MySQL；准确现状见 `docs/backend-architecture.md`。
+> 本文是未来演进草案，不是当前部署说明。当前仓库是单个 Spring Boot 应用，使用 MySQL 持久化业务数据，并使用 Redis 提供缓存和限流；准确现状见 `docs/backend-architecture.md`。
 
 ## 统一命名
 
@@ -200,6 +200,6 @@ flowchart TD
 
 - 仅当单体应用在团队协作、独立扩缩容或故障隔离方面出现明确瓶颈时，再评估拆分服务。
 - 拆分后可使用 Nacos 做服务注册发现，由网关统一暴露 `/api/**`。
-- 随业务量和可靠性需求再评估 Sentinel、RocketMQ 与 Redis，避免提前引入未被使用的基础设施。
+- 随业务量和可靠性需求再评估 Sentinel、RocketMQ 与 Redis Sentinel/Cluster，避免提前引入未被使用的基础设施。
 - Seata 只建议在确实出现跨服务强一致事务后再引入，避免过早增加复杂度。
 - 当前业务数据已通过 MyBatis-Plus 持久化到 MySQL，未来拆分时应优先按业务边界逐步迁移，避免一次性重构。

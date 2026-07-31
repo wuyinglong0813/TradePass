@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.tradepass.common.AuthContext;
 import com.tradepass.common.BusinessException;
 import com.tradepass.entity.LogisticsDocument;
+import com.tradepass.config.OssProperties;
 import com.tradepass.entity.TradeContract;
 import com.tradepass.mapper.LogisticsDocumentMapper;
 import com.tradepass.mapper.TradeContractMapper;
@@ -19,6 +20,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -105,5 +107,39 @@ class LogisticsDocumentServiceTest {
         assertThat(service.getImage(9L)).isSameAs(document);
         verify(accessControlService)
                 .requireAnyPermission(4L, "contract_view", "contract_sign");
+    }
+
+    @Test
+    void storesNewImageInOssAndHydratesOnlyForAuthorizedDownload() {
+        ObjectStorageService storage = mock(ObjectStorageService.class);
+        when(storage.isEnabled()).thenReturn(true);
+        byte[] jpeg = new byte[]{(byte) 0xff, (byte) 0xd8, (byte) 0xff, 0x01};
+        String sha256 = FileTypeInspector.sha256(jpeg);
+        when(storage.putImmutable(any(String.class), any(byte[].class), any(String.class), any(String.class)))
+                .thenReturn(new ObjectStorageService.StoredObject(
+                        "ALIYUN_OSS", "bucket", "tradepass/file/3/44/logistics/file.jpg",
+                        "v1", "etag", "AES256", jpeg.length, sha256));
+        LogisticsDocumentService ossService = new LogisticsDocumentService(
+                documentMapper, contractMapper, accessControlService, auditLogService,
+                storage, new OssProperties());
+        AtomicReference<LogisticsDocument> inserted = new AtomicReference<>();
+        doAnswer(invocation -> {
+            LogisticsDocument document = invocation.getArgument(0);
+            document.setId(10L);
+            inserted.set(document);
+            return 1;
+        }).when(documentMapper).insert(any(LogisticsDocument.class));
+        when(documentMapper.selectById(10L)).thenAnswer(invocation -> inserted.get());
+
+        assertThat(ossService.upload(44L, "物流单.jpg", jpeg)).containsEntry("id", 10L);
+        assertThat(inserted.get().getImageData()).isNull();
+        assertThat(inserted.get().getObjectVersionId()).isEqualTo("v1");
+        verify(storage).putImmutable(argThat(key -> key.startsWith(
+                        "tradepass/file/3/44/logistics/")), any(byte[].class),
+                org.mockito.ArgumentMatchers.eq("image/jpeg"),
+                org.mockito.ArgumentMatchers.eq(sha256));
+
+        when(storage.get(any(ObjectStorageService.ObjectReference.class))).thenReturn(jpeg);
+        assertThat(ossService.getImage(10L).getImageData()).containsExactly(jpeg);
     }
 }

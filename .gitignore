@@ -11,3 +11,5 @@ miniprogram/node_modules/
 
 .runtime/
 *.log
+.env
+!.env.example

@@ -7,6 +7,7 @@ Page({
     showAgreement: false,
     agreementTitle: '',
     agreementType: '',
+    shaking: false,
     // 小程序完成企业认证、开通「手机号验证组件」后改为 true
     quickPhoneEnabled: false
   },
@@ -22,17 +23,22 @@ Page({
 
   toggleAgree() { this.setData({ agreed: !this.data.agreed }); },
 
+  remindAgreement() {
+    this.setData({ shaking: true });
+    setTimeout(() => this.setData({ shaking: false }), 500);
+  },
+
   noop() {},
 
   skipLogin() { wx.switchTab({ url: '/pages/index/index' }); },
 
   /* 快捷登录未开通时，模拟 dev 登录 */
   onWechatPhoneTap() {
-    if (this.data.quickPhoneEnabled) return; // 已开通由 open-type 处理
     if (!this.data.agreed) {
-      wx.showToast({ title: '请先阅读并同意协议', icon: 'none' });
+      this.remindAgreement();
       return;
     }
+    if (this.data.quickPhoneEnabled) return; // 已开通由 open-type 处理
     this.loginWithPayload({ code: 'dev-openid-001', nickName: '满帅', phone: '18800000001' });
   },
 
@@ -48,7 +54,7 @@ Page({
   /* 微信手机号快捷登录 */
   quickPhoneLogin(e) {
     if (!this.data.agreed) {
-      wx.showToast({ title: '请先阅读并同意协议', icon: 'none' });
+      this.remindAgreement();
       return;
     }
     if (e.detail.errMsg !== 'getPhoneNumber:ok') {
