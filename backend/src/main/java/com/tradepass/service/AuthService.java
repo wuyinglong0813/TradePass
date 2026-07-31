@@ -71,7 +71,12 @@ public class AuthService {
 
     @Transactional
     public LoginSession wechatLogin(WechatLoginRequest request) {
-        String openid = wechatService.resolveOpenid(request.code());
+        return wechatLogin(request, null);
+    }
+
+    @Transactional
+    public LoginSession wechatLogin(WechatLoginRequest request, String trustedOpenid) {
+        String openid = wechatService.resolveOpenid(request.code(), trustedOpenid);
         if (!devEnabled && request.phone() != null && !request.phone().isBlank()) {
             throw new BusinessException("生产环境不接受未经验证的手机号");
         }

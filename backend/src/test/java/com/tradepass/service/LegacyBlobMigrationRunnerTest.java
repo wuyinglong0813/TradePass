@@ -1,6 +1,6 @@
 package com.tradepass.service;
 
-import com.tradepass.config.OssProperties;
+import com.tradepass.config.StorageProperties;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.DefaultApplicationArguments;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -20,10 +20,10 @@ import static org.mockito.Mockito.when;
 class LegacyBlobMigrationRunnerTest {
 
     @Test
-    void skipsUnlessOssAndMigrationSwitchAreBothEnabled() {
+    void skipsUnlessCloudStorageAndMigrationSwitchAreBothEnabled() {
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
         ObjectStorageService storage = mock(ObjectStorageService.class);
-        OssProperties properties = new OssProperties();
+        StorageProperties properties = new StorageProperties();
         LegacyBlobMigrationRunner runner = new LegacyBlobMigrationRunner(
                 jdbc, storage, mock(ContractArchiveService.class), properties);
 
@@ -42,7 +42,7 @@ class LegacyBlobMigrationRunnerTest {
         when(storage.isEnabled()).thenReturn(true);
         doReturn(List.of()).when(jdbc)
                 .query(anyString(), any(RowMapper.class), any(Object[].class));
-        OssProperties properties = new OssProperties();
+        StorageProperties properties = new StorageProperties();
         properties.setMigrateLegacyBlobs(true);
         LegacyBlobMigrationRunner runner = new LegacyBlobMigrationRunner(
                 jdbc, storage, mock(ContractArchiveService.class), properties);

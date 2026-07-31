@@ -33,8 +33,10 @@ public class AuthController {
     }
 
     @PostMapping("/auth/wechat-login")
-    public ApiResponse<LoginSession> wechatLogin(@Valid @RequestBody WechatLoginRequest request) {
-        return ApiResponse.ok(authService.wechatLogin(request));
+    public ApiResponse<LoginSession> wechatLogin(@Valid @RequestBody WechatLoginRequest request,
+                                                  HttpServletRequest servletRequest) {
+        return ApiResponse.ok(authService.wechatLogin(request,
+                servletRequest.getHeader("x-wx-openid")));
     }
 
     @PostMapping("/auth/bind-phone")

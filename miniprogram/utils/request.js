@@ -31,12 +31,10 @@ function request(options) {
       : (app.globalData.currentCompanyId || '');
     if (options.withCompany !== false && companyId) header['X-Company-Id'] = companyId;
 
-    wx.request({
-      url: `${app.globalData.baseUrl}${options.url}`,
+    const callbacks = {
       method: options.method || 'GET',
       data: options.data || {},
       header,
-      timeout: options.timeout || 15000,
       success: ({ statusCode, data }) => {
         if (statusCode === 401 || (data && data.code === 401)) {
           if (options.handleUnauthorized !== false) handleUnauthorized(app);
@@ -50,6 +48,29 @@ function request(options) {
         reject(new Error((data && data.message) || `请求失败（${statusCode || '未知状态'}）`));
       },
       fail: error => reject(new Error((error && error.errMsg) || (error && error.message) || '网络请求失败'))
+    };
+
+    if (!app.globalData.isLocalDevelopment) {
+      if (!wx.cloud || typeof wx.cloud.callContainer !== 'function') {
+        reject(new Error('当前微信版本不支持云托管调用，请升级微信后重试'));
+        return;
+      }
+      wx.cloud.callContainer({
+        ...callbacks,
+        config: { env: app.globalData.cloudEnv },
+        path: `/api${options.url}`,
+        header: {
+          ...header,
+          'X-WX-SERVICE': app.globalData.cloudService
+        }
+      });
+      return;
+    }
+
+    wx.request({
+      ...callbacks,
+      url: `${app.globalData.baseUrl}${options.url}`,
+      timeout: options.timeout || 15000
     });
   });
 }

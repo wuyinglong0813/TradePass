@@ -72,7 +72,7 @@ class AuthServiceTest {
     @Test
     void productionLoginRejectsUnverifiedRawPhone() {
         AuthService service = service(false);
-        when(wechatService.resolveOpenid("code")).thenReturn("openid");
+        when(wechatService.resolveOpenid("code", null)).thenReturn("openid");
 
         assertThatThrownBy(() -> service.wechatLogin(
                 new WechatLoginRequest("code", "昵称", null, "13800000000", null)))
@@ -85,7 +85,7 @@ class AuthServiceTest {
     @SuppressWarnings("unchecked")
     void createsGuestUserAndIssuesRandomSession() {
         AuthService service = service(true);
-        when(wechatService.resolveOpenid("dev-new")).thenReturn("dev-new");
+        when(wechatService.resolveOpenid("dev-new", null)).thenReturn("dev-new");
         when(userMapper.selectOne(any(Wrapper.class))).thenReturn(null);
         doAnswer(invocation -> {
             SysUser user = invocation.getArgument(0);
@@ -107,7 +107,7 @@ class AuthServiceTest {
     @SuppressWarnings("unchecked")
     void updatesExistingUserAndRestoresCompanyRole() {
         AuthService service = service(true);
-        when(wechatService.resolveOpenid("dev-phone-login")).thenReturn("dev-phone-login");
+        when(wechatService.resolveOpenid("dev-phone-login", null)).thenReturn("dev-phone-login");
         SysUser user = new SysUser();
         user.setId(7L);
         user.setOpenid("old-openid");

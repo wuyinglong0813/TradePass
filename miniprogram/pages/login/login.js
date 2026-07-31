@@ -61,12 +61,7 @@ Page({
       wx.showToast({ title: '获取手机号失败', icon: 'none' });
       return;
     }
-    wx.login({
-      success: ({ code }) => {
-        this.loginWithPayload({ code, phoneCode: e.detail.code });
-      },
-      fail: () => wx.showToast({ title: '微信登录失败', icon: 'none' })
-    });
+    this.loginWithPayload({ phoneCode: e.detail.code });
   },
 
   async loginWithPayload(payload) {

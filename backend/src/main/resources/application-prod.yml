@@ -5,5 +5,13 @@ tradepass:
     enabled: false
   verification:
     auto-approve: false
-  oss:
+  storage:
+    enabled: ${TRADEPASS_STORAGE_ENABLED:true}
     required: true
+    migrate-legacy-blobs: ${TRADEPASS_STORAGE_MIGRATE_LEGACY_BLOBS:false}
+    bucket: ${CLOUDBASE_STORAGE_BUCKET:7072-prod-d7g9zrn5s7e6aab68-1446724178}
+    region: ${CLOUDBASE_STORAGE_REGION:ap-shanghai}
+    key-prefix: ${TRADEPASS_STORAGE_KEY_PREFIX:prod}
+
+wechat:
+  cloud-open-api-enabled: ${WECHAT_CLOUD_OPEN_API_ENABLED:true}

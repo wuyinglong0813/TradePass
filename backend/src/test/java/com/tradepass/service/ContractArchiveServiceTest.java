@@ -1,6 +1,6 @@
 package com.tradepass.service;
 
-import com.tradepass.config.OssProperties;
+import com.tradepass.config.StorageProperties;
 import com.tradepass.dto.response.ContractPayload;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -25,7 +25,7 @@ class ContractArchiveServiceTest {
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
         ContractPdfService pdfService = mock(ContractPdfService.class);
         ObjectStorageService storage = mock(ObjectStorageService.class);
-        OssProperties properties = new OssProperties();
+        StorageProperties properties = new StorageProperties();
         properties.setKeyPrefix("tradepass");
         ContractPayload contract = contract("ACTIVE");
         byte[] pdf = "%PDF-frozen".getBytes();
@@ -38,8 +38,8 @@ class ContractArchiveServiceTest {
         when(pdfService.fileName(contract)).thenReturn("合同.pdf");
         when(storage.putImmutable(anyString(), any(byte[].class), anyString(), anyString()))
                 .thenReturn(new ObjectStorageService.StoredObject(
-                        "ALIYUN_OSS", "bucket", record.objectKey(), "version-1", "etag",
-                        "AES256", pdf.length, sha256));
+                        "CLOUDBASE_COS", "bucket", record.objectKey(), "version-1", "etag",
+                        "CLOUDBASE_MANAGED", pdf.length, sha256));
         doReturn(List.of(), List.of(record), List.of(record))
                 .when(jdbc).query(anyString(), any(RowMapper.class), any(Object[].class));
         when(storage.get(any(ObjectStorageService.ObjectReference.class))).thenReturn(pdf);
@@ -57,7 +57,7 @@ class ContractArchiveServiceTest {
     }
 
     @Test
-    void keepsDraftPdfDynamicWhenOssIsDisabled() {
+    void keepsDraftPdfDynamicWhenCloudStorageIsDisabled() {
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
         ContractPdfService pdfService = mock(ContractPdfService.class);
         ObjectStorageService storage = mock(ObjectStorageService.class);
@@ -66,7 +66,7 @@ class ContractArchiveServiceTest {
         when(pdfService.generate(contract)).thenReturn(pdf);
         when(pdfService.fileName(contract)).thenReturn("草稿.pdf");
         ContractArchiveService service = new ContractArchiveService(
-                jdbc, pdfService, storage, new OssProperties());
+                jdbc, pdfService, storage, new StorageProperties());
 
         assertThat(service.getPdf(contract, 7L).data()).containsExactly(pdf);
     }

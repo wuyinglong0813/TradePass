@@ -22,7 +22,7 @@ log_err()  { echo -e "${RED}[ERROR]${NC} $*"; }
 
 # ---------- infra ----------
 start_infra() {
-  log_info "启动 Docker 基础设施 (MySQL + Redis)..."
+  log_info "启动 Docker 基础设施 (MySQL)..."
   if ! docker info >/dev/null 2>&1; then
     log_err "Docker 未运行"
     return 1

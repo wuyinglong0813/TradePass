@@ -15,6 +15,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class RedisCacheServiceTest {
@@ -63,5 +64,18 @@ class RedisCacheServiceTest {
         assertThat(service.get("auth:test")).isNull();
         assertThatCode(() -> service.put("auth:test", "7", Duration.ofSeconds(30)))
                 .doesNotThrowAnyException();
+    }
+
+    @Test
+    void doesNotTouchRedisWhenDisabled() {
+        RedisCacheService disabled = new RedisCacheService(
+                redisTemplate, new ObjectMapper(), false, "tradepass");
+
+        assertThat(disabled.get("auth:test")).isNull();
+        assertThat(disabled.increment("rate:test", Duration.ofMinutes(1))).isNull();
+        disabled.put("auth:test", "7", Duration.ofSeconds(30));
+        disabled.delete("auth:test");
+
+        verifyNoInteractions(redisTemplate);
     }
 }

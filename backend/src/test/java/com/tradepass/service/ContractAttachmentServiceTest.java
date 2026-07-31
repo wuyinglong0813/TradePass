@@ -3,7 +3,7 @@ package com.tradepass.service;
 import com.tradepass.common.AuthContext;
 import com.tradepass.common.BusinessException;
 import com.tradepass.entity.TradeContract;
-import com.tradepass.config.OssProperties;
+import com.tradepass.config.StorageProperties;
 import com.tradepass.mapper.TradeContractMapper;
 import com.tradepass.support.MybatisTestSupport;
 import org.junit.jupiter.api.AfterEach;
@@ -124,16 +124,16 @@ class ContractAttachmentServiceTest {
     }
 
     @Test
-    void storesNewAttachmentInOssAndReadsItBackWithRecordedVersion() {
+    void storesNewAttachmentInCloudStorageAndReadsItBackWithRecordedVersion() {
         ObjectStorageService storage = mock(ObjectStorageService.class);
         when(storage.isEnabled()).thenReturn(true);
         byte[] data = "%PDF-1.7".getBytes();
         String sha256 = FileTypeInspector.sha256(data);
         when(storage.putImmutable(anyString(), any(byte[].class), anyString(), anyString()))
                 .thenReturn(new ObjectStorageService.StoredObject(
-                        "ALIYUN_OSS", "bucket", "tradepass/file/3/12/attachment/file.pdf",
-                        "v1", "etag", "AES256", data.length, sha256));
-        OssProperties properties = new OssProperties();
+                        "CLOUDBASE_COS", "bucket", "tradepass/file/3/12/attachment/file.pdf",
+                        "v1", "etag", "CLOUDBASE_MANAGED", data.length, sha256));
+        StorageProperties properties = new StorageProperties();
         properties.setKeyPrefix("tradepass");
         ContractAttachmentService ossService = new ContractAttachmentService(
                 jdbc, contractMapper, mock(AccessControlService.class), mock(AuditLogService.class),

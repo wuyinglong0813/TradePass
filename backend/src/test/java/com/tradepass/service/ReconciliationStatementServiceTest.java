@@ -3,7 +3,7 @@ package com.tradepass.service;
 import com.tradepass.common.AuthContext;
 import com.tradepass.common.BusinessException;
 import com.tradepass.entity.CounterpartyRelationEntity;
-import com.tradepass.config.OssProperties;
+import com.tradepass.config.StorageProperties;
 import com.tradepass.mapper.CounterpartyRelationMapper;
 import com.tradepass.support.MybatisTestSupport;
 import org.junit.jupiter.api.AfterEach;
@@ -112,18 +112,18 @@ class ReconciliationStatementServiceTest {
     }
 
     @Test
-    void storesAndReadsStatementThroughOss() throws Exception {
+    void storesAndReadsStatementThroughCloudStorage() throws Exception {
         ObjectStorageService storage = mock(ObjectStorageService.class);
         when(storage.isEnabled()).thenReturn(true);
         byte[] data = ooxml("xl/workbook.xml");
         String sha256 = FileTypeInspector.sha256(data);
         when(storage.putImmutable(anyString(), any(byte[].class), anyString(), anyString()))
                 .thenReturn(new ObjectStorageService.StoredObject(
-                        "ALIYUN_OSS", "bucket", "tradepass/file/3/reconciliation/4/2026-07/file.xlsx",
-                        "v1", "etag", "AES256", data.length, sha256));
+                        "CLOUDBASE_COS", "bucket", "tradepass/file/3/reconciliation/4/2026-07/file.xlsx",
+                        "v1", "etag", "CLOUDBASE_MANAGED", data.length, sha256));
         ReconciliationStatementService ossService = new ReconciliationStatementService(
                 jdbc, relationMapper, mock(AccessControlService.class), mock(AuditLogService.class),
-                storage, new OssProperties());
+                storage, new StorageProperties());
         when(jdbc.queryForObject(anyString(), eq(Long.class))).thenReturn(18L);
         doReturn(List.of(Map.of("id", 18L))).when(jdbc)
                 .query(anyString(), any(RowMapper.class), any(Object[].class));

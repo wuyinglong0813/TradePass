@@ -4,17 +4,15 @@ const { request, clearSession } = require('./utils/request');
 const LOCAL_API = 'http://127.0.0.1:9999/api';
 // 云托管公网访问地址（真机/体验版/正式版用）
 const CLOUD_API = 'https://tradepass-274155-4-1446724178.sh.run.tcloudbase.com/api';
+// 云托管 callContainer 配置；生产请求经微信链路自动注入可信用户信息。
+const CLOUD_ENV = 'prod-d7g9zrn5s7e6aab68';
+const CLOUD_SERVICE = 'tradepass';
 
 function isLocalDevelopment() {
   try {
-    if (wx.getSystemInfoSync().platform === 'devtools') return true;
+    return wx.getSystemInfoSync().platform === 'devtools';
   } catch (e) {}
-  try {
-    const account = wx.getAccountInfoSync();
-    return account && account.miniProgram && account.miniProgram.envVersion === 'develop';
-  } catch (e) {
-    return false;
-  }
+  return false;
 }
 
 const localDevelopment = isLocalDevelopment();
@@ -23,6 +21,8 @@ App({
   globalData: {
     baseUrl: localDevelopment ? LOCAL_API : CLOUD_API,
     isLocalDevelopment: localDevelopment,
+    cloudEnv: CLOUD_ENV,
+    cloudService: CLOUD_SERVICE,
     token: '',
     currentCompanyId: '',
     userInfo: null,
@@ -34,6 +34,9 @@ App({
   },
 
   onLaunch() {
+    if (!localDevelopment && wx.cloud) {
+      wx.cloud.init({ env: CLOUD_ENV, traceUser: true });
+    }
     const token = wx.getStorageSync('tradepass_token');
     const companyId = wx.getStorageSync('tradepass_company_id');
     if (companyId) this.globalData.currentCompanyId = String(companyId);
@@ -96,24 +99,23 @@ App({
 
   doLogin() {
     wx.showLoading({ title: '登录中...' });
+    const login = data => request({
+      url: '/auth/wechat-login',
+      method: 'POST',
+      data,
+      auth: false,
+      withCompany: false
+    }).then(session => this.establishSession(session))
+      .then(() => wx.showToast({ title: '登录成功', icon: 'success' }))
+      .catch(error => wx.showToast({ title: error.message || '登录失败', icon: 'none' }))
+      .finally(() => wx.hideLoading());
+
+    if (!localDevelopment) {
+      login({});
+      return;
+    }
     wx.login({
-      success: async ({ code }) => {
-        try {
-          const session = await request({
-            url: '/auth/wechat-login',
-            method: 'POST',
-            data: { code },
-            auth: false,
-            withCompany: false
-          });
-          await this.establishSession(session);
-          wx.showToast({ title: '登录成功', icon: 'success' });
-        } catch (error) {
-          wx.showToast({ title: error.message || '登录失败', icon: 'none' });
-        } finally {
-          wx.hideLoading();
-        }
-      },
+      success: ({ code }) => login({ code }),
       fail: () => {
         wx.hideLoading();
         wx.showToast({ title: '微信登录失败', icon: 'none' });

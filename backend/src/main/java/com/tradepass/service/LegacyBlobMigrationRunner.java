@@ -1,6 +1,6 @@
 package com.tradepass.service;
 
-import com.tradepass.config.OssProperties;
+import com.tradepass.config.StorageProperties;
 import com.tradepass.dto.response.ContractPayload;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,12 +22,12 @@ public class LegacyBlobMigrationRunner implements ApplicationRunner {
     private final JdbcTemplate jdbc;
     private final ObjectStorageService objectStorageService;
     private final ContractArchiveService contractArchiveService;
-    private final OssProperties properties;
+    private final StorageProperties properties;
 
     public LegacyBlobMigrationRunner(JdbcTemplate jdbc,
                                      ObjectStorageService objectStorageService,
                                      ContractArchiveService contractArchiveService,
-                                     OssProperties properties) {
+                                     StorageProperties properties) {
         this.jdbc = jdbc;
         this.objectStorageService = objectStorageService;
         this.contractArchiveService = contractArchiveService;
@@ -43,9 +43,9 @@ public class LegacyBlobMigrationRunner implements ApplicationRunner {
         failures += migrateStatements();
         failures += archiveActiveContracts();
         if (failures == 0) {
-            log.info("历史合同及文件已完成 OSS 加密归档迁移");
+            log.info("历史合同及文件已完成云托管对象存储归档迁移");
         } else {
-            log.warn("历史 OSS 迁移有 {} 条失败；原 MySQL BLOB 未删除，可修复后安全重试", failures);
+            log.warn("历史云存储迁移有 {} 条失败；原 MySQL BLOB 未删除，可修复后安全重试", failures);
         }
     }
 

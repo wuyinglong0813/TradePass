@@ -1,7 +1,7 @@
 package com.tradepass.service;
 
 import com.tradepass.common.BusinessException;
-import com.tradepass.config.OssProperties;
+import com.tradepass.config.StorageProperties;
 import com.tradepass.dto.response.ContractPayload;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -16,15 +16,15 @@ public class ContractArchiveService {
     private final JdbcTemplate jdbc;
     private final ContractPdfService pdfService;
     private final ObjectStorageService objectStorageService;
-    private final OssProperties ossProperties;
+    private final StorageProperties storageProperties;
 
     public ContractArchiveService(JdbcTemplate jdbc, ContractPdfService pdfService,
                                   ObjectStorageService objectStorageService,
-                                  OssProperties ossProperties) {
+                                  StorageProperties storageProperties) {
         this.jdbc = jdbc;
         this.pdfService = pdfService;
         this.objectStorageService = objectStorageService;
-        this.ossProperties = ossProperties;
+        this.storageProperties = storageProperties;
     }
 
     public void archiveOnApproval(ContractPayload contract, long archivedBy) {
@@ -109,7 +109,7 @@ public class ContractArchiveService {
     }
 
     private String keyPrefix() {
-        String value = ossProperties.getKeyPrefix();
+        String value = storageProperties.getKeyPrefix();
         value = value == null ? "" : value.trim().replaceAll("^/+|/+$", "");
         return value.isBlank() ? "tradepass" : value;
     }

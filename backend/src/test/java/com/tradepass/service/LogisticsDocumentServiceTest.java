@@ -4,7 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.tradepass.common.AuthContext;
 import com.tradepass.common.BusinessException;
 import com.tradepass.entity.LogisticsDocument;
-import com.tradepass.config.OssProperties;
+import com.tradepass.config.StorageProperties;
 import com.tradepass.entity.TradeContract;
 import com.tradepass.mapper.LogisticsDocumentMapper;
 import com.tradepass.mapper.TradeContractMapper;
@@ -110,18 +110,18 @@ class LogisticsDocumentServiceTest {
     }
 
     @Test
-    void storesNewImageInOssAndHydratesOnlyForAuthorizedDownload() {
+    void storesNewImageInCloudStorageAndHydratesOnlyForAuthorizedDownload() {
         ObjectStorageService storage = mock(ObjectStorageService.class);
         when(storage.isEnabled()).thenReturn(true);
         byte[] jpeg = new byte[]{(byte) 0xff, (byte) 0xd8, (byte) 0xff, 0x01};
         String sha256 = FileTypeInspector.sha256(jpeg);
         when(storage.putImmutable(any(String.class), any(byte[].class), any(String.class), any(String.class)))
                 .thenReturn(new ObjectStorageService.StoredObject(
-                        "ALIYUN_OSS", "bucket", "tradepass/file/3/44/logistics/file.jpg",
-                        "v1", "etag", "AES256", jpeg.length, sha256));
+                        "CLOUDBASE_COS", "bucket", "tradepass/file/3/44/logistics/file.jpg",
+                        "v1", "etag", "CLOUDBASE_MANAGED", jpeg.length, sha256));
         LogisticsDocumentService ossService = new LogisticsDocumentService(
                 documentMapper, contractMapper, accessControlService, auditLogService,
-                storage, new OssProperties());
+                storage, new StorageProperties());
         AtomicReference<LogisticsDocument> inserted = new AtomicReference<>();
         doAnswer(invocation -> {
             LogisticsDocument document = invocation.getArgument(0);

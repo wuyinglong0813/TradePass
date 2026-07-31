@@ -55,19 +55,25 @@ class HttpApiContractTest {
     }
 
     @Test
-    void rejectsInvalidJsonBodyUsingUnifiedApiError() throws Exception {
+    void acceptsTrustedCloudIdentityWithoutLoginCode() throws Exception {
+        UserProfile profile = new UserProfile("7", "cloud-openid", "", "用户", null, "GUEST");
+        when(authService.wechatLogin(org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.eq("cloud-openid")))
+                .thenReturn(new LoginSession("token", profile));
+
         mvc.perform(post("/api/auth/wechat-login")
+                        .header("x-wx-openid", "cloud-openid")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value(400))
-                .andExpect(jsonPath("$.message").value("微信登录 code 不能为空"));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.user.openid").value("cloud-openid"));
     }
 
     @Test
     void wrapsSuccessfulLoginAndMinimalCompanySearch() throws Exception {
         UserProfile profile = new UserProfile("7", "openid", "", "用户", null, "GUEST");
-        when(authService.wechatLogin(org.mockito.ArgumentMatchers.any()))
+        when(authService.wechatLogin(org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.isNull()))
                 .thenReturn(new LoginSession("token", profile));
         mvc.perform(post("/api/auth/wechat-login")
                         .contentType(MediaType.APPLICATION_JSON)

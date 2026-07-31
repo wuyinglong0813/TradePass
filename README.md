@@ -4,9 +4,9 @@
 
 ## 技术栈
 
-- **后端**：Java 17 · Spring Boot 3.3.6 · Spring Web · MyBatis-Plus · MySQL 8.4 · Redis 7 · 阿里云 OSS
+- **后端**：Java 17 · Spring Boot 3.3.6 · Spring Web · MyBatis-Plus · MySQL 8.4 · 微信云托管对象存储
 - **小程序**：原生微信小程序 · WXML/WXSS/JS
-- **基础设施**：Docker Compose（MySQL、Redis）· 阿里云 OSS 私有 Bucket
+- **基础设施**：Docker Compose（MySQL；Redis 仅作可选 profile）· CloudBase/COS 私有对象存储
 
 ## 项目结构
 
@@ -24,7 +24,7 @@ scripts/        启动/关闭脚本
 ## 快速开始
 
 ```bash
-# 一键启动（MySQL + Redis + 应用）
+# 一键启动（MySQL + 应用；Redis 可选）
 ./scripts/start.sh
 
 # 关闭
@@ -116,17 +116,16 @@ Tab：
 
 ## 数据库与初始化
 
-当前 MVP 阶段由后端启动时自动创建表并写入演示数据，逻辑位于 `DatabaseInitializer`。MySQL 和 Redis 默认由 Docker Compose 提供：
+当前 MVP 阶段由后端启动时自动创建表并写入演示数据，逻辑位于 `DatabaseInitializer`。MySQL 默认由 Docker Compose 提供：
 
 - MySQL：`localhost:1118`
 - database：`tradepass`
 - username：`tradepass`
 - password：`tradepass_pwd`
-- Redis：`localhost:1119`
 
-Redis 用于短时鉴权缓存、企业搜索限流、微信 `access_token` 共享缓存和首页排行缓存。MySQL 仍是业务数据与登录会话的权威数据源；Redis 不可用时应用会自动回退到数据库或单实例内存实现。
+Redis 默认关闭且不是运行必需项：登录会话与排行榜直接查询 MySQL，企业搜索限流和微信 `access_token` 使用单实例内存。如未来多实例部署后需要共享缓存或分布式限流，可执行 `docker compose --profile redis up -d` 启动本地 Redis，并显式设置 `TRADEPASS_REDIS_ENABLED=true`。
 
-合同、附件和单据采用“OSS 二进制 + MySQL 元数据”模式：已签署生效合同的冻结 PDF、物流图片、合同附件/转款凭证、XLSX 对账单保存到私有 OSS；MySQL 保存业务归属、对象 key/versionId、文件大小、SHA-256、ETag 和服务端加密方式。每次下载都经过后端权限校验，并重新校验文件长度和 SHA-256。开发环境未启用 OSS 时保留历史 BLOB 兼容路径；`prod` profile 会强制要求 OSS，避免上线后误存数据库。
+合同、附件和单据采用“微信云托管对象存储二进制 + MySQL 元数据”模式：已签署生效合同的冻结 PDF、物流图片、合同附件/转款凭证、XLSX 对账单保存到私有对象存储；MySQL 保存业务归属、对象 key、文件大小、SHA-256 和服务端加密方式。后端通过开放接口服务取得短期 COS 凭证，不保存永久 SecretId/SecretKey；每次上传后及下载时都会重新校验文件长度和 SHA-256。开发环境未启用云存储时保留历史 BLOB 兼容路径；`prod` profile 会强制要求云存储，避免上线后误存数据库。
 
 ## 环境变量
 
@@ -136,37 +135,41 @@ Redis 用于短时鉴权缓存、企业搜索限流、微信 `access_token` 共�
 | `DB_PORT` | `1118` | 数据库端口 |
 | `DB_USERNAME` | `tradepass` | 数据库用户 |
 | `DB_PASSWORD` | `tradepass_pwd` | 数据库密码 |
-| `REDIS_HOST` | `localhost` | Redis 主机 |
-| `REDIS_PORT` | `1119` | Redis 端口 |
-| `REDIS_PASSWORD` | 空 | Redis 密码 |
-| `TRADEPASS_REDIS_ENABLED` | `true` | 是否启用 Redis 缓存与分布式限流 |
-| `TRADEPASS_REDIS_KEY_PREFIX` | `tradepass` | Redis 键前缀 |
-| `TRADEPASS_OSS_ENABLED` | `false` | 是否启用阿里云 OSS；上线必须为 `true` |
-| `TRADEPASS_OSS_REQUIRED` | `false` | OSS 未配置时是否拒绝启动；`prod` profile 固定为 `true` |
-| `OSS_ENDPOINT` | 空 | OSS HTTPS Endpoint，例如 `oss-cn-hangzhou.aliyuncs.com` |
-| `OSS_BUCKET` | 空 | 私有 Bucket 名称 |
-| `OSS_ACCESS_KEY_ID` | 空 | RAM 用户/角色 AccessKey ID，禁止使用主账号密钥 |
-| `OSS_ACCESS_KEY_SECRET` | 空 | RAM 用户/角色 AccessKey Secret，不得提交到 Git |
-| `OSS_SECURITY_TOKEN` | 空 | 使用 STS 临时凭证时填写 |
-| `OSS_SERVER_SIDE_ENCRYPTION` | `AES256` | 服务端加密算法：`AES256` 或 `KMS` |
-| `OSS_KMS_KEY_ID` | 空 | 使用 `KMS` 时可指定 CMK ID |
-| `TRADEPASS_OSS_KEY_PREFIX` | `tradepass` | OSS 对象 key 前缀；生产环境设置为 `prod` |
-| `TRADEPASS_OSS_MIGRATE_LEGACY_BLOBS` | `false` | 启动时迁移历史合同/文件；完成后恢复为 `false` |
+| `TRADEPASS_REDIS_ENABLED` | `false` | 是否启用可选的 Redis 缓存与分布式限流 |
+| `REDIS_HOST` | `localhost` | 仅启用 Redis 时需要：Redis 主机 |
+| `REDIS_PORT` | `1119` | 仅启用 Redis 时需要：Redis 端口 |
+| `REDIS_PASSWORD` | 空 | 仅启用 Redis 时需要：Redis 密码 |
+| `TRADEPASS_REDIS_KEY_PREFIX` | `tradepass` | 仅启用 Redis 时需要：Redis 键前缀 |
+| `TRADEPASS_STORAGE_ENABLED` | 开发环境 `false`，生产环境 `true` | 是否启用微信云托管对象存储；通常无需在云托管中另配 |
+| `TRADEPASS_STORAGE_REQUIRED` | 开发环境 `false`，生产环境固定 `true` | 云存储未配置时是否拒绝启动 |
+| `CLOUDBASE_STORAGE_BUCKET` | 生产环境 `7072-prod-d7g9zrn5s7e6aab68-1446724178` | 云托管对象存储 Bucket；仅在更换 Bucket 时覆盖 |
+| `CLOUDBASE_STORAGE_REGION` | `ap-shanghai` | 对象存储地域；应与控制台“存储配置”一致 |
+| `TRADEPASS_STORAGE_KEY_PREFIX` | 开发环境 `tradepass`，生产环境 `prod` | 对象 key 前缀；通常无需在云托管中另配 |
+| `TRADEPASS_STORAGE_MIGRATE_LEGACY_BLOBS` | `false` | 启动时迁移历史合同/文件；完成后恢复为 `false` |
 | `WECHAT_APP_ID` | `wxd6d1e93a3868253e` | 小程序 AppID |
-| `WECHAT_APP_SECRET` | 空 | 小程序密钥 |
+| `WECHAT_CLOUD_OPEN_API_ENABLED` | 开发环境 `false`，生产环境 `true` | 是否使用云托管开放接口服务免鉴权调用微信接口 |
+| `WECHAT_APP_SECRET` | 空 | 仅本地传统 `code2Session`/`access_token` 兼容路径需要；生产云调用无需配置 |
 | `TRADEPASS_DEV_ENABLED` | `false` | 是否启用 `/api/dev/**` 和开发占位能力；`dev` profile 会开启 |
 | `TRADEPASS_VERIFICATION_AUTO_APPROVE` | `false` | 是否允许开发环境模拟认证结果，生产环境应保持关闭 |
 
-### 阿里云 OSS 上线配置
+### 微信云托管对象存储上线配置
 
-1. 创建与应用同地域的 Bucket，读写权限设为“私有”，开启阻止公共访问；合同证据建议另外开启版本控制和合规保留（WORM）。
-2. 创建最小权限 RAM 用户或角色，仅授予目标 Bucket 前缀的读写权限；使用 KMS 时再授予对应密钥的加解密权限。
-3. `cp .env.example .env` 后在本机填写变量。启动脚本会读取 `.env`，该文件已被 Git 忽略。
-4. 首次切换时把 `TRADEPASS_OSS_MIGRATE_LEGACY_BLOBS=true` 启动一次。系统会先上传并校验，再清空原 BLOB；失败记录保留在 MySQL，可安全重试。确认迁移日志成功后改回 `false`。
+1. 在云托管对象存储的“存储权限”中设为“仅管理员可读写”。
+2. 在“对象存储 → 存储配置”确认 Bucket 和 Region 与生产配置一致。
+3. 在“服务管理 → 云调用”开启“开放接口服务”，并在云调用权限中添加 `/wxa/business/getuserphonenumber`。对象存储使用开放接口服务集成的专用接口集合，代码会调用 `/_/cos/getauth` 和 `/_/cos/metaid/encode`；不用在普通“微信令牌权限”列表中选择 `/tcb/uploadfile`。
+4. 开启开放接口服务后必须重新构建并发布服务版本；开关不会补充到已经存在的旧版本。
+5. 生产镜像已经启用 `prod` profile；Bucket、Region、`prod` 前缀和“必须启用对象存储”均有生产默认值。应用通过开放接口获取临时凭证，不需要配置永久 SecretId/SecretKey。
+6. 如需把数据库中的历史 BLOB 转入对象存储，可临时设置 `TRADEPASS_STORAGE_MIGRATE_LEGACY_BLOBS=true` 发布一次，确认日志成功后立即恢复为 `false`；此开关与阿里 OSS 无关。
 
-新签署合同会在状态变为 `ACTIVE` 的同一业务操作中生成一次 PDF 并归档；后续下载始终按 MySQL 记录的 OSS `versionId` 读取，不再重新生成。历史生效合同会在迁移步骤中补做冻结归档。
+新签署合同会在状态变为 `ACTIVE` 的同一业务操作中生成一次 PDF 并归档；对象 key 包含合同版本和 SHA-256，不允许不同内容覆盖。后续下载会重新校验文件长度和 SHA-256，不再重新生成。历史生效合同会在迁移步骤中补做冻结归档。
 
 生产对象统一使用以下层级：生效合同为 `prod/contract/{公司ID}/{合同ID}/v{版本号}/{SHA256}.pdf`；物流图片、转款凭证和其他附件为 `prod/file/{公司ID}/{合同ID}/{文件类型}/{年}/{月}/{UUID}-{SHA256}.{后缀}`；对账单由于不绑定单份合同，使用 `prod/file/{公司ID}/reconciliation/{对方公司ID}/{YYYY-MM}/{UUID}-{SHA256}.xlsx`。
+
+### 微信登录与手机号云调用
+
+体验版和正式版通过 `wx.cloud.callContainer` 访问 `tradepass` 服务，微信链路会自动注入可信的 `x-wx-openid`。后端直接使用该身份创建业务会话，不再调用 `auth.code2Session`。手机号按钮产生的一次性 `phoneCode` 发送到后端后，后端通过 `http://api.weixin.qq.com/wxa/business/getuserphonenumber` 免 `access_token` 换取手机号。
+
+小程序端的云环境配置位于 `miniprogram/app.js`，当前环境为 `prod-d7g9zrn5s7e6aab68`、服务名为 `tradepass`。修改云托管环境或服务名称时，需要同步更新这两个值。文件上传下载仍经过业务后端完成租户权限、文件类型、长度和 SHA-256 校验，后端再通过开放接口服务管理私有对象存储。
 
 ## 开发说明
 

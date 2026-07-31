@@ -12,7 +12,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import com.tradepass.config.OssProperties;
+import com.tradepass.config.StorageProperties;
 
 @Service
 public class ReconciliationStatementService {
@@ -21,7 +21,7 @@ public class ReconciliationStatementService {
     private final AccessControlService accessControlService;
     private final AuditLogService auditLogService;
     private final ObjectStorageService objectStorageService;
-    private final OssProperties ossProperties;
+    private final StorageProperties storageProperties;
 
     @Autowired
     public ReconciliationStatementService(JdbcTemplate jdbc,
@@ -29,13 +29,13 @@ public class ReconciliationStatementService {
                                           AccessControlService accessControlService,
                                           AuditLogService auditLogService,
                                           ObjectStorageService objectStorageService,
-                                          OssProperties ossProperties) {
+                                          StorageProperties storageProperties) {
         this.jdbc = jdbc;
         this.relationMapper = relationMapper;
         this.accessControlService = accessControlService;
         this.auditLogService = auditLogService;
         this.objectStorageService = objectStorageService;
-        this.ossProperties = ossProperties;
+        this.storageProperties = storageProperties;
     }
 
     ReconciliationStatementService(JdbcTemplate jdbc,
@@ -143,7 +143,7 @@ public class ReconciliationStatementService {
     }
 
     private String keyPrefix() {
-        String value = ossProperties == null ? "tradepass" : ossProperties.getKeyPrefix();
+        String value = storageProperties == null ? "tradepass" : storageProperties.getKeyPrefix();
         value = value == null ? "" : value.trim().replaceAll("^/+|/+$", "");
         return value.isBlank() ? "tradepass" : value;
     }

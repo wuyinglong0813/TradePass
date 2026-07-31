@@ -4,6 +4,7 @@ server:
 wechat:
   app-id: ${WECHAT_APP_ID:wxd6d1e93a3868253e}
   app-secret: ${WECHAT_APP_SECRET:}
+  cloud-open-api-enabled: ${WECHAT_CLOUD_OPEN_API_ENABLED:false}
 
 tradepass:
   dev:
@@ -18,25 +19,21 @@ tradepass:
     auto-approve: ${TRADEPASS_VERIFICATION_AUTO_APPROVE:false}
     callback-token: ${TRADEPASS_VERIFICATION_CALLBACK_TOKEN:}
   redis:
-    enabled: ${TRADEPASS_REDIS_ENABLED:true}
+    enabled: ${TRADEPASS_REDIS_ENABLED:false}
     key-prefix: ${TRADEPASS_REDIS_KEY_PREFIX:tradepass}
     auth-cache-ttl: ${TRADEPASS_REDIS_AUTH_CACHE_TTL:60s}
     ranking-cache-ttl: ${TRADEPASS_REDIS_RANKING_CACHE_TTL:30s}
     wechat-local-cache-ttl: ${TRADEPASS_REDIS_WECHAT_LOCAL_CACHE_TTL:5m}
-  oss:
-    enabled: ${TRADEPASS_OSS_ENABLED:false}
-    required: ${TRADEPASS_OSS_REQUIRED:false}
-    migrate-legacy-blobs: ${TRADEPASS_OSS_MIGRATE_LEGACY_BLOBS:false}
-    endpoint: ${OSS_ENDPOINT:}
-    bucket: ${OSS_BUCKET:}
-    access-key-id: ${OSS_ACCESS_KEY_ID:}
-    access-key-secret: ${OSS_ACCESS_KEY_SECRET:}
-    security-token: ${OSS_SECURITY_TOKEN:}
-    server-side-encryption: ${OSS_SERVER_SIDE_ENCRYPTION:AES256}
-    kms-key-id: ${OSS_KMS_KEY_ID:}
-    key-prefix: ${TRADEPASS_OSS_KEY_PREFIX:tradepass}
-    connection-timeout-millis: ${OSS_CONNECTION_TIMEOUT_MILLIS:5000}
-    socket-timeout-millis: ${OSS_SOCKET_TIMEOUT_MILLIS:30000}
+  storage:
+    enabled: ${TRADEPASS_STORAGE_ENABLED:false}
+    required: ${TRADEPASS_STORAGE_REQUIRED:false}
+    migrate-legacy-blobs: ${TRADEPASS_STORAGE_MIGRATE_LEGACY_BLOBS:false}
+    bucket: ${CLOUDBASE_STORAGE_BUCKET:}
+    region: ${CLOUDBASE_STORAGE_REGION:ap-shanghai}
+    key-prefix: ${TRADEPASS_STORAGE_KEY_PREFIX:tradepass}
+    connection-timeout-millis: ${CLOUDBASE_STORAGE_CONNECTION_TIMEOUT_MILLIS:5000}
+    socket-timeout-millis: ${CLOUDBASE_STORAGE_SOCKET_TIMEOUT_MILLIS:30000}
+    credential-refresh-skew-seconds: ${CLOUDBASE_STORAGE_CREDENTIAL_REFRESH_SKEW_SECONDS:60}
 
 spring:
   application:

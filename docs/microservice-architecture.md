@@ -43,7 +43,7 @@ flowchart TD
   company --> redis
   ranking --> redis
 
-  file --> objectStorage["对象存储 COS/OSS/MinIO"]
+  file --> objectStorage["微信云托管对象存储（COS）"]
 ```
 
 ## 请求调用链

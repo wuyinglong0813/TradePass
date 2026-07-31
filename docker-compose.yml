@@ -21,6 +21,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: tradepass-redis
+    profiles: ["redis"]
     ports:
       - "1119:6379"
     healthcheck:

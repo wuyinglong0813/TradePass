@@ -21,12 +21,15 @@ import java.util.Map;
 public class WechatService {
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(5);
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(10);
+    private static final URI CLOUD_PHONE_URI = URI.create(
+            "http://api.weixin.qq.com/wxa/business/getuserphonenumber");
 
-    private final ObjectMapper mapper = new ObjectMapper();
-    private final HttpClient httpClient = HttpClient.newBuilder().connectTimeout(CONNECT_TIMEOUT).build();
+    private final ObjectMapper mapper;
+    private final HttpClient httpClient;
     private final String wechatAppId;
     private final String wechatAppSecret;
     private final boolean devEnabled;
+    private final boolean cloudOpenApiEnabled;
     private final RedisCacheService redisCache;
     private final Duration localCacheTtl;
     private volatile String cachedAccessToken;
@@ -36,23 +39,57 @@ public class WechatService {
     public WechatService(@Value("${wechat.app-id}") String wechatAppId,
                          @Value("${wechat.app-secret}") String wechatAppSecret,
                          @Value("${tradepass.dev.enabled:false}") boolean devEnabled,
+                         @Value("${wechat.cloud-open-api-enabled:false}") boolean cloudOpenApiEnabled,
                          RedisCacheService redisCache,
                          @Value("${tradepass.redis.wechat-local-cache-ttl:5m}") Duration localCacheTtl) {
-        this.wechatAppId = wechatAppId;
-        this.wechatAppSecret = wechatAppSecret;
-        this.devEnabled = devEnabled;
-        this.redisCache = redisCache;
-        this.localCacheTtl = localCacheTtl;
+        this(wechatAppId, wechatAppSecret, devEnabled, cloudOpenApiEnabled, redisCache,
+                localCacheTtl, HttpClient.newBuilder().connectTimeout(CONNECT_TIMEOUT).build());
     }
 
     WechatService(String wechatAppId, String wechatAppSecret, boolean devEnabled) {
-        this(wechatAppId, wechatAppSecret, devEnabled, null, Duration.ofMinutes(5));
+        this(wechatAppId, wechatAppSecret, devEnabled, false, null, Duration.ofMinutes(5),
+                HttpClient.newBuilder().connectTimeout(CONNECT_TIMEOUT).build());
+    }
+
+    WechatService(String wechatAppId, String wechatAppSecret, boolean devEnabled,
+                  RedisCacheService redisCache, Duration localCacheTtl) {
+        this(wechatAppId, wechatAppSecret, devEnabled, false, redisCache, localCacheTtl,
+                HttpClient.newBuilder().connectTimeout(CONNECT_TIMEOUT).build());
+    }
+
+    WechatService(String wechatAppId, String wechatAppSecret, boolean devEnabled,
+                  boolean cloudOpenApiEnabled, RedisCacheService redisCache,
+                  Duration localCacheTtl, HttpClient httpClient) {
+        this.wechatAppId = wechatAppId;
+        this.wechatAppSecret = wechatAppSecret;
+        this.devEnabled = devEnabled;
+        this.cloudOpenApiEnabled = cloudOpenApiEnabled;
+        this.redisCache = redisCache;
+        this.localCacheTtl = localCacheTtl;
+        this.httpClient = httpClient;
+        this.mapper = new ObjectMapper();
     }
 
     public String resolveOpenid(String code) {
+        return resolveOpenid(code, null);
+    }
+
+    public String resolveOpenid(String code, String trustedOpenid) {
+        String cloudOpenid = cloudOpenApiEnabled ? normalizeTrustedOpenid(trustedOpenid) : null;
+        if (cloudOpenid != null) {
+            return cloudOpenid;
+        }
+        if (code == null || code.isBlank()) {
+            throw new BusinessException(cloudOpenApiEnabled
+                    ? "未获取到微信用户标识，请通过 wx.cloud.callContainer 调用"
+                    : "微信登录 code 不能为空");
+        }
         if (code.startsWith("dev-")) {
             if (!devEnabled) throw new BusinessException("开发登录凭证在当前环境不可用");
             return code;
+        }
+        if (cloudOpenApiEnabled) {
+            throw new BusinessException("未获取到微信用户标识，请通过 wx.cloud.callContainer 调用");
         }
         requireWechatSecret("无法完成微信登录");
         try {
@@ -79,10 +116,18 @@ public class WechatService {
 
     public String resolvePhoneByCode(String phoneCode) {
         try {
-            String token = getAccessToken();
+            if (phoneCode == null || phoneCode.isBlank()) {
+                throw new BusinessException("手机号凭证不能为空");
+            }
             String body = mapper.writeValueAsString(Map.of("code", phoneCode));
+            URI uri = CLOUD_PHONE_URI;
+            if (!cloudOpenApiEnabled) {
+                String token = getAccessToken();
+                uri = URI.create("https://api.weixin.qq.com/wxa/business/getuserphonenumber?access_token="
+                        + encode(token));
+            }
             JsonNode node = sendJson(HttpRequest.newBuilder()
-                    .uri(URI.create("https://api.weixin.qq.com/wxa/business/getuserphonenumber?access_token=" + encode(token)))
+                    .uri(uri)
                     .timeout(REQUEST_TIMEOUT)
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(body))
@@ -184,6 +229,17 @@ public class WechatService {
         if (wechatAppSecret == null || wechatAppSecret.isBlank()) {
             throw new BusinessException("未配置 WECHAT_APP_SECRET，" + action);
         }
+    }
+
+    private String normalizeTrustedOpenid(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        String normalized = value.trim();
+        if (normalized.length() > 128 || normalized.chars().anyMatch(Character::isISOControl)) {
+            throw new BusinessException("微信用户标识格式不正确");
+        }
+        return normalized;
     }
 
     private String encode(String value) {
