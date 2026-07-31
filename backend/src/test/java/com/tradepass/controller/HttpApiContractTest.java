@@ -17,9 +17,13 @@ import com.tradepass.service.RankingService;
 import com.tradepass.service.TradeService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.List;
 import java.time.LocalDate;
@@ -49,9 +53,25 @@ class HttpApiContractTest {
                         new CompanyController(companyService),
                         new TradeController(tradeService),
                         new RankingController(rankingService),
-                        new FileController(true))
+                        new FileController(true),
+                        new ProbeController(),
+                        new MissingResourceController())
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
+    }
+
+    @Test
+    void cloudPlatformProbeReturnsOk() throws Exception {
+        mvc.perform(get("/tcb_probe"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void missingStaticResourceReturns404InsteadOf500() throws Exception {
+        mvc.perform(get("/missing-resource"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value(404))
+                .andExpect(jsonPath("$.message").value("Not Found"));
     }
 
     @Test
@@ -154,5 +174,13 @@ class HttpApiContractTest {
                 .andExpect(jsonPath("$.data.items[0].id").value("8"))
                 .andExpect(jsonPath("$.data.total").value(21))
                 .andExpect(jsonPath("$.data.hasMore").value(true));
+    }
+
+    @RestController
+    private static class MissingResourceController {
+        @GetMapping("/missing-resource")
+        void missingResource() throws NoResourceFoundException {
+            throw new NoResourceFoundException(HttpMethod.GET, "missing-resource");
+        }
     }
 }

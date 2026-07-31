@@ -8,6 +8,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -33,6 +34,12 @@ public class GlobalExceptionHandler {
     public ApiResponse<Void> handleDataConflict(DataIntegrityViolationException ex) {
         log.warn("Data conflict", ex);
         return new ApiResponse<>(409, "数据已存在或状态已发生变化，请刷新后重试", null);
+    }
+
+    @ExceptionHandler(NoResourceFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public ApiResponse<Void> handleNoResourceFoundException(NoResourceFoundException ex) {
+        return new ApiResponse<>(404, "Not Found", null);
     }
 
     @ExceptionHandler(Exception.class)
