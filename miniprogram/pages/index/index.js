@@ -1,5 +1,5 @@
 const { request } = require('../../utils/request');
-const { syncTabBar } = require('../../utils/tabBar');
+const { setTabBarHidden, syncTabBar } = require('../../utils/tabBar');
 const app = getApp();
 
 Page({
@@ -51,7 +51,7 @@ Page({
   onLoad(options) {
     if (!wx.getStorageSync('privacy_agreed')) {
       this.setData({ showPrivacy: true });
-      wx.hideTabBar();
+      setTabBarHidden(this, true);
     }
     if (options.inviteCode) {
       app.globalData.pendingInvite = { code: options.inviteCode, type: options.type || 'member' };
@@ -396,7 +396,7 @@ Page({
     }
     wx.setStorageSync('privacy_agreed', true);
     this.setData({ showPrivacy: false });
-    wx.showTabBar();
+    setTabBarHidden(this, false);
   },
   doPrivacyDeny() {
     wx.showModal({

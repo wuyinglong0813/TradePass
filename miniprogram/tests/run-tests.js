@@ -153,6 +153,7 @@ test('company search confirmation does not depend on sensitive company fields', 
 const app = {
   globalData: {
     baseUrl: 'https://api.example.test',
+    isLocalDevelopment: true,
     token: 'token-1',
     currentCompanyId: 'company-3'
   }
@@ -160,7 +161,7 @@ const app = {
 global.getApp = () => app;
 global.wx = {};
 const { request } = require('../utils/request');
-const { syncTabBar, tabIndicatorTransform } = require('../utils/tabBar');
+const { setTabBarHidden, syncTabBar, tabIndicatorTransform } = require('../utils/tabBar');
 
 test('custom tab bar moves its indicator by one slot per navigation item', () => {
   assert.strictEqual(tabIndicatorTransform(0), 'translate3d(0%, 0, 0)');
@@ -183,6 +184,27 @@ test('custom tab bar moves its indicator by one slot per navigation item', () =>
     'utf8'
   );
   assert.ok(!componentScript.includes('setTimeout'));
+});
+
+test('privacy prompt hides both native and custom tab bars', () => {
+  let customHidden;
+  let nativeHidden = false;
+  let nativeShown = false;
+  wx.hideTabBar = () => { nativeHidden = true; };
+  wx.showTabBar = () => { nativeShown = true; };
+  const page = {
+    getTabBar: () => ({ setHidden: hidden => { customHidden = hidden; } })
+  };
+
+  setTabBarHidden(page, true);
+  assert.strictEqual(app.globalData.tabBarHidden, true);
+  assert.strictEqual(customHidden, true);
+  assert.strictEqual(nativeHidden, true);
+
+  setTabBarHidden(page, false);
+  assert.strictEqual(app.globalData.tabBarHidden, false);
+  assert.strictEqual(customHidden, false);
+  assert.strictEqual(nativeShown, true);
 });
 
 test('request injects auth and tenant headers and unwraps API data', async () => {

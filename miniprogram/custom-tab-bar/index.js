@@ -2,6 +2,7 @@ const { tabIndicatorTransform } = require('../utils/tabBar');
 
 Component({
   data: {
+    hidden: false,
     selected: 0,
     animateIndicator: false,
     indicatorTransform: tabIndicatorTransform(0),
@@ -36,11 +37,16 @@ Component({
         : Number.isInteger(app.globalData.activeTabIndex)
           ? app.globalData.activeTabIndex
           : 0;
+      this.setHidden(!!app.globalData.tabBarHidden);
       this.moveTo(selected, false);
     }
   },
 
   methods: {
+    setHidden(hidden) {
+      this.setData({ hidden: !!hidden });
+    },
+
     moveTo(index, animate = true) {
       this.setData({
         selected: index,

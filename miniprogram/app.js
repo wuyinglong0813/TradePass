@@ -30,7 +30,8 @@ App({
     companies: [],
     pendingInvite: null,
     activeTabIndex: null,
-    tabBarTransition: null
+    tabBarTransition: null,
+    tabBarHidden: false
   },
 
   onLaunch() {
