@@ -87,6 +87,22 @@ class ContractAttachmentServiceTest {
     }
 
     @Test
+    void acceptsOnlyImagesOrPdfForInvoices() throws Exception {
+        byte[] pdf = "%PDF-1.7".getBytes();
+        byte[] docx = ooxml("word/document.xml");
+        Map<String, Object> row = Map.of("id", 10L, "originalName", "发票.pdf");
+        when(jdbc.queryForObject(anyString(), eq(Long.class))).thenReturn(10L);
+        doReturn(List.of(row)).when(jdbc).query(anyString(), any(RowMapper.class), any(Object[].class));
+
+        assertThat(service.upload(12L, "INVOICE", "发票.pdf", pdf, null, null))
+                .containsEntry("id", 10L);
+        assertThatThrownBy(() -> service.upload(12L, "INVOICE", "发票.docx",
+                docx, null, null))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("发票仅支持图片或 PDF");
+    }
+
+    @Test
     void letsEitherContractPartyReadAndRejectsInvalidInput() {
         byte[] data = "%PDF-1.7".getBytes();
         ContractAttachmentService.FilePayload payload = new ContractAttachmentService.FilePayload(
@@ -104,6 +120,10 @@ class ContractAttachmentServiceTest {
                 data, "bad-date", null))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("转款日期格式不正确");
+        assertThatThrownBy(() -> service.upload(12L, "PAYMENT_VOUCHER", "凭证.pdf",
+                data, null, null))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("请输入转款金额");
         assertThatThrownBy(() -> service.upload(12L, "PAYMENT_VOUCHER", "凭证.pdf",
                 data, null, "-1"))
                 .isInstanceOf(BusinessException.class)

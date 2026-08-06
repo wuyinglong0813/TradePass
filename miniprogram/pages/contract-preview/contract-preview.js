@@ -8,7 +8,6 @@ Page({
     // Tab
     tabs: [
       { key: 'detail', label: '合同' },
-      { key: 'sales', label: '销售单' },
       { key: 'fulfillment', label: '履约资料' }
     ],
     activeTab: 'detail',
@@ -21,6 +20,10 @@ Page({
     otherAttachments: [],
     attachmentLoading: false,
     attachmentUploading: false,
+    showPaymentAmountEditor: false,
+    paymentAmount: '',
+    paymentAmountError: '',
+    pendingPaymentAttachment: null,
     fulfillmentLoading: false,
     fulfillmentCount: 0,
     invoiceList: [],
@@ -81,9 +84,8 @@ Page({
     const tab = e.currentTarget.dataset.tab;
     if (tab === this.data.activeTab) return;
     this.setData({ activeTab: tab });
-    if (tab === 'sales') {
+    if (tab === 'fulfillment') {
       this.loadBusinessDocuments('SALES_ORDER');
-    } else if (tab === 'fulfillment') {
       this.loadFulfillmentData();
     }
   },
@@ -414,9 +416,10 @@ Page({
     const { request } = require('../../utils/request');
     this.setData({ fulfillmentLoading: true });
     try {
-      const [logistics, payments, others] = await Promise.all([
+      const [logistics, payments, invoices, others] = await Promise.all([
         request({ url: `/contracts/${this.data.contractId}/logistics-documents` }),
         request({ url: `/contracts/${this.data.contractId}/attachments?category=PAYMENT_VOUCHER` }),
+        request({ url: `/contracts/${this.data.contractId}/attachments?category=INVOICE` }),
         request({ url: `/contracts/${this.data.contractId}/attachments?category=OTHER` })
       ]);
       const logisticsList = (logistics || []).map(item => ({
@@ -428,16 +431,20 @@ Page({
         ...item,
         fileSizeText: this.formatFileSize(item.fileSize),
         dateText: String(item.createdAt || '').replace('T', ' ').slice(0, 16),
-        isImage: String(item.contentType || '').indexOf('image/') === 0
+        isImage: String(item.contentType || '').indexOf('image/') === 0,
+        voucherAmountText: item.voucherAmount === null || item.voucherAmount === undefined
+          ? '金额未填写'
+          : `转款金额 ¥${Number(item.voucherAmount).toFixed(2)}`
       });
       const paymentAttachments = (payments || []).map(mapAttachment);
+      const invoiceList = (invoices || []).map(mapAttachment);
       const otherAttachments = (others || []).map(mapAttachment);
       this.setData({
         logisticsList,
         paymentAttachments,
-        otherAttachments,
-        fulfillmentCount: logisticsList.length + paymentAttachments.length + otherAttachments.length
-      });
+        invoiceList,
+        otherAttachments
+      }, () => this.updateFulfillmentCount());
     } catch (error) {
       wx.showToast({ title: error.message || '履约资料加载失败', icon: 'none' });
     } finally {
@@ -448,6 +455,7 @@ Page({
   updateFulfillmentCount() {
     this.setData({
       fulfillmentCount: this.data.logisticsList.length
+        + this.data.salesDocuments.length
         + this.data.paymentAttachments.length
         + this.data.otherAttachments.length
         + this.data.invoiceList.length
@@ -526,10 +534,18 @@ Page({
         ...item,
         fileSizeText: this.formatFileSize(item.fileSize),
         dateText: String(item.createdAt || '').replace('T', ' ').slice(0, 16),
-        isImage: String(item.contentType || '').indexOf('image/') === 0
+        isImage: String(item.contentType || '').indexOf('image/') === 0,
+        voucherAmountText: item.voucherAmount === null || item.voucherAmount === undefined
+          ? '金额未填写'
+          : `转款金额 ¥${Number(item.voucherAmount).toFixed(2)}`
       }));
+      const dataKey = {
+        PAYMENT_VOUCHER: 'paymentAttachments',
+        INVOICE: 'invoiceList',
+        OTHER: 'otherAttachments'
+      }[category];
       this.setData({
-        [category === 'PAYMENT_VOUCHER' ? 'paymentAttachments' : 'otherAttachments']: attachments
+        [dataKey]: attachments
       }, () => this.updateFulfillmentCount());
     } catch (error) {
       wx.showToast({ title: error.message || '资料加载失败', icon: 'none' });
@@ -566,7 +582,11 @@ Page({
           wx.showToast({ title: '文件不能超过10MB', icon: 'none' });
           return;
         }
-        this.uploadAttachment(category, file.tempFilePath, this.attachmentFileName(file.tempFilePath, 'jpg', category));
+        this.prepareAttachmentUpload(
+          category,
+          file.tempFilePath,
+          this.attachmentFileName(file.tempFilePath, 'jpg', category)
+        );
       }
     });
   },
@@ -575,7 +595,7 @@ Page({
     wx.chooseMessageFile({
       count: 1,
       type: 'file',
-      extension: category === 'PAYMENT_VOUCHER' ? ['pdf'] : ['pdf', 'doc', 'docx'],
+      extension: category === 'OTHER' ? ['pdf', 'doc', 'docx'] : ['pdf'],
       success: result => {
         const file = result.tempFiles && result.tempFiles[0];
         if (!file || !file.path) return;
@@ -583,7 +603,11 @@ Page({
           wx.showToast({ title: '文件不能超过10MB', icon: 'none' });
           return;
         }
-        this.uploadAttachment(category, file.path, file.name || this.attachmentFileName(file.path, 'pdf', category));
+        this.prepareAttachmentUpload(
+          category,
+          file.path,
+          file.name || this.attachmentFileName(file.path, 'pdf', category)
+        );
       }
     });
   },
@@ -591,11 +615,71 @@ Page({
   attachmentFileName(filePath, fallbackExtension, category) {
     const matched = String(filePath || '').match(/\.([a-zA-Z0-9]+)$/);
     const extension = matched ? matched[1].toLowerCase() : fallbackExtension;
-    const prefix = category === 'PAYMENT_VOUCHER' ? '转款凭证' : '其它资料';
+    const prefix = {
+      PAYMENT_VOUCHER: '转款凭证',
+      INVOICE: '发票',
+      OTHER: '其它资料'
+    }[category] || '合同资料';
     return `${prefix}-${Date.now()}.${extension}`;
   },
 
-  uploadAttachment(category, filePath, originalName) {
+  prepareAttachmentUpload(category, filePath, originalName) {
+    if (category !== 'PAYMENT_VOUCHER') {
+      this.uploadAttachment(category, filePath, originalName);
+      return;
+    }
+    this.setData({
+      showPaymentAmountEditor: true,
+      paymentAmount: '',
+      paymentAmountError: '',
+      pendingPaymentAttachment: { filePath, originalName }
+    });
+  },
+
+  onPaymentAmountInput(e) {
+    this.setData({
+      paymentAmount: e.detail.value,
+      paymentAmountError: ''
+    });
+  },
+
+  closePaymentAmountEditor() {
+    if (this.data.attachmentUploading) return;
+    this.setData({
+      showPaymentAmountEditor: false,
+      paymentAmount: '',
+      paymentAmountError: '',
+      pendingPaymentAttachment: null
+    });
+  },
+
+  confirmPaymentAttachmentUpload() {
+    if (this.data.attachmentUploading) return;
+    const amount = String(this.data.paymentAmount || '').trim();
+    if (!/^\d{1,16}(\.\d{1,2})?$/.test(amount)) {
+      this.setData({ paymentAmountError: '请输入正确金额，最多保留两位小数' });
+      return;
+    }
+    const attachment = this.data.pendingPaymentAttachment;
+    if (!attachment || !attachment.filePath) return;
+    const [integerPart, decimalPart = ''] = amount.split('.');
+    const normalizedAmount = `${integerPart}.${decimalPart.padEnd(2, '0')}`;
+    this.setData({
+      showPaymentAmountEditor: false,
+      paymentAmount: '',
+      paymentAmountError: '',
+      pendingPaymentAttachment: null
+    }, () => {
+      this.uploadAttachment(
+        'PAYMENT_VOUCHER',
+        attachment.filePath,
+        attachment.originalName,
+        { voucherAmount: normalizedAmount }
+      );
+    });
+  },
+
+  uploadAttachment(category, filePath, originalName, metadata = {}) {
     const app = getApp();
     const token = app.globalData.token || wx.getStorageSync('tradepass_token') || '';
     const companyId = app.globalData.currentCompanyId || wx.getStorageSync('tradepass_company_id') || '';
@@ -608,14 +692,17 @@ Page({
       url: `${app.globalData.baseUrl}/contracts/${this.data.contractId}/attachments`,
       filePath,
       name: 'file',
-      formData: { category, originalName },
+      formData: { category, originalName, ...metadata },
       header,
       timeout: 30000,
       success: response => {
         let body = null;
         try { body = JSON.parse(response.data || '{}'); } catch (error) { /* 统一提示 */ }
         if (response.statusCode >= 200 && response.statusCode < 300 && body && body.code === 0) {
-          wx.showToast({ title: '资料已上传', icon: 'success' });
+          const label = category === 'PAYMENT_VOUCHER'
+            ? '转款凭证'
+            : category === 'INVOICE' ? '发票' : '资料';
+          wx.showToast({ title: `${label}已上传`, icon: 'success' });
           this.loadAttachments(category);
           return;
         }
@@ -640,6 +727,30 @@ Page({
     this.downloadAttachmentFile(e.currentTarget.dataset.attachment, true);
   },
 
+  attachmentDownloadPath(attachment) {
+    const originalName = String(attachment.originalName || '').trim();
+    const matched = originalName.match(/\.([a-zA-Z0-9]{1,8})$/);
+    const extensionByType = {
+      'image/jpeg': 'jpg',
+      'image/png': 'png',
+      'image/gif': 'gif',
+      'image/webp': 'webp',
+      'application/pdf': 'pdf',
+      'application/msword': 'doc',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx'
+    };
+    const extension = matched
+      ? matched[1].toLowerCase()
+      : (extensionByType[attachment.contentType] || 'bin');
+    const rawBaseName = matched ? originalName.slice(0, -matched[0].length) : originalName;
+    const safeBaseName = rawBaseName
+      .replace(/[\\/:*?"<>|\r\n]/g, '_')
+      .replace(/^\.+/, '')
+      .trim()
+      .slice(0, 80) || '合同资料';
+    return `${wx.env.USER_DATA_PATH}/${safeBaseName}-${attachment.id}.${extension}`;
+  },
+
   downloadAttachmentFile(attachment, download) {
     if (!attachment || !attachment.id) return;
     const app = getApp();
@@ -648,8 +759,16 @@ Page({
     const header = {};
     if (token) header.Authorization = token;
     if (companyId) header['X-Company-Id'] = String(companyId);
+    const localFilePath = download ? this.attachmentDownloadPath(attachment) : '';
+    if (localFilePath) {
+      try {
+        wx.getFileSystemManager().unlinkSync(localFilePath);
+      } catch (error) {
+        // 首次下载时目标文件不存在。
+      }
+    }
     wx.showLoading({ title: download ? '下载中...' : '打开中...' });
-    wx.downloadFile({
+    const options = {
       url: `${app.globalData.baseUrl}/contract-attachments/${attachment.id}/content?download=${download}`,
       header,
       timeout: 30000,
@@ -658,8 +777,16 @@ Page({
           wx.showToast({ title: `文件获取失败（${response.statusCode}）`, icon: 'none' });
           return;
         }
-        const path = response.filePath || response.tempFilePath;
+        const path = response.filePath || response.tempFilePath || localFilePath;
         if (attachment.isImage) {
+          if (download) {
+            wx.saveImageToPhotosAlbum({
+              filePath: path,
+              success: () => wx.showToast({ title: '图片已保存到相册', icon: 'success' }),
+              fail: () => wx.showToast({ title: '图片保存失败，请检查相册权限', icon: 'none' })
+            });
+            return;
+          }
           wx.previewImage({ current: path, urls: [path] });
           return;
         }
@@ -668,12 +795,17 @@ Page({
           filePath: path,
           fileType: ['pdf', 'doc', 'docx'].includes(extension) ? extension : undefined,
           showMenu: true,
+          success: () => {
+            if (download) wx.showToast({ title: '文件已下载', icon: 'success' });
+          },
           fail: () => wx.showToast({ title: '文件打开失败', icon: 'none' })
         });
       },
       fail: error => wx.showToast({ title: error.errMsg || '文件获取失败', icon: 'none' }),
       complete: () => wx.hideLoading()
-    });
+    };
+    if (localFilePath) options.filePath = localFilePath;
+    wx.downloadFile(options);
   },
 
   async loadBusinessDocuments(documentType) {
@@ -686,7 +818,7 @@ Page({
         ...item,
         dateText: String(item.createdAt || '').slice(0, 10)
       }));
-      this.setData({ salesDocuments: documents });
+      this.setData({ salesDocuments: documents }, () => this.updateFulfillmentCount());
     } catch (error) {
       wx.showToast({ title: error.message || '单据加载失败', icon: 'none' });
     }

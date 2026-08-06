@@ -207,6 +207,70 @@ test('privacy prompt hides both native and custom tab bars', () => {
   assert.strictEqual(nativeShown, true);
 });
 
+test('payment voucher requires a manually entered amount before upload', () => {
+  const contractPreview = loadPage('../pages/contract-preview/contract-preview');
+  let uploaded;
+  const context = {
+    data: {
+      attachmentUploading: false,
+      paymentAmount: '',
+      pendingPaymentAttachment: null
+    },
+    setData(changes, callback) {
+      Object.assign(this.data, changes);
+      if (callback) callback();
+    },
+    uploadAttachment: (category, filePath, originalName, metadata) => {
+      uploaded = { category, filePath, originalName, metadata };
+    }
+  };
+
+  contractPreview.prepareAttachmentUpload.call(
+    context,
+    'PAYMENT_VOUCHER',
+    '/tmp/voucher.pdf',
+    '转款凭证.pdf'
+  );
+
+  assert.strictEqual(context.data.showPaymentAmountEditor, true);
+  assert.deepStrictEqual(context.data.pendingPaymentAttachment, {
+    filePath: '/tmp/voucher.pdf',
+    originalName: '转款凭证.pdf'
+  });
+  contractPreview.onPaymentAmountInput.call(context, { detail: { value: '1288.5' } });
+  contractPreview.confirmPaymentAttachmentUpload.call(context);
+  assert.deepStrictEqual(uploaded, {
+    category: 'PAYMENT_VOUCHER',
+    filePath: '/tmp/voucher.pdf',
+    originalName: '转款凭证.pdf',
+    metadata: { voucherAmount: '1288.50' }
+  });
+  assert.strictEqual(context.data.showPaymentAmountEditor, false);
+});
+
+test('contract attachments download to a safe persistent path for every category', () => {
+  const contractPreview = loadPage('../pages/contract-preview/contract-preview');
+  wx.env = { USER_DATA_PATH: '/user-data' };
+
+  assert.strictEqual(contractPreview.attachmentDownloadPath({
+    id: 18,
+    originalName: '../转款:凭证.pdf',
+    contentType: 'application/pdf'
+  }), '/user-data/_转款_凭证-18.pdf');
+  assert.strictEqual(contractPreview.attachmentDownloadPath({
+    id: 19,
+    originalName: '其它资料',
+    contentType: 'image/png'
+  }), '/user-data/其它资料-19.png');
+
+  const script = fs.readFileSync(
+    path.join(__dirname, '..', 'pages', 'contract-preview', 'contract-preview.js'),
+    'utf8'
+  );
+  assert.ok(!script.includes("download && attachment.category === 'INVOICE'"));
+  assert.ok(script.includes('if (localFilePath) options.filePath = localFilePath'));
+});
+
 test('request injects auth and tenant headers and unwraps API data', async () => {
   let captured;
   wx.getStorageSync = () => '';
@@ -320,7 +384,7 @@ test('app switchCompany sends target tenant header and updates global profile', 
   assert.strictEqual(result.member.roleCode, 'ADMIN');
 });
 
-test('contract sales tab only shows documents bound to the current contract', () => {
+test('contract sales documents only show records bound to the current contract', () => {
   const pageDir = path.join(__dirname, '..', 'pages', 'contract-preview');
   const script = fs.readFileSync(path.join(pageDir, 'contract-preview.js'), 'utf8');
   const template = fs.readFileSync(path.join(pageDir, 'contract-preview.wxml'), 'utf8');
@@ -343,15 +407,20 @@ test('business documents require an editable template flow and do not auto-open 
   assert.ok(!script.includes('this.downloadBusinessDocumentFile(document, false)'));
 });
 
-test('contract collaboration uses three visible tabs and keeps other fulfillment files last', () => {
+test('contract collaboration groups sales orders and uploadable invoices in fulfillment', () => {
   const pageDir = path.join(__dirname, '..', 'pages', 'contract-preview');
   const script = fs.readFileSync(path.join(pageDir, 'contract-preview.js'), 'utf8');
   const template = fs.readFileSync(path.join(pageDir, 'contract-preview.wxml'), 'utf8');
   assert.ok(script.includes("{ key: 'detail', label: '合同' }"));
-  assert.ok(script.includes("{ key: 'sales', label: '销售单' }"));
   assert.ok(script.includes("{ key: 'fulfillment', label: '履约资料' }"));
+  assert.ok(!script.includes("{ key: 'sales', label: '销售单' }"));
   assert.ok(!script.includes("{ key: 'payment'"));
+  assert.ok(template.indexOf('>销售单<') < template.indexOf('>物流单<'));
   assert.ok(template.indexOf('>发票<') < template.indexOf('>其它<'));
+  assert.ok(template.includes('data-category="INVOICE"'));
+  assert.ok(script.includes('/attachments?category=INVOICE'));
+  assert.ok(script.includes('showPaymentAmountEditor: true'));
+  assert.ok(script.includes('voucherAmount: normalizedAmount'));
   assert.ok(!script.includes('DELIVERY_NOTE'));
   assert.ok(!template.includes('送货单'));
   assert.ok(template.includes('我的进展'));

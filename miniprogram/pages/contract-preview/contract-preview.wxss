@@ -111,11 +111,13 @@ page { background: #f4f8fd; }
 }
 .document-badge.logistics { background: #e9f8f0; color: #20a66a; }
 .document-badge.payment { background: #fff3df; color: #d88912; }
+.document-badge.invoice { background: #e8f2ff; color: #377fd1; }
 .document-badge.other { background: #f0ecff; color: #7554d8; }
 .document-badge.draft { background: #fff4db; color: #c37c0b; }
 .document-info { flex: 1; margin-left: 14rpx; min-width: 0; }
 .document-no { color: #223247; font-size: 24rpx; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .document-meta { color: #95a1af; font-size: 19rpx; margin-top: 5rpx; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.document-meta.payment-amount { color: #c77b0a; font-weight: 600; }
 .document-actions { color: #3498ff; display: flex; flex-shrink: 0; font-size: 21rpx; }
 .document-actions view { padding: 12rpx 8rpx; }
 .document-actions view + view { border-left: 1rpx solid #e6edf5; }
@@ -181,6 +183,236 @@ page { background: #f4f8fd; }
 }
 .memo-save::after { border: 0; }
 
+/* ===== 转款金额确认 ===== */
+.payment-amount-mask {
+  align-items: flex-end;
+  animation: fadeIn .2s ease;
+  background: rgba(11, 25, 43, .52);
+  bottom: 0;
+  display: flex;
+  justify-content: center;
+  left: 0;
+  position: fixed;
+  right: 0;
+  top: 0;
+  z-index: 300;
+}
+
+.payment-amount-sheet {
+  animation: slideUp .26s cubic-bezier(.22, 1, .36, 1);
+  background: #ffffff;
+  border-radius: 32rpx 32rpx 0 0;
+  box-sizing: border-box;
+  max-width: 750rpx;
+  padding: 14rpx 30rpx calc(28rpx + env(safe-area-inset-bottom));
+  width: 100%;
+}
+
+.payment-sheet-handle {
+  background: #dce4ed;
+  border-radius: 999rpx;
+  height: 7rpx;
+  margin: 0 auto 25rpx;
+  width: 72rpx;
+}
+
+.payment-sheet-head {
+  align-items: center;
+  display: flex;
+}
+
+.payment-sheet-icon {
+  align-items: center;
+  background: linear-gradient(145deg, #eaf5ff, #d9ecff);
+  border-radius: 18rpx;
+  color: #2587e4;
+  display: flex;
+  flex-shrink: 0;
+  font-size: 34rpx;
+  font-weight: 700;
+  height: 72rpx;
+  justify-content: center;
+  width: 72rpx;
+}
+
+.payment-sheet-copy {
+  flex: 1;
+  margin-left: 17rpx;
+  min-width: 0;
+}
+
+.payment-sheet-title {
+  color: #1b2e45;
+  font-size: 31rpx;
+  font-weight: 700;
+}
+
+.payment-sheet-sub {
+  color: #8d9baa;
+  font-size: 21rpx;
+  margin-top: 5rpx;
+}
+
+.payment-sheet-close {
+  color: #93a1af;
+  font-size: 44rpx;
+  line-height: 48rpx;
+  margin-left: 16rpx;
+  padding: 8rpx;
+}
+
+.payment-file-card {
+  align-items: center;
+  background: #f6f9fd;
+  border: 1rpx solid #e3ebf4;
+  border-radius: 18rpx;
+  display: flex;
+  margin-top: 27rpx;
+  padding: 18rpx 20rpx;
+}
+
+.payment-file-icon {
+  align-items: center;
+  background: #fff2dc;
+  border-radius: 13rpx;
+  color: #cf8214;
+  display: flex;
+  flex-shrink: 0;
+  font-size: 22rpx;
+  font-weight: 700;
+  height: 54rpx;
+  justify-content: center;
+  width: 54rpx;
+}
+
+.payment-file-copy {
+  flex: 1;
+  margin-left: 14rpx;
+  min-width: 0;
+}
+
+.payment-file-label {
+  color: #7f8d9d;
+  font-size: 19rpx;
+}
+
+.payment-file-name {
+  color: #2a3b50;
+  font-size: 23rpx;
+  font-weight: 600;
+  margin-top: 3rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.payment-file-check {
+  align-items: center;
+  background: #e4f7ed;
+  border-radius: 50%;
+  color: #1da866;
+  display: flex;
+  flex-shrink: 0;
+  font-size: 18rpx;
+  height: 38rpx;
+  justify-content: center;
+  margin-left: 14rpx;
+  width: 38rpx;
+}
+
+.payment-field-label {
+  color: #34465b;
+  font-size: 23rpx;
+  font-weight: 600;
+  margin: 30rpx 0 12rpx;
+}
+
+.payment-amount-field {
+  align-items: center;
+  background: #f8fbff;
+  border: 2rpx solid #b9d9f8;
+  border-radius: 20rpx;
+  box-shadow: 0 8rpx 24rpx rgba(52, 152, 255, .08);
+  box-sizing: border-box;
+  display: flex;
+  height: 104rpx;
+  padding: 0 22rpx;
+}
+
+.payment-amount-field.error {
+  background: #fffafa;
+  border-color: #e85c5c;
+  box-shadow: 0 8rpx 24rpx rgba(232, 92, 92, .08);
+}
+
+.payment-currency {
+  color: #2587e4;
+  font-size: 38rpx;
+  font-weight: 700;
+}
+
+.payment-amount-input {
+  color: #172b43;
+  flex: 1;
+  font-size: 52rpx;
+  font-weight: 700;
+  height: 100%;
+  margin: 0 14rpx;
+}
+
+.payment-amount-placeholder {
+  color: #c4d0dc;
+  font-weight: 500;
+}
+
+.payment-unit {
+  color: #8796a6;
+  font-size: 23rpx;
+}
+
+.payment-field-message {
+  color: #94a1af;
+  font-size: 19rpx;
+  line-height: 1.5;
+  margin-top: 9rpx;
+  min-height: 29rpx;
+}
+
+.payment-field-message.error {
+  color: #df4d4d;
+}
+
+.payment-sheet-actions {
+  display: flex;
+  gap: 16rpx;
+  margin-top: 27rpx;
+}
+
+.payment-sheet-actions button {
+  border: 0;
+  border-radius: 17rpx;
+  font-size: 25rpx;
+  font-weight: 600;
+  height: 78rpx;
+  line-height: 78rpx;
+  margin: 0;
+}
+
+.payment-sheet-actions button::after { border: 0; }
+
+.payment-cancel {
+  background: #eef3f8;
+  color: #607185;
+  width: 176rpx;
+}
+
+.payment-confirm {
+  background: linear-gradient(135deg, #45a8ff, #2478df);
+  box-shadow: 0 9rpx 22rpx rgba(36, 120, 223, .2);
+  color: #ffffff;
+  flex: 1;
+}
+
 /* ===== 履约资料分组 ===== */
 .fulfillment-intro {
   background: linear-gradient(145deg,#fff,#f4f9ff); border: 1rpx solid #dceafb;
@@ -197,6 +429,7 @@ page { background: #f4f8fd; }
   justify-content: center; margin-right: 11rpx; width: 42rpx;
 }
 .section-mark.logistics { background: #e9f8f0; color: #20a66a; }
+.section-mark.sales { background: #e7f3ff; color: #3498ff; }
 .section-mark.payment { background: #fff3df; color: #d88912; }
 .section-mark.invoice { background: #e8f2ff; color: #377fd1; }
 .section-mark.other { background: #f0ecff; color: #7554d8; }

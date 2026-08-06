@@ -21,6 +21,7 @@ import com.tradepass.config.StorageProperties;
 @Service
 public class ContractAttachmentService {
     public static final String PAYMENT_VOUCHER = "PAYMENT_VOUCHER";
+    public static final String INVOICE = "INVOICE";
     public static final String OTHER = "OTHER";
 
     private final JdbcTemplate jdbc;
@@ -100,6 +101,9 @@ public class ContractAttachmentService {
         validateContentType(normalized, contentType, originalName);
         LocalDate parsedDate = parseDate(voucherDate);
         BigDecimal parsedAmount = parseAmount(voucherAmount);
+        if (PAYMENT_VOUCHER.equals(normalized) && parsedAmount == null) {
+            throw new BusinessException("请输入转款金额");
+        }
         String safeName = FileTypeInspector.sanitizeFileName(originalName, contentType);
         String sha256 = FileTypeInspector.sha256(data);
         ObjectStorageService.StoredObject stored = store(companyId, contractId, normalized,
@@ -163,7 +167,11 @@ public class ContractAttachmentService {
                                                      String contentType, byte[] data, String sha256) {
         if (objectStorageService == null || !objectStorageService.isEnabled()) return null;
         LocalDate today = LocalDate.now();
-        String fileType = PAYMENT_VOUCHER.equals(category) ? "payment-voucher" : "attachment";
+        String fileType = switch (category) {
+            case PAYMENT_VOUCHER -> "payment-voucher";
+            case INVOICE -> "invoice";
+            default -> "attachment";
+        };
         String key = keyPrefix() + "/file/" + companyId + "/" + contractId + "/"
                 + fileType + "/" + today.getYear() + "/" + String.format("%02d", today.getMonthValue())
                 + "/" + UUID.randomUUID() + "-" + sha256 + "."
@@ -188,17 +196,19 @@ public class ContractAttachmentService {
 
     private String normalizeCategory(String category) {
         String normalized = category == null ? "" : category.trim().toUpperCase(Locale.ROOT);
-        if (!PAYMENT_VOUCHER.equals(normalized) && !OTHER.equals(normalized)) {
+        if (!PAYMENT_VOUCHER.equals(normalized)
+                && !INVOICE.equals(normalized)
+                && !OTHER.equals(normalized)) {
             throw new BusinessException("附件分类不正确");
         }
         return normalized;
     }
 
     private void validateContentType(String category, String contentType, String originalName) {
-        if (PAYMENT_VOUCHER.equals(category)
+        if ((PAYMENT_VOUCHER.equals(category) || INVOICE.equals(category))
                 && !FileTypeInspector.isImage(contentType)
                 && !"application/pdf".equals(contentType)) {
-            throw new BusinessException("转款凭证仅支持图片或 PDF");
+            throw new BusinessException(categoryLabel(category) + "仅支持图片或 PDF");
         }
         if (OTHER.equals(category)
                 && !FileTypeInspector.isImage(contentType)
@@ -233,7 +243,11 @@ public class ContractAttachmentService {
     }
 
     private String categoryLabel(String category) {
-        return PAYMENT_VOUCHER.equals(category) ? "转款凭证" : "其它资料";
+        return switch (category) {
+            case PAYMENT_VOUCHER -> "转款凭证";
+            case INVOICE -> "发票";
+            default -> "其它资料";
+        };
     }
 
     public record FilePayload(Long id, Long contractId, String originalName, String contentType,
