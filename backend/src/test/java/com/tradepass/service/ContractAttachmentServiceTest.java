@@ -94,7 +94,8 @@ class ContractAttachmentServiceTest {
         when(jdbc.queryForObject(anyString(), eq(Long.class))).thenReturn(10L);
         doReturn(List.of(row)).when(jdbc).query(anyString(), any(RowMapper.class), any(Object[].class));
 
-        assertThat(service.upload(12L, "INVOICE", "发票.pdf", pdf, null, null))
+        assertThat(service.upload(12L, "INVOICE", "发票.pdf", pdf, null, null,
+                "FP-2026-001", "2026-07-28", "88.50"))
                 .containsEntry("id", 10L);
         assertThatThrownBy(() -> service.upload(12L, "INVOICE", "发票.docx",
                 docx, null, null))

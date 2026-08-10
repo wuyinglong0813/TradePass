@@ -32,7 +32,8 @@ public class InventoryController {
                                                     @RequestBody Map<String, Object> body) {
         return ApiResponse.ok(inventoryService.receive(id,
                 String.valueOf(body.getOrDefault("decision", "")),
-                longValue(body.get("warehouseId"))));
+                longValue(body.get("warehouseId")),
+                String.valueOf(body.getOrDefault("reason", ""))));
     }
 
     @GetMapping("/warehouses")

@@ -132,25 +132,22 @@ flowchart TD
 
     subgraph RECON["七、对账闭环"]
         direction TB
-        R0["当前实现停留在订单汇总<br/>统一展示“待获取发票”"]
-        R1["按合作方与 SALE／PURCHASE 查询订单"]
-        R2["形成应收／应付金额汇总"]
-        R3["获取发票与结算数据"]
-        R4["逐笔匹配订单和发票"]
-        R5{"金额是否一致"}
-        R6["已匹配／完成对账"]
-        R7["生成差异并跟进处理"]
-        R8["开票、收付款及财务闭环"]
+        R0["每对合作企业一份长期对账单"]
+        R1["销售单／转款凭证／发票先提交对方确认"]
+        R2{"对方是否通过"}
+        R3["幂等写入自动对账明细"]
+        R4["累计应收／应付、已收／已付、开票金额"]
+        R5["自动计算未收／未付和未开票金额"]
+        R6["驳回并说明原因，不进入对账"]
+        R7["旧版 XLSX 仅作为历史文件保留"]
 
+        R0 --> R1
         R1 --> R2
-        R2 --> R3
-        R0 -. "发票数据源待接入" .-> R3
+        R2 -- "通过" --> R3
+        R2 -- "驳回" --> R6
         R3 --> R4
         R4 --> R5
-        R5 -- "一致" --> R6
-        R5 -- "不一致" --> R7
-        R6 -. "规划中" .-> R8
-        R7 -. "规划中" .-> R8
+        R7 -. "不参与自动计算" .-> R0
     end
 
     subgraph TODO["八、待办驱动"]
@@ -216,7 +213,7 @@ flowchart TD
 2. 企业创建后，`LEGAL_CANDIDATE/PENDING` 到正式法人 `LEGAL/ACTIVE` 的审核回调尚未形成完整闭环。
 3. 订单已有创建、查询、汇总和排行接口，小程序当前主要使用演示数据；Excel 导入和后台修正仍在规划中。
 4. 合同目前支持 `PENDING → ACTIVE/REJECTED`，尚无履约完成操作。
-5. 对账目前只有订单金额汇总，发票、收付款和差异处理尚未接入。
+5. 对账按合作企业唯一账户自动汇总已确认的销售单、发票和转款凭证；旧版按月 XLSX 仅保留查看下载。
 6. 合同审批接口当前主要校验合同是否为 `PENDING`，后续还应补充对方企业身份及审批权限校验。
 
 ## 主要实现位置
@@ -225,4 +222,5 @@ flowchart TD
 - 企业、成员与角色：`backend/src/main/java/com/tradepass/service/CompanyService.java`
 - 订单、合作方与合同：`backend/src/main/java/com/tradepass/service/TradeService.java`
 - 首页排行：`backend/src/main/java/com/tradepass/service/RankingService.java`
+- 自动对账：`backend/src/main/java/com/tradepass/service/ReconciliationAccountService.java`
 - 小程序页面：`miniprogram/pages/`

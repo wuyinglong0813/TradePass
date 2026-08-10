@@ -245,9 +245,9 @@ Page({
   publishDraft() {
     if (!this.data.detail || !this.data.detail.canPublish || this.data.publishing) return;
     wx.showModal({
-      title: '确认发布销售单',
-      content: '发布后需方将可以查看、接收并选择是否直接入库，销售单内容不能再编辑。',
-      confirmText: '确认发布',
+      title: '提交销售单确认',
+      content: '提交后将等待需方确认；需方通过后双方正式可见，并自动更新客户对账。',
+      confirmText: '提交确认',
       success: result => {
         if (result.confirm) this.submitPublishDraft();
       }
@@ -258,7 +258,7 @@ Page({
     try {
       this.setData({ publishing: true });
       await request({ url: `/trade-documents/${this.data.id}/publish`, method: 'POST', data: {} });
-      wx.showToast({ title: '销售单已发布', icon: 'success' });
+      wx.showToast({ title: '已提交，等待对方确认', icon: 'success' });
       await this.loadAll();
     } catch (error) {
       wx.showToast({ title: error.message || '发布失败', icon: 'none' });
@@ -270,9 +270,28 @@ Page({
   receiveOnly() {
     wx.showModal({
       title: '确认接收销售单',
-      content: '接收后暂不增加库存，之后仍可在本页选择仓库入库。',
+      content: '通过后销售单将正式生效并立即更新双方对账；暂不增加库存。',
       success: result => {
         if (result.confirm) this.submitReceive('RECEIVE_ONLY');
+      }
+    });
+  },
+
+  rejectSalesOrder() {
+    wx.showModal({
+      title: '驳回销售单',
+      content: '',
+      editable: true,
+      placeholderText: '请输入驳回原因',
+      confirmText: '确认驳回',
+      success: result => {
+        if (!result.confirm) return;
+        const reason = String(result.content || '').trim();
+        if (!reason) {
+          wx.showToast({ title: '请输入驳回原因', icon: 'none' });
+          return;
+        }
+        this.submitReceive('REJECT', null, reason);
       }
     });
   },
@@ -298,17 +317,21 @@ Page({
     });
   },
 
-  async submitReceive(decision, warehouseId) {
+  async submitReceive(decision, warehouseId, reason = '') {
     if (this.data.receiving) return;
     try {
       this.setData({ receiving: true });
       const detail = await request({
         url: `/sales-orders/${this.data.id}/receive`,
         method: 'POST',
-        data: { decision, warehouseId }
+        data: { decision, warehouseId, reason }
       });
       this.setData({ detail: { ...this.data.detail, ...detail }, items: detail.items || this.data.items });
-      wx.showToast({ title: decision === 'INBOUND' ? '销售单已入库' : '销售单已接收', icon: 'success' });
+      wx.showToast({
+        title: decision === 'REJECT' ? '销售单已驳回'
+          : decision === 'INBOUND' ? '已通过并入库' : '已通过并更新对账',
+        icon: 'success'
+      });
       await this.loadAll();
     } catch (error) {
       wx.showToast({ title: error.message || '操作失败', icon: 'none' });

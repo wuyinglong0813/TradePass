@@ -23,6 +23,7 @@ public class BusinessDocument {
     private Long createdBy;
     private Long acknowledgedBy;
     private LocalDateTime acknowledgedAt;
+    private String rejectedReason;
     private LocalDateTime createdAt;
 
     public Long getId() { return id; }
@@ -53,6 +54,8 @@ public class BusinessDocument {
     public void setAcknowledgedBy(Long acknowledgedBy) { this.acknowledgedBy = acknowledgedBy; }
     public LocalDateTime getAcknowledgedAt() { return acknowledgedAt; }
     public void setAcknowledgedAt(LocalDateTime acknowledgedAt) { this.acknowledgedAt = acknowledgedAt; }
+    public String getRejectedReason() { return rejectedReason; }
+    public void setRejectedReason(String rejectedReason) { this.rejectedReason = rejectedReason; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 }

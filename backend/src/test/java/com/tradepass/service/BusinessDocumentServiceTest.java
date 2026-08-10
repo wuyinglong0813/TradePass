@@ -121,7 +121,7 @@ class BusinessDocumentServiceTest {
         BusinessDocument document = inserted.get();
         assertThat(document.getTemplateId()).isEqualTo(11L);
         assertThat(document.getRecipientCompanyId()).isEqualTo(4L);
-        assertThat(document.getStatus()).isEqualTo("ISSUED");
+        assertThat(document.getStatus()).isEqualTo("DRAFT");
         assertThat(document.getSourceType()).isEqualTo("TEMPLATE");
         JsonNode content = objectMapper.readTree(document.getContent());
         assertThat(content.path("title").asText()).isEqualTo("七月销售单");
@@ -213,7 +213,7 @@ class BusinessDocumentServiceTest {
 
         Map<String, Object> published = service.publishDraft(33L);
         assertThat(draft.getStatus()).isEqualTo("ISSUED");
-        assertThat(published).containsEntry("statusText", "已发布")
+        assertThat(published).containsEntry("statusText", "待对方确认")
                 .containsEntry("canPublish", false);
     }
 }

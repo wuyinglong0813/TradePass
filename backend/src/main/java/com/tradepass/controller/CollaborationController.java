@@ -4,6 +4,7 @@ import com.tradepass.common.ApiResponse;
 import com.tradepass.common.BusinessException;
 import com.tradepass.service.ContractAttachmentService;
 import com.tradepass.service.PersonalMemoService;
+import com.tradepass.service.ReconciliationAccountService;
 import com.tradepass.service.ReconciliationStatementService;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -28,13 +29,16 @@ public class CollaborationController {
     private final ContractAttachmentService attachmentService;
     private final PersonalMemoService memoService;
     private final ReconciliationStatementService statementService;
+    private final ReconciliationAccountService accountService;
 
     public CollaborationController(ContractAttachmentService attachmentService,
                                    PersonalMemoService memoService,
-                                   ReconciliationStatementService statementService) {
+                                   ReconciliationStatementService statementService,
+                                   ReconciliationAccountService accountService) {
         this.attachmentService = attachmentService;
         this.memoService = memoService;
         this.statementService = statementService;
+        this.accountService = accountService;
     }
 
     @GetMapping("/contracts/{contractId}/attachments")
@@ -50,17 +54,29 @@ public class CollaborationController {
             @RequestParam(required = false) String originalName,
             @RequestParam(required = false) String voucherDate,
             @RequestParam(required = false) String voucherAmount,
+            @RequestParam(required = false) String invoiceNo,
+            @RequestParam(required = false) String invoiceDate,
+            @RequestParam(required = false) String invoiceAmount,
             @RequestParam MultipartFile file) {
         try {
             String name = originalName == null || originalName.isBlank()
                     ? file.getOriginalFilename() : originalName;
             return ApiResponse.ok(attachmentService.upload(contractId, category, name,
-                    file.getBytes(), voucherDate, voucherAmount));
+                    file.getBytes(), voucherDate, voucherAmount,
+                    invoiceNo, invoiceDate, invoiceAmount));
         } catch (BusinessException exception) {
             throw exception;
         } catch (Exception exception) {
             throw new BusinessException("文件读取失败，请重新选择");
         }
+    }
+
+    @PostMapping("/contract-attachments/{id}/decision")
+    public ApiResponse<Map<String, Object>> decideAttachment(@PathVariable Long id,
+                                                              @RequestBody Map<String, Object> body) {
+        return ApiResponse.ok(attachmentService.decide(id,
+                String.valueOf(body.getOrDefault("decision", "")),
+                String.valueOf(body.getOrDefault("reason", ""))));
     }
 
     @GetMapping("/contract-attachments/{id}/content")
@@ -98,6 +114,26 @@ public class CollaborationController {
     public ApiResponse<List<Map<String, Object>>> statements(
             @RequestParam(required = false) Long counterpartyCompanyId) {
         return ApiResponse.ok(statementService.list(counterpartyCompanyId));
+    }
+
+    @GetMapping("/reconciliation-accounts")
+    public ApiResponse<List<Map<String, Object>>> reconciliationAccounts() {
+        return ApiResponse.ok(accountService.listAccounts());
+    }
+
+    @GetMapping("/reconciliation-accounts/{counterpartyCompanyId}")
+    public ApiResponse<Map<String, Object>> reconciliationAccount(
+            @PathVariable Long counterpartyCompanyId) {
+        return ApiResponse.ok(accountService.account(counterpartyCompanyId));
+    }
+
+    @GetMapping("/reconciliation-accounts/{counterpartyCompanyId}/workbook")
+    public ResponseEntity<byte[]> reconciliationWorkbook(
+            @PathVariable Long counterpartyCompanyId,
+            @RequestParam(defaultValue = "false") boolean download) {
+        ReconciliationAccountService.WorkbookPayload workbook =
+                accountService.workbook(counterpartyCompanyId);
+        return fileResponse(workbook.originalName(), workbook.contentType(), workbook.data(), download);
     }
 
     @PostMapping(value = "/reconciliation-statements", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

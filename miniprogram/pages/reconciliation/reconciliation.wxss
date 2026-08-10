@@ -2,21 +2,15 @@ page { background: #f4f8fd; }
 .recon-page { min-height: 100vh; padding-bottom: 38rpx; }
 .recon-hero { background: linear-gradient(138deg,#45a8ff,#2478df 76%,#1557a8); color: #fff; overflow: hidden; padding: 36rpx 32rpx 80rpx; position: relative; }
 .recon-hero image { height: 220rpx; opacity: .08; position: absolute; right: -30rpx; top: -42rpx; width: 220rpx; }
-.hero-label { color: rgba(255,255,255,.68); font-size: 22rpx; position: relative; }
-.hero-title { font-size: 35rpx; font-weight: 700; margin-top: 10rpx; max-width: 650rpx; overflow: hidden; position: relative; text-overflow: ellipsis; white-space: nowrap; }
-.hero-date { color: rgba(255,255,255,.72); font-size: 22rpx; margin-top: 10rpx; position: relative; }
-.upload-card,.statement-card { background: #fff; border: 1rpx solid #e1eaf5; border-radius: 24rpx; box-shadow: 0 10rpx 30rpx rgba(24,56,92,.055); margin: 22rpx 24rpx 0; padding: 26rpx; }
-.upload-card { margin-top: -48rpx; position: relative; }
-.upload-copy { margin-bottom: 20rpx; }
-.upload-title,.section-title { color: #16283d; font-size: 29rpx; font-weight: 700; }
-.upload-sub,.section-sub { color: #929eac; font-size: 21rpx; margin-top: 5rpx; }
-.period-picker { background: #f5f8fc; border: 1rpx solid #dfe8f2; border-radius: 12rpx; color: #38516d; font-size: 25rpx; padding: 17rpx 20rpx; }
-.upload-button { background: linear-gradient(135deg,#45a8ff,#2478df); border: 0; border-radius: 14rpx; color: #fff; font-size: 25rpx; height: 72rpx; line-height: 72rpx; margin: 14rpx 0 0; }
-.upload-button::after { border: 0; }
-.statement-card { margin-top: 22rpx; }
+.hero-label { color: rgba(255,255,255,.7); font-size: 22rpx; position: relative; }
+.hero-title { font-size: 35rpx; font-weight: 700; margin-top: 10rpx; overflow: hidden; position: relative; text-overflow: ellipsis; white-space: nowrap; }
+.hero-date { color: rgba(255,255,255,.76); font-size: 22rpx; line-height: 1.6; margin-top: 10rpx; position: relative; }
+.statement-card { background: #fff; border: 1rpx solid #e1eaf5; border-radius: 24rpx; box-shadow: 0 10rpx 30rpx rgba(24,56,92,.055); margin: -48rpx 24rpx 0; padding: 26rpx; position: relative; }
 .section-head { align-items: center; display: flex; justify-content: space-between; margin-bottom: 14rpx; }
+.section-title { color: #16283d; font-size: 29rpx; font-weight: 700; }
+.section-sub { color: #929eac; font-size: 21rpx; margin-top: 5rpx; }
 .count-pill { background: #eaf4ff; border-radius: 18rpx; color: #318de5; font-size: 20rpx; padding: 5rpx 13rpx; }
-.statement-item { align-items: center; border-bottom: 1rpx solid #edf2f7; display: flex; padding: 21rpx 0; }
+.statement-item { align-items: center; border-bottom: 1rpx solid #edf2f7; display: flex; padding: 24rpx 0; }
 .statement-item:last-child { border-bottom: 0; }
 .xlsx-icon { align-items: center; background: #e7f6ed; border-radius: 14rpx; color: #238a50; display: flex; flex-shrink: 0; font-size: 25rpx; font-weight: 800; height: 60rpx; justify-content: center; width: 60rpx; }
 .statement-copy { flex: 1; margin-left: 14rpx; min-width: 0; }

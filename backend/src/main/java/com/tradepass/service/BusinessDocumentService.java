@@ -176,7 +176,8 @@ public class BusinessDocumentService {
         document.setContractId(contractId);
         document.setDocumentType(type);
         document.setSourceType(normalizeSourceType(string(body.get("sourceType"))));
-        document.setStatus("PENDING".equals(contract.getStatus()) ? "DRAFT" : "ISSUED");
+        // 销售单统一先保存为草稿；合同生效后由供方明确提交给需方确认。
+        document.setStatus("DRAFT");
         document.setDocumentNo(createDocumentNo(type));
         document.setTemplateId(template.getId());
         document.setTemplateName(template.getName());
@@ -188,8 +189,7 @@ public class BusinessDocumentService {
             inventoryService.saveDocumentItems(document);
         }
         auditLogService.log(companyId, "BUSINESS_DOCUMENT", document.getId(), "CREATE",
-                "按模板 " + template.getName() + ("DRAFT".equals(document.getStatus())
-                        ? " 创建销售单草稿" : " 发布销售单"));
+                "按模板 " + template.getName() + " 创建销售单草稿");
         return documentView(documentMapper.selectById(document.getId()), contract, companyId);
     }
 
@@ -197,7 +197,7 @@ public class BusinessDocumentService {
     public Map<String, Object> updateDraft(Long id, Map<String, Object> body) {
         long companyId = AuthContext.requireCompanyId();
         accessControlService.requireAnyPermission(companyId, "contract_sign", "order_create");
-        BusinessDocument document = requireOwnedDraft(id, companyId);
+        BusinessDocument document = requireOwnedEditableDocument(id, companyId);
         TradeContract contract = requireContractParty(document.getContractId(), companyId);
         if (!"PENDING".equals(contract.getStatus()) && !"ACTIVE".equals(contract.getStatus())) {
             throw new BusinessException("当前合同状态不能编辑销售单草稿");
@@ -216,7 +216,7 @@ public class BusinessDocumentService {
     public Map<String, Object> publishDraft(Long id) {
         long companyId = AuthContext.requireCompanyId();
         accessControlService.requireAnyPermission(companyId, "contract_sign", "order_create");
-        BusinessDocument document = requireOwnedDraft(id, companyId);
+        BusinessDocument document = requireOwnedEditableDocument(id, companyId);
         TradeContract contract = requireContractParty(document.getContractId(), companyId);
         if (!"ACTIVE".equals(contract.getStatus())) {
             throw new BusinessException("合同生效后才能发布销售单");
@@ -225,9 +225,10 @@ public class BusinessDocumentService {
             throw new BusinessException("仅合同供方可以发布销售单");
         }
         document.setStatus("ISSUED");
+        document.setRejectedReason(null);
         documentMapper.updateById(document);
         auditLogService.log(companyId, "BUSINESS_DOCUMENT", document.getId(),
-                "PUBLISH", "发布销售单 " + document.getDocumentNo());
+                "SUBMIT", "提交销售单等待需方确认 " + document.getDocumentNo());
         return documentView(documentMapper.selectById(document.getId()), contract, companyId);
     }
 
@@ -483,11 +484,11 @@ public class BusinessDocumentService {
         return contract;
     }
 
-    private BusinessDocument requireOwnedDraft(Long id, long companyId) {
+    private BusinessDocument requireOwnedEditableDocument(Long id, long companyId) {
         BusinessDocument document = documentMapper.selectById(id);
         if (document == null || !SALES_ORDER.equals(document.getDocumentType())
                 || !Long.valueOf(companyId).equals(document.getCompanyId())
-                || !"DRAFT".equals(document.getStatus())) {
+                || (!"DRAFT".equals(document.getStatus()) && !"REJECTED".equals(document.getStatus()))) {
             throw new BusinessException("可编辑的销售单草稿不存在");
         }
         return document;
@@ -510,6 +511,7 @@ public class BusinessDocumentService {
                                              TradeContract contract,
                                              long viewerCompanyId) {
         Map<String, Object> view = new LinkedHashMap<>();
+        boolean owner = Long.valueOf(viewerCompanyId).equals(document.getCompanyId());
         view.put("id", document.getId());
         view.put("documentType", document.getDocumentType());
         view.put("typeLabel", typeLabel(document.getDocumentType()));
@@ -517,13 +519,14 @@ public class BusinessDocumentService {
         view.put("recipientCompanyId", document.getRecipientCompanyId());
         view.put("sourceType", document.getSourceType());
         view.put("status", document.getStatus());
-        view.put("statusText", statusText(document.getStatus()));
+        view.put("statusText", "ISSUED".equals(document.getStatus()) && !owner
+                ? "待我方确认" : statusText(document.getStatus()));
+        view.put("rejectedReason", safe(document.getRejectedReason()));
         view.put("documentNo", document.getDocumentNo());
         view.put("templateId", document.getTemplateId());
         view.put("templateName", document.getTemplateName());
         view.put("createdAt", document.getCreatedAt());
-        boolean owner = Long.valueOf(viewerCompanyId).equals(document.getCompanyId());
-        boolean draft = "DRAFT".equals(document.getStatus());
+        boolean draft = "DRAFT".equals(document.getStatus()) || "REJECTED".equals(document.getStatus());
         view.put("contractStatus", contract.getStatus());
         view.put("canEditDraft", owner && draft
                 && ("PENDING".equals(contract.getStatus()) || "ACTIVE".equals(contract.getStatus())));
@@ -568,9 +571,11 @@ public class BusinessDocumentService {
 
     private String statusText(String status) {
         if ("DRAFT".equals(status)) return "草稿";
-        if ("ACKNOWLEDGED".equals(status)) return "已接收待入库";
-        if ("INBOUNDED".equals(status)) return "已入库";
-        return "已发布";
+        if ("ISSUED".equals(status)) return "待对方确认";
+        if ("REJECTED".equals(status)) return "已驳回";
+        if ("ACKNOWLEDGED".equals(status)) return "已通过待入库";
+        if ("INBOUNDED".equals(status)) return "已通过并入库";
+        return status;
     }
 
     private Long longValue(Object value) {

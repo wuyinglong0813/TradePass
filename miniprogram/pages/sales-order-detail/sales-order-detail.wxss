@@ -7,6 +7,8 @@ page { background: #f4f8fd; }
 .hero-row { align-items: center; display: flex; font-size: 22rpx; justify-content: space-between; margin-top: 16rpx; }
 .status { background: rgba(255,255,255,.2); border-radius: 15rpx; padding: 5rpx 13rpx; }
 .status.draft { background: #fff2ce; color: #a96a00; }
+.status.rejected { background: #fde5e5; color: #aa3434; }
+.reject-reason { color: #b23e3e; font-weight: 600; margin: 10rpx 0; }
 .memo-summary {
   align-items: center; background: #fff; border: 1rpx solid #dce9f7; border-radius: 20rpx;
   box-shadow: 0 7rpx 20rpx rgba(28,75,126,.07); display: flex; margin: -18rpx 24rpx 20rpx;

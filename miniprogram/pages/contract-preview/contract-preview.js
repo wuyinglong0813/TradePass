@@ -1,3 +1,8 @@
+function today() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+}
+
 Page({
   data: {
     contractId: '',
@@ -22,8 +27,15 @@ Page({
     attachmentUploading: false,
     showPaymentAmountEditor: false,
     paymentAmount: '',
+    paymentDate: today(),
     paymentAmountError: '',
     pendingPaymentAttachment: null,
+    showInvoiceEditor: false,
+    invoiceNo: '',
+    invoiceDate: today(),
+    invoiceAmount: '',
+    invoiceError: '',
+    pendingInvoiceAttachment: null,
     fulfillmentLoading: false,
     fulfillmentCount: 0,
     invoiceList: [],
@@ -130,7 +142,7 @@ Page({
       const isSupplier = viewerDirection === 'SALE';
       const canCreateSalesOrder = isSupplier
         && (contract.status === 'PENDING' || contract.status === 'ACTIVE');
-      const createAsDraft = contract.status === 'PENDING';
+      const createAsDraft = true;
 
       this.setData({
         contract: {
@@ -144,9 +156,11 @@ Page({
         sData,
         canCreateSalesOrder,
         createAsDraft,
-        salesOrderCreateText: createAsDraft ? '创建草稿' : '创建销售单',
+        salesOrderCreateText: '创建草稿',
         salesOrderEmptyHint: canCreateSalesOrder
-          ? (createAsDraft ? '合同待签署，可先按合同产品准备销售单草稿' : '按合同产品生成并发布销售单')
+          ? (contract.status === 'PENDING'
+            ? '合同待签署，可先按合同产品准备销售单草稿'
+            : '先创建销售单草稿，确认内容后再提交给需方')
           : '等待合同供方创建销售单',
         pdfTitle,
         pdfSupplier: pdfSupplier || '—',
@@ -434,7 +448,10 @@ Page({
         isImage: String(item.contentType || '').indexOf('image/') === 0,
         voucherAmountText: item.voucherAmount === null || item.voucherAmount === undefined
           ? '金额未填写'
-          : `转款金额 ¥${Number(item.voucherAmount).toFixed(2)}`
+          : `转款金额 ¥${Number(item.voucherAmount).toFixed(2)}`,
+        invoiceAmountText: item.invoiceAmount === null || item.invoiceAmount === undefined
+          ? '金额未填写'
+          : `发票金额 ¥${Number(item.invoiceAmount).toFixed(2)}`
       });
       const paymentAttachments = (payments || []).map(mapAttachment);
       const invoiceList = (invoices || []).map(mapAttachment);
@@ -537,7 +554,10 @@ Page({
         isImage: String(item.contentType || '').indexOf('image/') === 0,
         voucherAmountText: item.voucherAmount === null || item.voucherAmount === undefined
           ? '金额未填写'
-          : `转款金额 ¥${Number(item.voucherAmount).toFixed(2)}`
+          : `转款金额 ¥${Number(item.voucherAmount).toFixed(2)}`,
+        invoiceAmountText: item.invoiceAmount === null || item.invoiceAmount === undefined
+          ? '金额未填写'
+          : `发票金额 ¥${Number(item.invoiceAmount).toFixed(2)}`
       }));
       const dataKey = {
         PAYMENT_VOUCHER: 'paymentAttachments',
@@ -624,13 +644,25 @@ Page({
   },
 
   prepareAttachmentUpload(category, filePath, originalName) {
-    if (category !== 'PAYMENT_VOUCHER') {
+    if (category === 'OTHER') {
       this.uploadAttachment(category, filePath, originalName);
+      return;
+    }
+    if (category === 'INVOICE') {
+      this.setData({
+        showInvoiceEditor: true,
+        invoiceNo: '',
+        invoiceDate: today(),
+        invoiceAmount: '',
+        invoiceError: '',
+        pendingInvoiceAttachment: { filePath, originalName }
+      });
       return;
     }
     this.setData({
       showPaymentAmountEditor: true,
       paymentAmount: '',
+      paymentDate: today(),
       paymentAmountError: '',
       pendingPaymentAttachment: { filePath, originalName }
     });
@@ -643,11 +675,16 @@ Page({
     });
   },
 
+  onPaymentDateChange(e) {
+    this.setData({ paymentDate: e.detail.value });
+  },
+
   closePaymentAmountEditor() {
     if (this.data.attachmentUploading) return;
     this.setData({
       showPaymentAmountEditor: false,
       paymentAmount: '',
+      paymentDate: today(),
       paymentAmountError: '',
       pendingPaymentAttachment: null
     });
@@ -662,11 +699,13 @@ Page({
     }
     const attachment = this.data.pendingPaymentAttachment;
     if (!attachment || !attachment.filePath) return;
+    const paymentDate = this.data.paymentDate;
     const [integerPart, decimalPart = ''] = amount.split('.');
     const normalizedAmount = `${integerPart}.${decimalPart.padEnd(2, '0')}`;
     this.setData({
       showPaymentAmountEditor: false,
       paymentAmount: '',
+      paymentDate: today(),
       paymentAmountError: '',
       pendingPaymentAttachment: null
     }, () => {
@@ -674,9 +713,64 @@ Page({
         'PAYMENT_VOUCHER',
         attachment.filePath,
         attachment.originalName,
-        { voucherAmount: normalizedAmount }
+        { voucherAmount: normalizedAmount, voucherDate: paymentDate }
       );
     });
+  },
+
+  onInvoiceNoInput(e) {
+    this.setData({ invoiceNo: e.detail.value, invoiceError: '' });
+  },
+
+  onInvoiceAmountInput(e) {
+    this.setData({ invoiceAmount: e.detail.value, invoiceError: '' });
+  },
+
+  onInvoiceDateChange(e) {
+    this.setData({ invoiceDate: e.detail.value, invoiceError: '' });
+  },
+
+  closeInvoiceEditor() {
+    if (this.data.attachmentUploading) return;
+    this.setData({
+      showInvoiceEditor: false,
+      invoiceNo: '',
+      invoiceDate: today(),
+      invoiceAmount: '',
+      invoiceError: '',
+      pendingInvoiceAttachment: null
+    });
+  },
+
+  confirmInvoiceUpload() {
+    if (this.data.attachmentUploading) return;
+    const invoiceNo = String(this.data.invoiceNo || '').trim();
+    const amount = String(this.data.invoiceAmount || '').trim();
+    if (!invoiceNo) {
+      this.setData({ invoiceError: '请输入发票号码' });
+      return;
+    }
+    if (!/^\d{1,16}(\.\d{1,2})?$/.test(amount)) {
+      this.setData({ invoiceError: '请输入正确金额，最多保留两位小数' });
+      return;
+    }
+    const attachment = this.data.pendingInvoiceAttachment;
+    if (!attachment || !attachment.filePath) return;
+    const [integerPart, decimalPart = ''] = amount.split('.');
+    const normalizedAmount = `${integerPart}.${decimalPart.padEnd(2, '0')}`;
+    const metadata = {
+      invoiceNo,
+      invoiceDate: this.data.invoiceDate,
+      invoiceAmount: normalizedAmount
+    };
+    this.setData({
+      showInvoiceEditor: false,
+      invoiceNo: '',
+      invoiceDate: today(),
+      invoiceAmount: '',
+      invoiceError: '',
+      pendingInvoiceAttachment: null
+    }, () => this.uploadAttachment('INVOICE', attachment.filePath, attachment.originalName, metadata));
   },
 
   uploadAttachment(category, filePath, originalName, metadata = {}) {
@@ -702,7 +796,10 @@ Page({
           const label = category === 'PAYMENT_VOUCHER'
             ? '转款凭证'
             : category === 'INVOICE' ? '发票' : '资料';
-          wx.showToast({ title: `${label}已上传`, icon: 'success' });
+          wx.showToast({
+            title: category === 'OTHER' ? `${label}已上传` : `${label}已提交确认`,
+            icon: 'success'
+          });
           this.loadAttachments(category);
           return;
         }
@@ -717,6 +814,60 @@ Page({
         this.setData({ attachmentUploading: false });
       }
     });
+  },
+
+  approveAttachment(e) {
+    const attachment = e.currentTarget.dataset.attachment;
+    if (!attachment || !attachment.id) return;
+    wx.showModal({
+      title: `确认${attachment.category === 'INVOICE' ? '发票' : '转款凭证'}`,
+      content: '通过后将正式共享给双方，并立即更新客户对账。',
+      confirmText: '确认通过',
+      success: result => {
+        if (result.confirm) this.submitAttachmentDecision(attachment, 'APPROVE', '');
+      }
+    });
+  },
+
+  rejectAttachment(e) {
+    const attachment = e.currentTarget.dataset.attachment;
+    if (!attachment || !attachment.id) return;
+    wx.showModal({
+      title: '驳回资料',
+      content: '',
+      editable: true,
+      placeholderText: '请输入驳回原因',
+      confirmText: '确认驳回',
+      success: result => {
+        if (!result.confirm) return;
+        const reason = String(result.content || '').trim();
+        if (!reason) {
+          wx.showToast({ title: '请输入驳回原因', icon: 'none' });
+          return;
+        }
+        this.submitAttachmentDecision(attachment, 'REJECT', reason);
+      }
+    });
+  },
+
+  async submitAttachmentDecision(attachment, decision, reason) {
+    if (this.data.attachmentLoading) return;
+    const { request } = require('../../utils/request');
+    try {
+      this.setData({ attachmentLoading: true });
+      await request({
+        url: `/contract-attachments/${attachment.id}/decision`,
+        method: 'POST',
+        data: { decision, reason }
+      });
+      wx.showToast({ title: decision === 'APPROVE' ? '已通过并更新对账' : '已驳回', icon: 'success' });
+      this.setData({ attachmentLoading: false });
+      await this.loadAttachments(attachment.category);
+    } catch (error) {
+      wx.showToast({ title: error.message || '确认失败', icon: 'none' });
+    } finally {
+      this.setData({ attachmentLoading: false });
+    }
   },
 
   viewAttachment(e) {
@@ -1084,10 +1235,8 @@ Page({
     }
     const confirmed = await new Promise(resolve => {
       wx.showModal({
-        title: createAsDraft ? '确认保存销售单草稿' : `确认创建${documentEditorLabel}`,
-        content: createAsDraft
-          ? `模板：${documentTemplates[documentTemplateIndex].name}\n合同生效后再发布给需方，发布前仍可编辑。`
-          : `模板：${documentTemplates[documentTemplateIndex].name}\n创建后将作为正式销售单发布给需方。`,
+        title: '确认保存销售单草稿',
+        content: `模板：${documentTemplates[documentTemplateIndex].name}\n保存后可继续编辑，提交并经需方确认后才会进入对账。`,
         success: result => resolve(!!result.confirm),
         fail: () => resolve(false)
       });
@@ -1120,7 +1269,7 @@ Page({
       });
       await this.loadBusinessDocuments(documentEditorType);
       this.setData({ showDocumentEditor: false });
-      wx.showToast({ title: createAsDraft ? '销售单草稿已保存' : `${documentEditorLabel}已发布`, icon: 'success' });
+      wx.showToast({ title: '销售单草稿已保存', icon: 'success' });
     } catch (error) {
       wx.showToast({ title: error.message || '单据生成失败', icon: 'none' });
     } finally {

@@ -243,9 +243,36 @@ test('payment voucher requires a manually entered amount before upload', () => {
     category: 'PAYMENT_VOUCHER',
     filePath: '/tmp/voucher.pdf',
     originalName: '转款凭证.pdf',
-    metadata: { voucherAmount: '1288.50' }
+    metadata: { voucherAmount: '1288.50', voucherDate: context.data.paymentDate }
   });
   assert.strictEqual(context.data.showPaymentAmountEditor, false);
+});
+
+test('invoice requires number date and amount before counterpart confirmation', () => {
+  const contractPreview = loadPage('../pages/contract-preview/contract-preview');
+  let uploaded;
+  const context = {
+    data: { attachmentUploading: false, pendingInvoiceAttachment: null },
+    setData(changes, callback) {
+      Object.assign(this.data, changes);
+      if (callback) callback();
+    },
+    uploadAttachment: (category, filePath, originalName, metadata) => {
+      uploaded = { category, filePath, originalName, metadata };
+    }
+  };
+  contractPreview.prepareAttachmentUpload.call(context, 'INVOICE', '/tmp/invoice.pdf', '发票.pdf');
+  assert.strictEqual(context.data.showInvoiceEditor, true);
+  contractPreview.onInvoiceNoInput.call(context, { detail: { value: 'FP-001' } });
+  contractPreview.onInvoiceAmountInput.call(context, { detail: { value: '88.5' } });
+  const invoiceDate = context.data.invoiceDate;
+  contractPreview.confirmInvoiceUpload.call(context);
+  assert.deepStrictEqual(uploaded, {
+    category: 'INVOICE',
+    filePath: '/tmp/invoice.pdf',
+    originalName: '发票.pdf',
+    metadata: { invoiceNo: 'FP-001', invoiceDate, invoiceAmount: '88.50' }
+  });
 });
 
 test('contract attachments download to a safe persistent path for every category', () => {
@@ -427,7 +454,7 @@ test('contract collaboration groups sales orders and uploadable invoices in fulf
   assert.ok(template.includes('仅当前账号可见'));
 });
 
-test('pending contracts create editable sales-order drafts before publishing', () => {
+test('all sales orders start as editable drafts before counterpart confirmation', () => {
   const contractPreview = fs.readFileSync(
     path.join(__dirname, '..', 'pages', 'contract-preview', 'contract-preview.js'), 'utf8'
   );
@@ -435,12 +462,13 @@ test('pending contracts create editable sales-order drafts before publishing', (
     path.join(__dirname, '..', 'pages', 'sales-order-detail', 'sales-order-detail.js'), 'utf8'
   );
   assert.ok(contractPreview.includes("contract.status === 'PENDING'"));
-  assert.ok(contractPreview.includes("salesOrderCreateText: createAsDraft ? '创建草稿' : '创建销售单'"));
+  assert.ok(contractPreview.includes("salesOrderCreateText: '创建草稿'"));
+  assert.ok(contractPreview.includes('提交并经需方确认后才会进入对账'));
   assert.ok(salesDetail.includes('/trade-documents/${this.data.id}/draft'));
   assert.ok(salesDetail.includes('/trade-documents/${this.data.id}/publish'));
 });
 
-test('xlsx reconciliation and sales-order inbound pages are wired', () => {
+test('live reconciliation and sales-order confirmation pages are wired', () => {
   const appConfig = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'app.json'), 'utf8'));
   const reconciliation = fs.readFileSync(
     path.join(__dirname, '..', 'pages', 'reconciliation', 'reconciliation.js'), 'utf8'
@@ -450,10 +478,12 @@ test('xlsx reconciliation and sales-order inbound pages are wired', () => {
   );
   assert.ok(appConfig.pages.includes('pages/sales-order-detail/sales-order-detail'));
   assert.ok(appConfig.pages.includes('pages/inventory/inventory'));
-  assert.ok(reconciliation.includes("extension: ['xlsx']"));
-  assert.ok(reconciliation.includes('/reconciliation-statements'));
+  assert.ok(reconciliation.includes('/reconciliation-accounts'));
+  assert.ok(reconciliation.includes('/workbook?download=${download}'));
+  assert.ok(!reconciliation.includes('/reconciliation-statements'));
   assert.ok(salesDetail.includes("this.submitReceive('RECEIVE_ONLY')"));
   assert.ok(salesDetail.includes("this.submitReceive('INBOUND', warehouse.id)"));
+  assert.ok(salesDetail.includes("this.submitReceive('REJECT'"));
 });
 
 test('home company switching uses the custom switcher instead of a native action sheet', () => {

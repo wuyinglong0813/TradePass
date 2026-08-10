@@ -9,6 +9,7 @@ import com.tradepass.entity.TradeContract;
 import com.tradepass.mapper.BusinessDocumentMapper;
 import com.tradepass.mapper.TradeContractMapper;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -28,6 +30,7 @@ import java.util.UUID;
 public class SalesOrderInventoryService {
     public static final String RECEIVE_ONLY = "RECEIVE_ONLY";
     public static final String INBOUND = "INBOUND";
+    public static final String REJECT = "REJECT";
 
     private final JdbcTemplate jdbc;
     private final BusinessDocumentMapper documentMapper;
@@ -35,19 +38,33 @@ public class SalesOrderInventoryService {
     private final AccessControlService accessControlService;
     private final AuditLogService auditLogService;
     private final ObjectMapper objectMapper;
+    private final ReconciliationAccountService reconciliationAccountService;
 
+    @Autowired
     public SalesOrderInventoryService(JdbcTemplate jdbc,
                                       BusinessDocumentMapper documentMapper,
                                       TradeContractMapper contractMapper,
                                       AccessControlService accessControlService,
                                       AuditLogService auditLogService,
-                                      ObjectMapper objectMapper) {
+                                      ObjectMapper objectMapper,
+                                      ReconciliationAccountService reconciliationAccountService) {
         this.jdbc = jdbc;
         this.documentMapper = documentMapper;
         this.contractMapper = contractMapper;
         this.accessControlService = accessControlService;
         this.auditLogService = auditLogService;
         this.objectMapper = objectMapper;
+        this.reconciliationAccountService = reconciliationAccountService;
+    }
+
+    SalesOrderInventoryService(JdbcTemplate jdbc,
+                               BusinessDocumentMapper documentMapper,
+                               TradeContractMapper contractMapper,
+                               AccessControlService accessControlService,
+                               AuditLogService auditLogService,
+                               ObjectMapper objectMapper) {
+        this(jdbc, documentMapper, contractMapper, accessControlService, auditLogService,
+                objectMapper, null);
     }
 
     @Transactional
@@ -73,6 +90,8 @@ public class SalesOrderInventoryService {
         accessControlService.requireAnyPermission(companyId,
                 "contract_view", "contract_sign", "order_create", "sales_order_receive", "inventory_view");
         BusinessDocument document = requireDocumentParty(documentId, companyId);
+        boolean recipient = Long.valueOf(companyId).equals(document.getRecipientCompanyId());
+        boolean owner = Long.valueOf(companyId).equals(document.getCompanyId());
         Map<String, Object> view = new LinkedHashMap<>();
         view.put("id", document.getId());
         view.put("contractId", document.getContractId());
@@ -82,9 +101,11 @@ public class SalesOrderInventoryService {
         view.put("templateName", document.getTemplateName());
         view.put("sourceType", document.getSourceType());
         view.put("status", document.getStatus());
-        view.put("statusText", statusText(document.getStatus()));
+        view.put("statusText", "ISSUED".equals(document.getStatus()) && recipient
+                ? "待我方确认" : statusText(document.getStatus()));
         view.put("createdAt", document.getCreatedAt());
         view.put("acknowledgedAt", document.getAcknowledgedAt());
+        view.put("rejectedReason", document.getRejectedReason() == null ? "" : document.getRejectedReason());
         try {
             view.put("content", objectMapper.readTree(document.getContent()));
         } catch (Exception exception) {
@@ -92,17 +113,17 @@ public class SalesOrderInventoryService {
         }
         view.put("items", documentItems(documentId));
         TradeContract contract = contractMapper.selectById(document.getContractId());
-        boolean recipient = Long.valueOf(companyId).equals(document.getRecipientCompanyId());
-        boolean owner = Long.valueOf(companyId).equals(document.getCompanyId());
         boolean canReceive = recipient && accessControlService.hasPermission(companyId, "sales_order_receive");
         boolean canInbound = canReceive && accessControlService.hasPermission(companyId, "inventory_receive");
         view.put("canReceive", canReceive && "ISSUED".equals(document.getStatus()));
+        view.put("canReject", canReceive && "ISSUED".equals(document.getStatus()));
         view.put("canInbound", canInbound && ("ISSUED".equals(document.getStatus())
                 || "ACKNOWLEDGED".equals(document.getStatus())));
         view.put("contractStatus", contract == null ? "" : contract.getStatus());
-        view.put("canEditDraft", owner && "DRAFT".equals(document.getStatus()) && contract != null
+        boolean editable = "DRAFT".equals(document.getStatus()) || "REJECTED".equals(document.getStatus());
+        view.put("canEditDraft", owner && editable && contract != null
                 && ("PENDING".equals(contract.getStatus()) || "ACTIVE".equals(contract.getStatus())));
-        view.put("canPublish", owner && "DRAFT".equals(document.getStatus()) && contract != null
+        view.put("canPublish", owner && editable && contract != null
                 && "ACTIVE".equals(contract.getStatus()));
         return view;
     }
@@ -182,16 +203,37 @@ public class SalesOrderInventoryService {
 
     @Transactional
     public Map<String, Object> receive(Long documentId, String decision, Long warehouseId) {
+        return receive(documentId, decision, warehouseId, null);
+    }
+
+    @Transactional
+    public Map<String, Object> receive(Long documentId, String decision, Long warehouseId,
+                                       String rejectedReason) {
         long companyId = AuthContext.requireCompanyId();
         accessControlService.requirePermission(companyId, "sales_order_receive");
         String normalized = decision == null ? "" : decision.trim().toUpperCase(Locale.ROOT);
-        if (!RECEIVE_ONLY.equals(normalized) && !INBOUND.equals(normalized)) {
+        if (!RECEIVE_ONLY.equals(normalized) && !INBOUND.equals(normalized) && !REJECT.equals(normalized)) {
             throw new BusinessException("接收方式不正确");
         }
         BusinessDocument document = documentMapper.selectById(documentId);
         if (document == null || !"SALES_ORDER".equals(document.getDocumentType())
                 || !Long.valueOf(companyId).equals(document.getRecipientCompanyId())) {
             throw new BusinessException("待接收销售单不存在");
+        }
+        if (REJECT.equals(normalized)) {
+            if (!"ISSUED".equals(document.getStatus())) {
+                throw new BusinessException("销售单当前状态不能驳回");
+            }
+            String reason = rejectedReason == null ? "" : rejectedReason.trim();
+            if (reason.isBlank() || reason.length() > 500) {
+                throw new BusinessException("请输入驳回原因且不能超过 500 字");
+            }
+            document.setStatus("REJECTED");
+            document.setRejectedReason(reason);
+            documentMapper.updateById(document);
+            auditLogService.log(companyId, "SALES_ORDER_RECEIPT", documentId,
+                    "REJECT", "驳回销售单 " + document.getDocumentNo() + "：" + reason);
+            return documentDetail(documentId);
         }
         if ("INBOUNDED".equals(document.getStatus())) return documentDetail(documentId);
         if (!"ISSUED".equals(document.getStatus()) && !"ACKNOWLEDGED".equals(document.getStatus())) {
@@ -221,6 +263,7 @@ public class SalesOrderInventoryService {
             document.setAcknowledgedBy(AuthContext.userId());
             document.setAcknowledgedAt(LocalDateTime.now());
             documentMapper.updateById(document);
+            recordReconciliation(document);
             auditLogService.log(companyId, "SALES_ORDER_RECEIPT", receiptId,
                     "RECEIVE", "接收销售单 " + document.getDocumentNo() + "，暂不入库");
             return documentDetail(documentId);
@@ -235,6 +278,7 @@ public class SalesOrderInventoryService {
         if (existingInbound != null) {
             document.setStatus("INBOUNDED");
             documentMapper.updateById(document);
+            recordReconciliation(document);
             return documentDetail(documentId);
         }
 
@@ -279,6 +323,7 @@ public class SalesOrderInventoryService {
         document.setAcknowledgedBy(AuthContext.userId());
         document.setAcknowledgedAt(LocalDateTime.now());
         documentMapper.updateById(document);
+        recordReconciliation(document);
         auditLogService.log(companyId, "INVENTORY_INBOUND", inboundId,
                 "CREATE", "销售单 " + document.getDocumentNo() + " 接收并入库至仓库 " + warehouseId);
         return documentDetail(documentId);
@@ -425,9 +470,27 @@ public class SalesOrderInventoryService {
 
     private String statusText(String status) {
         if ("DRAFT".equals(status)) return "草稿";
-        if ("ACKNOWLEDGED".equals(status)) return "已接收待入库";
-        if ("INBOUNDED".equals(status)) return "已入库";
-        return "已发布";
+        if ("ISSUED".equals(status)) return "待对方确认";
+        if ("REJECTED".equals(status)) return "已驳回";
+        if ("ACKNOWLEDGED".equals(status)) return "已通过待入库";
+        if ("INBOUNDED".equals(status)) return "已通过并入库";
+        return status;
+    }
+
+    private void recordReconciliation(BusinessDocument document) {
+        if (reconciliationAccountService == null) return;
+        List<SalesItem> items = parseItems(document.getContent());
+        BigDecimal total = items.stream().map(SalesItem::amount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add).setScale(2, RoundingMode.HALF_UP);
+        LocalDate businessDate = LocalDate.now();
+        try {
+            String date = objectMapper.readTree(document.getContent()).path("date").asText("");
+            if (!date.isBlank()) businessDate = LocalDate.parse(date);
+        } catch (Exception ignored) {
+            // 历史销售单日期缺失时以确认当天作为业务日期。
+        }
+        reconciliationAccountService.recordSalesOrder(document, total, businessDate,
+                AuthContext.userId(), document.getAcknowledgedAt());
     }
 
     private record SalesItem(int lineNo, String productName, String specification,

@@ -134,19 +134,19 @@ class SalesOrderInventoryServiceTest {
         doReturn(List.of(item)).when(jdbc).query(anyString(), any(RowMapper.class), any(Object[].class));
 
         Map<String, Object> detail = service.documentDetail(31L);
-        assertThat(detail).containsEntry("statusText", "已发布")
+        assertThat(detail).containsEntry("statusText", "待我方确认")
                 .containsEntry("canReceive", true)
                 .containsEntry("canInbound", true);
         assertThat((List<?>) detail.get("items")).hasSize(1);
 
         document.setStatus("ACKNOWLEDGED");
         detail = service.documentDetail(31L);
-        assertThat(detail).containsEntry("statusText", "已接收待入库")
+        assertThat(detail).containsEntry("statusText", "已通过待入库")
                 .containsEntry("canReceive", false)
                 .containsEntry("canInbound", true);
 
         document.setStatus("INBOUNDED");
-        assertThat(service.documentDetail(31L)).containsEntry("statusText", "已入库");
+        assertThat(service.documentDetail(31L)).containsEntry("statusText", "已通过并入库");
 
         document.setContent("bad-json");
         assertThat(service.documentDetail(31L).get("content")).isEqualTo(Map.of());
@@ -230,6 +230,21 @@ class SalesOrderInventoryServiceTest {
 
         assertThatThrownBy(() -> service.receive(31L, "bad", null))
                 .isInstanceOf(BusinessException.class).hasMessage("接收方式不正确");
+    }
+
+    @Test
+    void recipientCanRejectPendingSalesOrderWithReason() {
+        document.setStatus("ISSUED");
+        doReturn(List.of(item)).when(jdbc).query(anyString(), any(RowMapper.class), any(Object[].class));
+
+        Map<String, Object> result = service.receive(31L, "REJECT", null, "金额需要核对");
+
+        assertThat(result).containsEntry("status", "REJECTED")
+                .containsEntry("statusText", "已驳回")
+                .containsEntry("rejectedReason", "金额需要核对");
+        assertThatThrownBy(() -> service.receive(31L, "REJECT", null, ""))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("当前状态不能驳回");
     }
 
     @Test

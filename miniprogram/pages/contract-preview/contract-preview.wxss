@@ -118,6 +118,11 @@ page { background: #f4f8fd; }
 .document-no { color: #223247; font-size: 24rpx; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .document-meta { color: #95a1af; font-size: 19rpx; margin-top: 5rpx; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .document-meta.payment-amount { color: #c77b0a; font-weight: 600; }
+.document-meta.status-DRAFT { color: #7f8b99; font-weight: 600; }
+.document-meta.status-ISSUED,.document-meta.status-PENDING_CONFIRMATION { color: #b87812; font-weight: 600; }
+.document-meta.status-ACKNOWLEDGED,.document-meta.status-INBOUNDED,.document-meta.status-APPROVED { color: #218657; font-weight: 600; }
+.document-meta.status-REJECTED,.document-meta.reject { color: #c34e4e; white-space: normal; }
+.document-meta.status-LEGACY { color: #7d8997; }
 .document-actions { color: #3498ff; display: flex; flex-shrink: 0; font-size: 21rpx; }
 .document-actions view { padding: 12rpx 8rpx; }
 .document-actions view + view { border-left: 1rpx solid #e6edf5; }
@@ -381,6 +386,20 @@ page { background: #f4f8fd; }
 .payment-field-message.error {
   color: #df4d4d;
 }
+.payment-text-field {
+  align-items: center;
+  background: #f7f9fc;
+  border: 2rpx solid #e1e8f1;
+  border-radius: 16rpx;
+  color: #344a62;
+  display: flex;
+  font-size: 26rpx;
+  justify-content: space-between;
+  margin-top: 10rpx;
+  min-height: 76rpx;
+  padding: 0 22rpx;
+}
+.payment-text-field input { flex: 1; font-size: 26rpx; height: 76rpx; }
 
 .payment-sheet-actions {
   display: flex;

@@ -226,12 +226,14 @@ public class DatabaseInitializer {
         db.execute("INSERT IGNORE INTO sys_user (id, openid, phone, nickname) VALUES (3, 'dev-openid-003', '18800000003', '李销售')");
         db.execute("INSERT IGNORE INTO sys_user (id, openid, phone, nickname) VALUES (4, 'dev-openid-004', '18800000004', '王财务')");
         db.execute("INSERT IGNORE INTO sys_user (id, openid, phone, nickname) VALUES (5, 'dev-openid-005', '18800000005', '赵管理')");
+        db.execute("INSERT IGNORE INTO sys_user (id, openid, phone, nickname) VALUES (14, 'dev-openid-014', '18800000014', '王海')");
         db.execute("INSERT IGNORE INTO company_member (company_id, user_id, role_code, is_legal_person, is_administrator) VALUES (1, 1, 'LEGAL', 1, 0)");
         db.execute("INSERT IGNORE INTO company_member (company_id, user_id, role_code, is_legal_person, is_administrator) VALUES (1, 2, 'PURCHASER', 0, 0)");
         db.execute("INSERT IGNORE INTO company_member (company_id, user_id, role_code, is_legal_person, is_administrator) VALUES (1, 3, 'SALES', 0, 0)");
         db.execute("INSERT IGNORE INTO company_member (company_id, user_id, role_code, is_legal_person, is_administrator) VALUES (1, 4, 'FINANCE', 0, 0)");
         db.execute("INSERT IGNORE INTO company_member (company_id, user_id, role_code, is_legal_person, is_administrator) VALUES (1, 5, 'ADMIN', 0, 1)");
         db.execute("INSERT IGNORE INTO company_member (company_id, user_id, role_code, is_legal_person) VALUES (2, 1, 'SALES', 0)");
+        db.execute("INSERT IGNORE INTO company_member (company_id, user_id, role_code, is_legal_person, is_administrator) VALUES (2, 14, 'LEGAL', 1, 0)");
     }
 
     private void seedPermissions() {
