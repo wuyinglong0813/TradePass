@@ -24,11 +24,11 @@ Page({
     smsText: '获取验证码',
     smsCounting: false,
     submitting: false,
-    isDev: false
+    caMockEnabled: false
   },
 
   onLoad(options) {
-    this.setData({ isDev: !!app.globalData.isLocalDevelopment });
+    this.loadCaConfig();
     if (options.name) {
       // 从搜索页跳来，新企业流程
       this.setData({
@@ -47,6 +47,15 @@ Page({
 
   onShow() {
     if (this.data.hasCompany) this.loadCompany();
+  },
+
+  async loadCaConfig() {
+    try {
+      const config = await request({ url: '/ca/config' });
+      this.setData({ caMockEnabled: !!(config && config.mockEnabled) });
+    } catch (e) {
+      this.setData({ caMockEnabled: false });
+    }
   },
 
   async loadCompany() {
@@ -108,11 +117,11 @@ Page({
       wx.showToast({ title: '请先输入手机号', icon: 'none' });
       return;
     }
-    if (!this.data.isDev) {
+    if (!this.data.caMockEnabled) {
       wx.showToast({ title: '短信认证服务暂未接入', icon: 'none' });
       return;
     }
-    wx.showToast({ title: '开发环境验证码已发送', icon: 'none' });
+    wx.showToast({ title: '测试验证码已发送', icon: 'none' });
     this.setData({ smsCounting: true, smsText: '60s' });
     let sec = 60;
     const timer = setInterval(() => {
@@ -155,23 +164,21 @@ Page({
         }
       });
 
-      // 3. 开发环境执行模拟核验；生产环境由认证服务商审核回调给出最终结果
-      if (this.data.isDev) {
+      // 3. 开关启用时写入明确的模拟核验结果；关闭后等待真实服务商链路。
+      if (this.data.caMockEnabled) {
         await request({
           url: '/verifications/real-name',
           method: 'POST',
           data: { companyId: created.id }
         });
-        if (authMethod === 'face') {
-          await request({
-            url: '/verifications/face',
-            method: 'POST',
-            data: { companyId: created.id }
-          });
-        }
+        await request({
+          url: '/verifications/face',
+          method: 'POST',
+          data: { companyId: created.id }
+        });
       }
 
-      // 4. 创建持久化认证申请；开发环境可自动审核，生产环境等待回调
+      // 4. 创建持久化认证申请；模拟开关启用时自动审核，否则等待真实回调。
       const application = await request({
         url: `/companies/${created.id}/certifications`,
         method: 'POST',
@@ -196,10 +203,10 @@ Page({
   // ===== 已有企业：点击其他认证步骤 =====
   async handleAction(e) {
     const key = e.currentTarget.dataset.key;
-    if (!this.data.isDev) {
+    if (!this.data.caMockEnabled) {
       wx.showModal({
         title: '能力尚未接入',
-        content: '生产环境已关闭模拟认证和模拟文件上传，请配置对应服务商后再操作。',
+        content: 'CA 模拟开关已关闭，请配置对应服务商后再操作。',
         showCancel: false
       });
       return;
@@ -210,10 +217,12 @@ Page({
       return;
     }
     try {
-      if (key === 'face') {
+      if (key === 'realName') {
+        await request({ url: '/verifications/real-name', method: 'POST', data: { companyId } });
+      } else if (key === 'face') {
         await request({ url: '/verifications/face', method: 'POST', data: { companyId } });
       } else if (key === 'seal') {
-        await request({ url: '/seals', method: 'POST', data: { companyId, fileUrl: 'dev://demo-seal.png', usage: '合同签署' } });
+        await request({ url: '/seals', method: 'POST', data: { companyId, fileUrl: 'mock://experience-seal.png', usage: '合同签署' } });
       } else {
         await request({ url: `/companies/${companyId}/certifications`, method: 'POST', data: {} });
       }

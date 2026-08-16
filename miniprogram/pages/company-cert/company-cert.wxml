@@ -61,8 +61,11 @@
 
   <!-- ===== 新企业 Step2：认证方式 ===== -->
   <block wx:elif="{{step === 'auth'}}">
-    <view class="auth-card" wx:if="{{!isDev}}">
+    <view class="auth-card" wx:if="{{!caMockEnabled}}">
       <view class="face-desc">生产环境尚未配置实名、人脸及短信认证服务，当前不会生成模拟认证结果。</view>
+    </view>
+    <view class="auth-card" wx:else>
+      <view class="face-desc">体验测试模式：本次实名、人脸、CA 与电子章均生成模拟结果，不具有法律效力。</view>
     </view>
     <view class="auth-card">
       <view class="section-title">认证方式</view>

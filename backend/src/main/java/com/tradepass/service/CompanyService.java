@@ -55,7 +55,7 @@ public class CompanyService {
     private final CompanySearchRateLimiter companySearchRateLimiter;
     private final RolePermissionService rolePermissionService;
     private final AuditLogService auditLogService;
-    private final boolean verificationAutoApprove;
+    private final boolean caMockEnabled;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public CompanyService(CompanyMapper companyMapper,
@@ -68,7 +68,7 @@ public class CompanyService {
                           CompanySearchRateLimiter companySearchRateLimiter,
                           RolePermissionService rolePermissionService,
                           AuditLogService auditLogService,
-                          @Value("${tradepass.verification.auto-approve:false}") boolean verificationAutoApprove) {
+                          @Value("${tradepass.ca.mock-enabled:false}") boolean caMockEnabled) {
         this.companyMapper = companyMapper;
         this.companyMemberMapper = companyMemberMapper;
         this.companyInviteMapper = companyInviteMapper;
@@ -79,7 +79,7 @@ public class CompanyService {
         this.companySearchRateLimiter = companySearchRateLimiter;
         this.rolePermissionService = rolePermissionService;
         this.auditLogService = auditLogService;
-        this.verificationAutoApprove = verificationAutoApprove;
+        this.caMockEnabled = caMockEnabled;
     }
 
     public List<CompanySearchSummary> searchCompanies(String keyword) {
@@ -172,8 +172,12 @@ public class CompanyService {
         accessControlService.requireLegalOrClaim(parseId(req.companyId()));
         companyMapper.update(new LambdaUpdateWrapper<Company>()
                 .eq(Company::getId, parseId(req.companyId()))
-                .set(Company::getSealStatus, "PENDING_REVIEW"));
-        return new SealRecord(UUID.randomUUID().toString(), req.companyId(), req.fileUrl(), req.usage(), "PENDING_REVIEW");
+                .set(Company::getSealStatus, "UPLOADED"));
+        return new SealRecord("MOCK-SEAL-" + UUID.randomUUID(), req.companyId(), req.fileUrl(), req.usage(), "UPLOADED");
+    }
+
+    public boolean caMockEnabled() {
+        return caMockEnabled;
     }
 
     public InviteResult createInvite(InviteRequest req) {
@@ -577,7 +581,7 @@ public class CompanyService {
     }
 
     private void requireVerificationProvider() {
-        if (!verificationAutoApprove) {
+        if (!caMockEnabled) {
             throw new BusinessException("认证服务尚未配置，无法完成该操作");
         }
     }

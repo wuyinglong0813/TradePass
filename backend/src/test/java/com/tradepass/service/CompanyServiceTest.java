@@ -206,8 +206,10 @@ class CompanyServiceTest {
                 .satisfies(seal -> {
                     assertThat(seal.id()).isNotBlank();
                     assertThat(seal.companyId()).isEqualTo("3");
-                    assertThat(seal.status()).isEqualTo("PENDING_REVIEW");
+                    assertThat(seal.id()).startsWith("MOCK-SEAL-");
+                    assertThat(seal.status()).isEqualTo("UPLOADED");
                 });
+        assertThat(service.caMockEnabled()).isTrue();
         verify(companyMapper, org.mockito.Mockito.times(4)).update(any(Wrapper.class));
     }
 

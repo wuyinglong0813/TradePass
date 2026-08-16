@@ -3,5 +3,5 @@ tradepass:
     enabled: true
   demo-data:
     enabled: true
-  verification:
-    auto-approve: true
+  ca:
+    mock-enabled: true

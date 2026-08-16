@@ -16,8 +16,9 @@ tradepass:
   auth:
     session-hours: ${TRADEPASS_SESSION_HOURS:168}
   verification:
-    auto-approve: ${TRADEPASS_VERIFICATION_AUTO_APPROVE:false}
     callback-token: ${TRADEPASS_VERIFICATION_CALLBACK_TOKEN:}
+  ca:
+    mock-enabled: ${TRADEPASS_CA_MOCK_ENABLED:false}
   redis:
     enabled: ${TRADEPASS_REDIS_ENABLED:false}
     key-prefix: ${TRADEPASS_REDIS_KEY_PREFIX:tradepass}

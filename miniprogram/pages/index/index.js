@@ -31,7 +31,9 @@ Page({
     companies: [],
     currentCompanyId: '',
     showCompanySwitcher: false,
+    showJoinModal: false,
     switchingCompanyId: '',
+    companySwitcherListHeight: 0,
     isLegalPerson: false,
     counterpartyInviteCode: '',
     counterpartyEmptyBtn: '',
@@ -138,13 +140,28 @@ Page({
   /* 公司切换 */
   switchCompany() {
     const companies = this.data.companies;
-    if (companies.length <= 1) return;
-    this.setData({ showCompanySwitcher: true, switchingCompanyId: '' });
+    if (companies.length === 0) return;
+    setTabBarHidden(this, true);
+    this.setData({
+      showCompanySwitcher: true,
+      switchingCompanyId: '',
+      companySwitcherListHeight: Math.min(companies.length, 4) * 150 + 22
+    });
   },
 
   closeCompanySwitcher() {
     if (this.data.switchingCompanyId) return;
+    setTabBarHidden(this, false);
     this.setData({ showCompanySwitcher: false });
+  },
+
+  openJoin() {
+    this.setData({ showCompanySwitcher: false, showJoinModal: true, joinCompanyId: '' });
+  },
+
+  closeJoin() {
+    setTabBarHidden(this, false);
+    this.setData({ showJoinModal: false });
   },
 
   async selectCompanyFromSwitcher(e) {
@@ -152,6 +169,7 @@ Page({
     const company = this.data.companies.find(item => String(item.companyId) === companyId);
     if (!company || this.data.switchingCompanyId) return;
     if (companyId === String(this.data.currentCompanyId)) {
+      setTabBarHidden(this, false);
       this.setData({ showCompanySwitcher: false });
       return;
     }
@@ -166,6 +184,7 @@ Page({
         showCompanySwitcher: false,
         switchingCompanyId: ''
       });
+      setTabBarHidden(this, false);
       this.initRoleFromMember();
       await Promise.all([this.loadHome(), this.loadCounterparties()]);
       wx.showToast({ title: '企业已切换', icon: 'success' });
@@ -216,7 +235,12 @@ Page({
     const companyId = this.data.joinCompanyId.trim();
     if (!companyId) { wx.showToast({ title: '请输入邀请码', icon: 'none' }); return; }
     const user = app.globalData.userInfo;
-    if (!user || !user.id) { this.goLogin(); return; }
+    if (!user || !user.id) {
+      setTabBarHidden(this, false);
+      this.setData({ showJoinModal: false });
+      this.goLogin();
+      return;
+    }
     try {
       const result = await request({
         url: '/companies/join',
@@ -224,6 +248,8 @@ Page({
         data: { code: companyId }
       });
       wx.showToast({ title: result.message, icon: 'success' });
+      setTabBarHidden(this, false);
+      this.setData({ showJoinModal: false });
       await app.loadMe();
       await this.onShow();
     } catch (e) {
@@ -357,6 +383,8 @@ Page({
 
   goCreateCompany() {
     if (!this.requireLogin()) return;
+    setTabBarHidden(this, false);
+    this.setData({ showCompanySwitcher: false });
     wx.navigateTo({ url: '/pages/company-bind/company-bind' });
   },
 

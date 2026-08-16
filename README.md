@@ -150,7 +150,7 @@ Redis 默认关闭且不是运行必需项：登录会话与排行榜直接查�
 | `WECHAT_CLOUD_OPEN_API_ENABLED` | 开发环境 `false`，生产环境 `true` | 是否使用云托管开放接口服务免鉴权调用微信接口 |
 | `WECHAT_APP_SECRET` | 空 | 仅本地传统 `code2Session`/`access_token` 兼容路径需要；生产云调用无需配置 |
 | `TRADEPASS_DEV_ENABLED` | `false` | 是否启用 `/api/dev/**` 和开发占位能力；`dev` profile 会开启 |
-| `TRADEPASS_VERIFICATION_AUTO_APPROVE` | `false` | 是否允许开发环境模拟认证结果，生产环境应保持关闭 |
+| `TRADEPASS_CA_MOCK_ENABLED` | `false`（体验版 prod 配置当前默认 `true`） | 是否启用 CA、实名、人脸和电子章模拟结果；接入真实服务商前关闭 |
 
 ### 微信云托管对象存储上线配置
 

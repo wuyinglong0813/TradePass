@@ -150,6 +150,32 @@ test('company search confirmation does not depend on sensitive company fields', 
   assert.strictEqual(modal.showCancel, false);
 });
 
+test('project ledger formats contract totals and remains an optional enterprise entry', () => {
+  const projectLedger = require('../pages/project-ledger/project-ledger');
+  assert.strictEqual(projectLedger.money('1288.5'), '1288.50');
+  assert.strictEqual(projectLedger.money(null), '0.00');
+  assert.deepStrictEqual(projectLedger.decorateProject({
+    id: 1,
+    purchaseCost: 300,
+    salesIncome: 500,
+    estimatedProfit: 200
+  }), {
+    id: 1,
+    purchaseCost: 300,
+    salesIncome: 500,
+    estimatedProfit: 200,
+    purchaseCostText: '300.00',
+    salesIncomeText: '500.00',
+    estimatedProfitText: '200.00'
+  });
+  const companyView = fs.readFileSync(
+    path.join(__dirname, '..', 'pages', 'company', 'company.wxml'),
+    'utf8'
+  );
+  assert.ok(companyView.includes('项目账套'));
+  assert.ok(companyView.includes('bindtap="goProjectLedger"'));
+});
+
 const app = {
   globalData: {
     baseUrl: 'https://api.example.test',
@@ -339,15 +365,21 @@ test('request clears session and redirects after unauthorized response', async (
   assert.strictEqual(redirectUrl, '/pages/index/index');
 });
 
-function loadAppDefinition() {
+function loadAppDefinition(platform = 'devtools') {
   let definition;
   global.App = value => { definition = value; };
-  wx.getSystemInfoSync = () => ({ platform: 'devtools' });
+  wx.getSystemInfoSync = () => ({ platform });
   const modulePath = require.resolve('../app');
   delete require.cache[modulePath];
   require('../app');
   return definition;
 }
+
+test('app detects desktop WeChat without treating it as local development', () => {
+  const definition = loadAppDefinition('windows');
+  assert.strictEqual(definition.globalData.isDesktopWechat, true);
+  assert.strictEqual(definition.globalData.isLocalDevelopment, false);
+});
 
 function appInstance(definition) {
   return Object.assign({}, definition, { globalData: Object.assign({}, definition.globalData) });
@@ -490,8 +522,13 @@ test('home company switching uses the custom switcher instead of a native action
   const script = fs.readFileSync(path.join(__dirname, '..', 'pages', 'index', 'index.js'), 'utf8');
   const template = fs.readFileSync(path.join(__dirname, '..', 'pages', 'index', 'index.wxml'), 'utf8');
   assert.ok(script.includes('showCompanySwitcher: true'));
+  assert.ok(script.includes('if (companies.length === 0) return'));
   assert.ok(!script.includes('wx.showActionSheet'));
   assert.ok(template.includes('company-switch-sheet'));
+  assert.ok(template.includes('company-switch-action primary'));
+  assert.ok(template.includes('添加并管理另一家公司'));
+  assert.ok(template.includes('输入邀请码加入'));
+  assert.ok(template.includes('加入管理员邀请的企业空间'));
 });
 
 test('profile only displays the current company and cannot switch tenants', () => {
@@ -508,6 +545,8 @@ test('enterprise management owns company switching and has no duplicate member i
   assert.ok(script.includes('showCompanySwitcher: true'));
   assert.ok(!script.includes('wx.showActionSheet'));
   assert.ok(template.includes('enterprise-switch-sheet'));
+  assert.ok(template.includes('enterprise-switch-action primary'));
+  assert.ok(template.includes('加入管理员邀请的企业空间'));
   assert.ok(template.indexOf('企业管理') < template.indexOf('我的企业'));
   assert.ok(!template.includes('邀请企业成员'));
   assert.ok(!template.includes('switchCompanyFromRow'));

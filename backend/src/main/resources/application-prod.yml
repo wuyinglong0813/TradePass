@@ -3,8 +3,9 @@ tradepass:
     enabled: false
   demo-data:
     enabled: false
-  verification:
-    auto-approve: false
+  # 体验版临时启用 CA 模拟链路；接入真实服务商前将环境变量改为 false。
+  ca:
+    mock-enabled: ${TRADEPASS_CA_MOCK_ENABLED:true}
   storage:
     enabled: ${TRADEPASS_STORAGE_ENABLED:true}
     required: true

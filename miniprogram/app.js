@@ -17,10 +17,21 @@ function isLocalDevelopment() {
 
 const localDevelopment = isLocalDevelopment();
 
+function isDesktopWechat() {
+  try {
+    const platform = wx.getSystemInfoSync().platform;
+    return platform === 'windows' || platform === 'mac';
+  } catch (e) {}
+  return false;
+}
+
+const desktopWechat = isDesktopWechat();
+
 App({
   globalData: {
     baseUrl: localDevelopment ? LOCAL_API : CLOUD_API,
     isLocalDevelopment: localDevelopment,
+    isDesktopWechat: desktopWechat,
     cloudEnv: CLOUD_ENV,
     cloudService: CLOUD_SERVICE,
     token: '',

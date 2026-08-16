@@ -28,11 +28,11 @@
     open-type="{{quickPhoneEnabled && agreed ? 'getPhoneNumber' : ''}}"
     bindgetphonenumber="quickPhoneLogin"
     bindtap="onWechatPhoneTap">
-    手机号快捷登录
+    {{desktopMode ? '微信登录' : '手机号快捷登录'}}
   </button>
 
   <!-- 输入手机号登录 / 注册 -->
-  <view class="phone-login-link" bindtap="goPhoneLogin">输入手机号登录 / 注册</view>
+  <view class="phone-login-link" wx:if="{{!desktopMode}}" bindtap="goPhoneLogin">输入手机号登录 / 注册</view>
 
   <!-- 稍后登录 -->
   <view class="skip-row" bindtap="skipLogin">稍后登录</view>

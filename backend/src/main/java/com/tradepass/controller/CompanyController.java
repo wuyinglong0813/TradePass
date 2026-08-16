@@ -32,6 +32,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api")
@@ -70,6 +71,11 @@ public class CompanyController {
             throw new IllegalStateException("企业认证服务未配置");
         }
         return ApiResponse.ok(certificationService.submit(id));
+    }
+
+    @GetMapping("/ca/config")
+    public ApiResponse<Map<String, Boolean>> caConfig() {
+        return ApiResponse.ok(Map.of("mockEnabled", companyService.caMockEnabled()));
     }
 
     @PostMapping("/verifications/real-name")

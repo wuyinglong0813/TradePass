@@ -67,11 +67,11 @@ class CompanyCertificationServiceTest {
         CertificationApplicationPayload payload = service.submit(3L);
 
         assertThat(payload.status()).isEqualTo("APPROVED");
-        assertThat(payload.providerRequestId()).startsWith("CERT-");
+        assertThat(payload.providerRequestId()).startsWith("MOCK-CA-");
         verify(accessControlService).requireLegalOrClaim(3L);
         verify(tenantBootstrapService).initialize(3L, 7L);
         verify(auditLogService).logAs(3L, 7L, "COMPANY_CERTIFICATION", 18L,
-                "APPROVE", "开发环境自动审核");
+                "APPROVE", "体验测试模拟认证自动审核");
     }
 
     @Test

@@ -1,6 +1,6 @@
 const { request } = require('../../utils/request');
 const dict = require('../../utils/dict');
-const { syncTabBar } = require('../../utils/tabBar');
+const { setTabBarHidden, syncTabBar } = require('../../utils/tabBar');
 const app = getApp();
 
 function hasPerm(perm) {
@@ -46,7 +46,8 @@ Page({
     showJoinModal: false,
     joinCode: '',
     showCompanySwitcher: false,
-    switchingCompanyId: ''
+    switchingCompanyId: '',
+    companySwitcherListHeight: 0
   },
 
   onShow() {
@@ -148,12 +149,19 @@ Page({
   },
 
   switchCompany() {
-    if (this.data.companies.length === 0) return;
-    this.setData({ showCompanySwitcher: true, switchingCompanyId: '' });
+    const companies = this.data.companies;
+    if (companies.length === 0) return;
+    setTabBarHidden(this, true);
+    this.setData({
+      showCompanySwitcher: true,
+      switchingCompanyId: '',
+      companySwitcherListHeight: Math.min(companies.length, 4) * 150 + 22
+    });
   },
 
   closeCompanySwitcher() {
     if (this.data.switchingCompanyId) return;
+    setTabBarHidden(this, false);
     this.setData({ showCompanySwitcher: false });
   },
 
@@ -162,12 +170,14 @@ Page({
     const company = this.data.companies.find(item => String(item.companyId) === companyId);
     if (!company || this.data.switchingCompanyId) return;
     if (companyId === String(this.data.currentCompanyId)) {
+      setTabBarHidden(this, false);
       this.setData({ showCompanySwitcher: false });
       return;
     }
     try {
       this.setData({ switchingCompanyId: companyId });
       await app.switchCompany(companyId);
+      setTabBarHidden(this, false);
       this.setData({ showCompanySwitcher: false, switchingCompanyId: '' });
       wx.showToast({ title: '企业已切换', icon: 'success' });
       await this.loadData();
@@ -178,6 +188,7 @@ Page({
   },
 
   goCreateCompany() {
+    setTabBarHidden(this, false);
     this.setData({ showCompanySwitcher: false });
     wx.navigateTo({ url: '/pages/company-bind/company-bind' });
   },
@@ -188,9 +199,13 @@ Page({
   goContractTemplate() { wx.navigateTo({ url: '/pages/contract-template/contract-template' }); },
   goDocumentTemplate() { wx.navigateTo({ url: '/pages/document-template/document-template' }); },
   goInventory() { wx.navigateTo({ url: '/pages/inventory/inventory' }); },
+  goProjectLedger() { wx.navigateTo({ url: '/pages/project-ledger/project-ledger' }); },
 
   openJoin() { this.setData({ showCompanySwitcher: false, showJoinModal: true, joinCode: '' }); },
-  closeJoin() { this.setData({ showJoinModal: false }); },
+  closeJoin() {
+    setTabBarHidden(this, false);
+    this.setData({ showJoinModal: false });
+  },
   onJoinInput(e) { this.setData({ joinCode: e.detail.value }); },
   noop() {},
 
@@ -200,6 +215,7 @@ Page({
     try {
       const result = await request({ url: '/companies/join', method: 'POST', data: { code } });
       wx.showToast({ title: result.message || '已提交', icon: 'none' });
+      setTabBarHidden(this, false);
       this.setData({ showJoinModal: false });
       app.loadMe().then(() => this.loadData());
     } catch (e) {

@@ -106,7 +106,7 @@ page {
   position: fixed;
   right: 0;
   top: 0;
-  z-index: 800;
+  z-index: 1200;
 }
 
 .company-switch-sheet {
@@ -115,7 +115,10 @@ page {
   border-radius: 32rpx 32rpx 0 0;
   box-shadow: 0 -16rpx 50rpx rgba(17, 44, 76, .16);
   box-sizing: border-box;
-  max-height: 76vh;
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 32rpx);
+  overflow: hidden;
   padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
   width: 100%;
 }
@@ -131,6 +134,7 @@ page {
   border-bottom: 1rpx solid #e6edf5;
   border-radius: 32rpx 32rpx 0 0;
   display: flex;
+  flex-shrink: 0;
   justify-content: space-between;
   padding: 30rpx 30rpx 25rpx;
 }
@@ -138,17 +142,19 @@ page {
 .company-switch-title { color: #17283c; font-size: 34rpx; font-weight: 700; }
 .company-switch-subtitle { color: #8e9baa; font-size: 21rpx; margin-top: 6rpx; }
 .company-switch-close { color: #8693a1; font-size: 44rpx; line-height: 1; padding: 10rpx; }
-.company-switch-list { box-sizing: border-box; max-height: 52vh; padding: 18rpx 22rpx 4rpx; }
+.company-switch-list-frame { flex: 0 1 auto; min-height: 0; overflow: hidden; }
+.company-switch-list { box-sizing: border-box; height: 100%; padding: 18rpx 22rpx 4rpx; }
 
 .company-switch-option {
   align-items: center;
   background: #ffffff;
   border: 1rpx solid #e0e9f3;
   border-radius: 21rpx;
+  box-sizing: border-box;
   box-shadow: 0 7rpx 22rpx rgba(27, 65, 105, .045);
   display: flex;
   margin-bottom: 14rpx;
-  min-height: 104rpx;
+  min-height: 136rpx;
   padding: 15rpx 18rpx;
 }
 
@@ -186,7 +192,55 @@ page {
 }
 .company-option-loading { color: #2478df; font-size: 20rpx; }
 .company-option-arrow { color: #9eabba; font-size: 34rpx; padding: 0 8rpx 0 15rpx; }
-.company-switch-tip { color: #98a4b1; font-size: 20rpx; padding: 14rpx 28rpx 0; text-align: center; }
+.company-switch-actions {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  gap: 14rpx;
+  margin: 4rpx 22rpx 0;
+}
+.company-switch-action {
+  align-items: center;
+  background: #ffffff;
+  border: 1rpx solid #e0e9f3;
+  border-radius: 21rpx;
+  box-sizing: border-box;
+  box-shadow: 0 7rpx 22rpx rgba(27, 65, 105, .045);
+  display: flex;
+  min-height: 136rpx;
+  padding: 15rpx 18rpx;
+}
+.company-switch-action.primary {
+  background: linear-gradient(145deg, #eff7ff, #ffffff);
+  border-color: #cfe4fb;
+  box-shadow: 0 8rpx 24rpx rgba(36, 120, 223, .08);
+}
+.company-switch-action-plus {
+  align-items: center;
+  background: linear-gradient(145deg, #5ab4ff, #2478df);
+  border-radius: 17rpx;
+  color: #ffffff;
+  display: flex;
+  flex-shrink: 0;
+  font-size: 29rpx;
+  height: 68rpx;
+  justify-content: center;
+  width: 68rpx;
+}
+.company-switch-action-plus.secondary { background: #e8f3ff; color: #2478df; }
+.company-switch-action-copy { flex: 1; margin-left: 17rpx; min-width: 0; }
+.company-switch-action-title { color: #213247; font-size: 27rpx; font-weight: 600; }
+.company-switch-action-desc { color: #8d9aa9; font-size: 20rpx; margin-top: 6rpx; }
+.company-switch-action-arrow { color: #8fa2b5; font-size: 35rpx; padding-left: 12rpx; }
+.company-switch-tip { color: #98a4b1; flex-shrink: 0; font-size: 20rpx; padding: 14rpx 28rpx 0; text-align: center; }
+
+.company-join-mask { align-items: center; background: rgba(13, 35, 64, .62); bottom: 0; display: flex; justify-content: center; left: 0; position: fixed; right: 0; top: 0; z-index: 1200; }
+.company-join-sheet { background: #ffffff; border-radius: 30rpx; box-sizing: border-box; margin: 0 48rpx; padding: 38rpx; width: 100%; }
+.company-join-title { color: #162336; font-size: 32rpx; font-weight: 700; }
+.company-join-desc { color: #69798d; font-size: 24rpx; margin: 12rpx 0 26rpx; text-align: center; }
+.company-join-input { background: #f2f6fb; border: 1rpx solid #dfe8f3; border-radius: 18rpx; box-sizing: border-box; font-size: 26rpx; height: 80rpx; margin-bottom: 20rpx; padding: 0 20rpx; width: 100%; }
+.company-join-button { background: linear-gradient(135deg, #45a8ff, #2478df); border: none; border-radius: 22rpx; color: #ffffff; font-size: 27rpx; font-weight: 600; height: 82rpx; line-height: 82rpx; }
+.company-join-button::after { border: none; }
 
 .home-guide {
   background:

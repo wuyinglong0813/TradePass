@@ -127,20 +127,49 @@
             </view>
             <view class="company-switch-close" bindtap="closeCompanySwitcher">×</view>
           </view>
-          <scroll-view class="company-switch-list" scroll-y>
-            <view class="company-switch-option {{item.companyId === currentCompanyId ? 'active' : ''}} {{item.companyId === switchingCompanyId ? 'switching' : ''}}"
-              wx:for="{{companies}}" wx:key="companyId" data-company-id="{{item.companyId}}" bindtap="selectCompanyFromSwitcher">
-              <view class="company-option-avatar">{{item.companyName[0]}}</view>
-              <view class="company-option-main">
-                <view class="company-option-name">{{item.companyName}}</view>
-                <view class="company-option-role">{{item.roleText || '企业成员'}}</view>
+          <view class="company-switch-list-frame" style="height: {{companySwitcherListHeight}}rpx;">
+            <scroll-view class="company-switch-list" scroll-y>
+              <view class="company-switch-option {{item.companyId === currentCompanyId ? 'active' : ''}} {{item.companyId === switchingCompanyId ? 'switching' : ''}}"
+                wx:for="{{companies}}" wx:key="companyId" data-company-id="{{item.companyId}}" bindtap="selectCompanyFromSwitcher">
+                <view class="company-option-avatar">{{item.companyName[0]}}</view>
+                <view class="company-option-main">
+                  <view class="company-option-name">{{item.companyName}}</view>
+                  <view class="company-option-role">{{item.roleText || '企业成员'}}</view>
+                </view>
+                <view class="company-option-current" wx:if="{{item.companyId === currentCompanyId}}">当前</view>
+                <view class="company-option-loading" wx:elif="{{item.companyId === switchingCompanyId}}">切换中</view>
+                <view class="company-option-arrow" wx:else>›</view>
               </view>
-              <view class="company-option-current" wx:if="{{item.companyId === currentCompanyId}}">当前</view>
-              <view class="company-option-loading" wx:elif="{{item.companyId === switchingCompanyId}}">切换中</view>
-              <view class="company-option-arrow" wx:else>›</view>
+            </scroll-view>
+          </view>
+          <view class="company-switch-actions">
+            <view class="company-switch-action primary" bindtap="goCreateCompany">
+              <view class="company-switch-action-plus">＋</view>
+              <view class="company-switch-action-copy">
+                <view class="company-switch-action-title">创建新企业</view>
+                <view class="company-switch-action-desc">添加并管理另一家公司</view>
+              </view>
+              <view class="company-switch-action-arrow">›</view>
             </view>
-          </scroll-view>
+            <view class="company-switch-action" bindtap="openJoin">
+              <view class="company-switch-action-plus secondary">＋</view>
+              <view class="company-switch-action-copy">
+                <view class="company-switch-action-title">输入邀请码加入</view>
+                <view class="company-switch-action-desc">加入管理员邀请的企业空间</view>
+              </view>
+              <view class="company-switch-action-arrow">›</view>
+            </view>
+          </view>
           <view class="company-switch-tip">切换后，首页数据和业务权限会同步更新</view>
+        </view>
+      </view>
+
+      <view class="company-join-mask" wx:if="{{showJoinModal}}" bindtap="closeJoin">
+        <view class="company-join-sheet" catchtap="noop">
+          <view class="company-join-title">加入企业</view>
+          <view class="company-join-desc">输入企业管理员提供的邀请码</view>
+          <input class="company-join-input" placeholder="请输入邀请码" value="{{joinCompanyId}}" bindinput="onJoinIdInput"/>
+          <button class="company-join-button" bindtap="joinCompany">提交申请</button>
         </view>
       </view>
 

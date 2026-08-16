@@ -30,7 +30,7 @@ public class CompanyCertificationService {
     private final AccessControlService accessControlService;
     private final TenantBootstrapService tenantBootstrapService;
     private final AuditLogService auditLogService;
-    private final boolean autoApprove;
+    private final boolean caMockEnabled;
     private final String callbackToken;
 
     public CompanyCertificationService(CompanyMapper companyMapper,
@@ -39,7 +39,7 @@ public class CompanyCertificationService {
                                        AccessControlService accessControlService,
                                        TenantBootstrapService tenantBootstrapService,
                                        AuditLogService auditLogService,
-                                       @Value("${tradepass.verification.auto-approve:false}") boolean autoApprove,
+                                       @Value("${tradepass.ca.mock-enabled:false}") boolean caMockEnabled,
                                        @Value("${tradepass.verification.callback-token:}") String callbackToken) {
         this.companyMapper = companyMapper;
         this.companyMemberMapper = companyMemberMapper;
@@ -47,7 +47,7 @@ public class CompanyCertificationService {
         this.accessControlService = accessControlService;
         this.tenantBootstrapService = tenantBootstrapService;
         this.auditLogService = auditLogService;
-        this.autoApprove = autoApprove;
+        this.caMockEnabled = caMockEnabled;
         this.callbackToken = callbackToken == null ? "" : callbackToken;
     }
 
@@ -69,7 +69,7 @@ public class CompanyCertificationService {
         if ("VERIFIED".equals(company.getCertificationStatus())) {
             throw new BusinessException("企业已完成认证");
         }
-        if (autoApprove && (!"VERIFIED".equals(company.getRealNameStatus())
+        if (caMockEnabled && (!"VERIFIED".equals(company.getRealNameStatus())
                 || !"VERIFIED".equals(company.getFaceStatus()))) {
             throw new BusinessException("请先完成实名和人脸核验");
         }
@@ -77,7 +77,8 @@ public class CompanyCertificationService {
         CompanyCertificationApplication application = new CompanyCertificationApplication();
         application.setCompanyId(companyId);
         application.setApplicantUserId(userId);
-        application.setProviderRequestId("CERT-" + UUID.randomUUID().toString().replace("-", ""));
+        String requestPrefix = caMockEnabled ? "MOCK-CA-" : "CERT-";
+        application.setProviderRequestId(requestPrefix + UUID.randomUUID().toString().replace("-", ""));
         application.setStatus("SUBMITTED");
         application.setSubmittedAt(LocalDateTime.now());
         applicationMapper.insert(application);
@@ -86,8 +87,8 @@ public class CompanyCertificationService {
                 .set(Company::getCertificationStatus, "PENDING_REVIEW"));
         auditLogService.log(companyId, "COMPANY_CERTIFICATION", application.getId(), "SUBMIT", "提交企业认证审核");
 
-        if (autoApprove) {
-            approve(application, company, "开发环境自动审核");
+        if (caMockEnabled) {
+            approve(application, company, "体验测试模拟认证自动审核");
         }
         return toPayload(application, company.getName());
     }

@@ -159,6 +159,11 @@
             <view class="row-copy"><view class="row-title">库存管理</view><view class="row-desc">仓库、商品库存与销售单入库</view></view>
             <view class="state-pill">库存</view><view class="row-arrow">›</view>
           </view>
+          <view class="list-row" wx:if="{{canManage}}" bindtap="goProjectLedger">
+            <view class="row-icon"><image src="/images/icons/reconcile.svg" mode="aspectFit"/></view>
+            <view class="row-copy"><view class="row-title">项目账套</view><view class="row-desc">创建项目、划分合同并自动计算成本</view></view>
+            <view class="state-pill">项目</view><view class="row-arrow">›</view>
+          </view>
         </view>
 
         <view class="readonly-card management-readonly" wx:if="{{!canManage}}">
@@ -180,22 +185,38 @@
         </view>
         <view class="enterprise-switch-close" bindtap="closeCompanySwitcher">×</view>
       </view>
-      <scroll-view class="enterprise-switch-list" scroll-y>
-        <view class="enterprise-switch-option {{item.companyId === currentCompanyId ? 'active' : ''}} {{item.companyId === switchingCompanyId ? 'switching' : ''}}"
-          wx:for="{{companies}}" wx:key="companyId" data-company-id="{{item.companyId}}" bindtap="selectCompanyFromSwitcher">
-          <view class="enterprise-option-avatar">{{item.initial}}</view>
-          <view class="enterprise-option-main">
-            <view class="enterprise-option-name">{{item.companyName}}</view>
-            <view class="enterprise-option-role">{{item.roleText || '企业成员'}}</view>
+      <view class="enterprise-switch-list-frame" style="height: {{companySwitcherListHeight}}rpx;">
+        <scroll-view class="enterprise-switch-list" scroll-y>
+          <view class="enterprise-switch-option {{item.companyId === currentCompanyId ? 'active' : ''}} {{item.companyId === switchingCompanyId ? 'switching' : ''}}"
+            wx:for="{{companies}}" wx:key="companyId" data-company-id="{{item.companyId}}" bindtap="selectCompanyFromSwitcher">
+            <view class="enterprise-option-avatar">{{item.initial}}</view>
+            <view class="enterprise-option-main">
+              <view class="enterprise-option-name">{{item.companyName}}</view>
+              <view class="enterprise-option-role">{{item.roleText || '企业成员'}}</view>
+            </view>
+            <view class="enterprise-option-current" wx:if="{{item.companyId === currentCompanyId}}">当前</view>
+            <view class="enterprise-option-loading" wx:elif="{{item.companyId === switchingCompanyId}}">切换中</view>
+            <view class="enterprise-option-arrow" wx:else>›</view>
           </view>
-          <view class="enterprise-option-current" wx:if="{{item.companyId === currentCompanyId}}">当前</view>
-          <view class="enterprise-option-loading" wx:elif="{{item.companyId === switchingCompanyId}}">切换中</view>
-          <view class="enterprise-option-arrow" wx:else>›</view>
-        </view>
-      </scroll-view>
+        </scroll-view>
+      </view>
       <view class="enterprise-switch-actions">
-        <view bindtap="goCreateCompany">＋ 创建新企业</view>
-        <view bindtap="openJoin">＋ 输入邀请码加入</view>
+        <view class="enterprise-switch-action primary" bindtap="goCreateCompany">
+          <view class="enterprise-switch-action-plus">＋</view>
+          <view class="enterprise-switch-action-copy">
+            <view class="enterprise-switch-action-title">创建新企业</view>
+            <view class="enterprise-switch-action-desc">添加并管理另一家公司</view>
+          </view>
+          <view class="enterprise-switch-action-arrow">›</view>
+        </view>
+        <view class="enterprise-switch-action" bindtap="openJoin">
+          <view class="enterprise-switch-action-plus secondary">＋</view>
+          <view class="enterprise-switch-action-copy">
+            <view class="enterprise-switch-action-title">输入邀请码加入</view>
+            <view class="enterprise-switch-action-desc">加入管理员邀请的企业空间</view>
+          </view>
+          <view class="enterprise-switch-action-arrow">›</view>
+        </view>
       </view>
       <view class="enterprise-switch-tip">切换后，企业数据和业务权限会同步更新</view>
     </view>
