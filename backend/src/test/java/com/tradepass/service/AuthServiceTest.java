@@ -48,6 +48,7 @@ class AuthServiceTest {
     private WechatService wechatService;
     private AccessControlService accessControlService;
     private AuthSessionService sessionService;
+    private ExperienceTestAccountService experienceTestAccountService;
 
     @BeforeEach
     void setUp() {
@@ -60,6 +61,9 @@ class AuthServiceTest {
         wechatService = mock(WechatService.class);
         accessControlService = mock(AccessControlService.class);
         sessionService = mock(AuthSessionService.class);
+        experienceTestAccountService = mock(ExperienceTestAccountService.class);
+        when(experienceTestAccountService.provisionIfConfigured(any(SysUser.class), any())).thenReturn(null);
+        when(memberMapper.selectUserCompanies(anyLong())).thenReturn(List.of());
         when(accessControlService.effectiveRole(anyLong(), anyLong()))
                 .thenReturn(new AccessControlService.EffectiveRole("ADMIN", "管理员", List.of("member_manage")));
     }
@@ -231,7 +235,8 @@ class AuthServiceTest {
 
     private AuthService service(boolean devEnabled) {
         return new AuthService(userMapper, companyMapper, memberMapper, permissionMapper, contractMapper,
-                wechatService, new RolePermissionService(), accessControlService, sessionService, devEnabled);
+                wechatService, new RolePermissionService(), accessControlService, sessionService,
+                experienceTestAccountService, devEnabled);
     }
 
     private Map<String, Object> memberRow(long userId, String role, String status) {

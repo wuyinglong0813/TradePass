@@ -45,6 +45,7 @@ public class AuthService {
     private final RolePermissionService rolePermissionService;
     private final AccessControlService accessControlService;
     private final AuthSessionService authSessionService;
+    private final ExperienceTestAccountService experienceTestAccountService;
     private final boolean devEnabled;
 
     public AuthService(SysUserMapper sysUserMapper,
@@ -56,6 +57,7 @@ public class AuthService {
                        RolePermissionService rolePermissionService,
                        AccessControlService accessControlService,
                        AuthSessionService authSessionService,
+                       ExperienceTestAccountService experienceTestAccountService,
                        @Value("${tradepass.dev.enabled:false}") boolean devEnabled) {
         this.sysUserMapper = sysUserMapper;
         this.companyMapper = companyMapper;
@@ -66,6 +68,7 @@ public class AuthService {
         this.rolePermissionService = rolePermissionService;
         this.accessControlService = accessControlService;
         this.authSessionService = authSessionService;
+        this.experienceTestAccountService = experienceTestAccountService;
         this.devEnabled = devEnabled;
     }
 
@@ -84,15 +87,13 @@ public class AuthService {
                 ? wechatService.resolvePhoneByCode(request.phoneCode())
                 : (devEnabled ? request.phone() : null);
 
-        SysUser user;
-        if (openid.startsWith("dev-phone-") && phone != null && !phone.isBlank()) {
+        SysUser user = sysUserMapper.selectOne(new LambdaQueryWrapper<SysUser>()
+                .eq(SysUser::getOpenid, openid)
+                .last("LIMIT 1"));
+        if (user == null && phone != null && !phone.isBlank()) {
             user = sysUserMapper.selectOne(new LambdaQueryWrapper<SysUser>()
                     .eq(SysUser::getPhone, phone)
                     .orderByAsc(SysUser::getId)
-                    .last("LIMIT 1"));
-        } else {
-            user = sysUserMapper.selectOne(new LambdaQueryWrapper<SysUser>()
-                    .eq(SysUser::getOpenid, openid)
                     .last("LIMIT 1"));
         }
         if (user == null) {
@@ -102,22 +103,26 @@ public class AuthService {
             user.setPhone(phone != null ? phone : "");
             user.setStatus("ACTIVE");
             sysUserMapper.insert(user);
-            return new LoginSession(tokenFor(user.getId()), new UserProfile(String.valueOf(user.getId()), openid,
-                    user.getPhone(), user.getNickname(), null, "GUEST"));
+        } else {
+            if (request.nickName() != null && !request.nickName().isBlank()) {
+                user.setNickname(request.nickName());
+            }
+            if (phone != null && !phone.isBlank()) {
+                user.setPhone(phone);
+            }
+            sysUserMapper.updateById(user);
         }
 
-        if (request.nickName() != null && !request.nickName().isBlank()) {
-            user.setNickname(request.nickName());
-        }
-        if (phone != null && !phone.isBlank()) {
-            user.setPhone(phone);
-        }
-        sysUserMapper.updateById(user);
+        Long experienceCompanyId = experienceTestAccountService.provisionIfConfigured(user, phone);
 
         List<CompanyRole> companies = loadUserCompanies(user.getId());
-        String currentCompanyId = companies.isEmpty() ? null : companies.get(0).companyId();
-        MemberInfo member = loadMemberAnyCompany(user.getId());
-        String roleCode = member == null ? "GUEST" : member.roleCode();
+        String currentCompanyId = experienceCompanyId != null
+                ? String.valueOf(experienceCompanyId)
+                : (companies.isEmpty() ? null : companies.get(0).companyId());
+        MemberInfo member = experienceCompanyId != null
+                ? loadMember(user.getId(), experienceCompanyId)
+                : loadMemberAnyCompany(user.getId());
+        String roleCode = member == null || member.roleCode() == null ? "GUEST" : member.roleCode();
         return new LoginSession(tokenFor(user.getId()), new UserProfile(String.valueOf(user.getId()), openid,
                 user.getPhone(), user.getNickname(), currentCompanyId, roleCode));
     }

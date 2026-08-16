@@ -11,6 +11,8 @@ tradepass:
     enabled: ${TRADEPASS_DEV_ENABLED:false}
   demo-data:
     enabled: ${TRADEPASS_DEMO_DATA_ENABLED:false}
+  experience-test-accounts:
+    enabled: ${TRADEPASS_EXPERIENCE_TEST_ACCOUNTS_ENABLED:false}
   migration:
     allow-destructive-v5: ${TRADEPASS_ALLOW_DESTRUCTIVE_V5:false}
   auth:

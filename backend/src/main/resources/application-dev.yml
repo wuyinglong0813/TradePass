@@ -3,5 +3,7 @@ tradepass:
     enabled: true
   demo-data:
     enabled: true
+  experience-test-accounts:
+    enabled: true
   ca:
     mock-enabled: true
