@@ -1,4 +1,5 @@
 const { request } = require('../../utils/request');
+const { downloadApiFile } = require('../../utils/fileTransfer');
 
 Page({
   data: {
@@ -344,34 +345,25 @@ Page({
     this.downloadPdf(false);
   },
 
-  downloadPdf(showToast) {
-    const app = getApp();
-    const token = app.globalData.token || wx.getStorageSync('tradepass_token') || '';
-    const companyId = app.globalData.currentCompanyId || wx.getStorageSync('tradepass_company_id') || '';
-    const header = {};
-    if (token) header.Authorization = token;
-    if (companyId) header['X-Company-Id'] = String(companyId);
+  async downloadPdf(showToast) {
+    const safeId = String(this.data.detail && this.data.detail.documentNo || this.data.id)
+      .replace(/[\\/:*?"<>|\r\n]/g, '_');
+    const filePath = `${wx.env.USER_DATA_PATH}/销售单-${safeId}.pdf`;
     wx.showLoading({ title: '下载PDF中...' });
-    wx.downloadFile({
-      url: `${app.globalData.baseUrl}/trade-documents/${this.data.id}/pdf`,
-      header,
-      timeout: 30000,
-      success: response => {
-        if (response.statusCode !== 200) {
-          wx.showToast({ title: `PDF下载失败（${response.statusCode}）`, icon: 'none' });
-          return;
-        }
-        if (showToast) wx.showToast({ title: 'PDF已下载', icon: 'success' });
-        wx.openDocument({
-          filePath: response.filePath || response.tempFilePath,
-          fileType: 'pdf',
-          showMenu: true,
-          fail: () => wx.showToast({ title: 'PDF打开失败', icon: 'none' })
-        });
-      },
-      fail: error => wx.showToast({ title: error.errMsg || 'PDF下载失败', icon: 'none' }),
-      complete: () => wx.hideLoading()
-    });
+    try {
+      const result = await downloadApiFile(`/trade-documents/${this.data.id}/pdf-data`, filePath);
+      if (showToast) wx.showToast({ title: 'PDF已下载', icon: 'success' });
+      wx.openDocument({
+        filePath: result.filePath,
+        fileType: 'pdf',
+        showMenu: true,
+        fail: () => wx.showToast({ title: 'PDF打开失败', icon: 'none' })
+      });
+    } catch (error) {
+      wx.showToast({ title: error.message || 'PDF下载失败', icon: 'none' });
+    } finally {
+      wx.hideLoading();
+    }
   },
 
   noop() {}

@@ -24,7 +24,30 @@
       <view class="cc-dates" wx:if="{{item.startDate}}">{{item.startDate}} ~ {{item.endDate}}</view>
       <view class="cc-amount">合同金额：<text class="cc-amount-value">¥{{item.amount}}</text></view>
       <view class="cc-template" wx:if="{{item.templateName}}">模板：{{item.templateName}}</view>
-      <view class="cc-terms" wx:if="{{item.terms}}">{{item.terms}}</view>
+
+      <view class="contract-content" wx:if="{{item.fields.length || item.tableColumns.length || item.clauses.length}}">
+        <view class="content-title">合同正文</view>
+        <view class="content-field" wx:for="{{item.fields}}" wx:for-item="field" wx:key="key">
+          <text>{{field.label}}</text><text>{{field.value || '—'}}</text>
+        </view>
+        <view class="content-section-title" wx:if="{{item.tableColumns.length}}">{{item.tableTitle}}</view>
+        <scroll-view class="content-table-scroll" scroll-x wx:if="{{item.tableColumns.length}}">
+          <view class="content-table">
+            <view class="content-table-row header">
+              <view wx:for="{{item.tableColumns}}" wx:for-item="column" wx:key="*this">{{column}}</view>
+            </view>
+            <view class="content-table-row" wx:for="{{item.tableRows}}" wx:for-item="row" wx:key="*this">
+              <view wx:for="{{row}}" wx:for-item="cell" wx:key="*this">{{cell}}</view>
+            </view>
+          </view>
+        </scroll-view>
+        <view class="content-total" wx:if="{{item.tableColumns.length}}">合计：¥{{item.totalAmount}} <text wx:if="{{item.totalAmountCn}}">（{{item.totalAmountCn}}）</text></view>
+        <view class="content-clause" wx:for="{{item.clauses}}" wx:for-item="clause" wx:key="label">
+          <view>{{clause.label}}</view><text>{{clause.content || '—'}}</text>
+        </view>
+      </view>
+      <view class="cc-terms" wx:elif="{{item.plainTerms}}">{{item.plainTerms}}</view>
+      <view class="view-contract" data-contract="{{item}}" bindtap="viewContract">查看完整合同 ›</view>
       <view class="cc-created">发起时间：{{item.createdAt}}</view>
 
       <view class="cc-actions">

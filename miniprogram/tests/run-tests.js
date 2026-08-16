@@ -138,6 +138,46 @@ test('contract details and snapshots use the entered contract name', () => {
   ));
 });
 
+test('contract approval and detail render structured contract content instead of raw JSON', () => {
+  const approvalDir = path.join(__dirname, '..', 'pages', 'contract-approval');
+  const approvalScript = fs.readFileSync(path.join(approvalDir, 'contract-approval.js'), 'utf8');
+  const approvalTemplate = fs.readFileSync(path.join(approvalDir, 'contract-approval.wxml'), 'utf8');
+  const previewTemplate = fs.readFileSync(
+    path.join(__dirname, '..', 'pages', 'contract-preview', 'contract-preview.wxml'), 'utf8'
+  );
+  assert.ok(approvalScript.includes('JSON.parse(c.terms'));
+  assert.ok(approvalTemplate.includes('item.tableRows'));
+  assert.ok(!approvalTemplate.includes('{{item.terms}}'));
+  assert.ok(previewTemplate.includes('contractTableRows'));
+  assert.ok(previewTemplate.includes('contractClauses'));
+});
+
+test('experience build uses one native tab bar and cloud-routed file transfer', () => {
+  const config = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'app.json'), 'utf8'));
+  assert.strictEqual(config.tabBar.custom, false);
+  const scripts = [
+    'pages/contract-preview/contract-preview.js',
+    'pages/sales-order-detail/sales-order-detail.js',
+    'pages/reconciliation/reconciliation.js'
+  ].map(relative => fs.readFileSync(path.join(__dirname, '..', relative), 'utf8')).join('\n');
+  assert.ok(!scripts.includes('wx.downloadFile'));
+  assert.ok(!scripts.includes('wx.uploadFile'));
+  assert.ok(scripts.includes('downloadApiFile'));
+  assert.ok(scripts.includes('uploadApiFile'));
+});
+
+test('home displays a direct sales-order confirmation notice', () => {
+  const homeScript = fs.readFileSync(
+    path.join(__dirname, '..', 'pages', 'index', 'index.js'), 'utf8'
+  );
+  const homeTemplate = fs.readFileSync(
+    path.join(__dirname, '..', 'pages', 'index', 'index.wxml'), 'utf8'
+  );
+  assert.ok(homeScript.includes("item.type === 'SALES_ORDER'"));
+  assert.ok(homeScript.includes('sales-order-detail:'));
+  assert.ok(homeTemplate.includes('pendingSalesOrderTodo'));
+});
+
 test('company search confirmation does not depend on sensitive company fields', () => {
   const companyBind = loadPage('../pages/company-bind/company-bind');
   let modal;
@@ -321,7 +361,8 @@ test('contract attachments download to a safe persistent path for every category
     'utf8'
   );
   assert.ok(!script.includes("download && attachment.category === 'INVOICE'"));
-  assert.ok(script.includes('if (localFilePath) options.filePath = localFilePath'));
+  assert.ok(script.includes('/contract-attachments/${attachment.id}/content-data'));
+  assert.ok(script.includes('downloadApiFile'));
 });
 
 test('request injects auth and tenant headers and unwraps API data', async () => {
@@ -511,7 +552,7 @@ test('live reconciliation and sales-order confirmation pages are wired', () => {
   assert.ok(appConfig.pages.includes('pages/sales-order-detail/sales-order-detail'));
   assert.ok(appConfig.pages.includes('pages/inventory/inventory'));
   assert.ok(reconciliation.includes('/reconciliation-accounts'));
-  assert.ok(reconciliation.includes('/workbook?download=${download}'));
+  assert.ok(reconciliation.includes('/workbook-data'));
   assert.ok(!reconciliation.includes('/reconciliation-statements'));
   assert.ok(salesDetail.includes("this.submitReceive('RECEIVE_ONLY')"));
   assert.ok(salesDetail.includes("this.submitReceive('INBOUND', warehouse.id)"));

@@ -3,6 +3,7 @@ package com.tradepass.controller;
 import com.tradepass.common.ApiResponse;
 import com.tradepass.common.BusinessException;
 import com.tradepass.entity.LogisticsDocument;
+import com.tradepass.dto.response.FileDataPayload;
 import com.tradepass.service.LogisticsDocumentService;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -12,6 +13,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
@@ -20,6 +22,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+import java.util.Base64;
 
 @RestController
 @RequestMapping("/api")
@@ -52,6 +55,15 @@ public class LogisticsDocumentController {
         }
     }
 
+    @PostMapping(value = "/contracts/{contractId}/logistics-documents/base64",
+            consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ApiResponse<Map<String, Object>> uploadBase64(@PathVariable Long contractId,
+                                                         @RequestBody Map<String, Object> body) {
+        return ApiResponse.ok(logisticsDocumentService.upload(contractId,
+                String.valueOf(body.getOrDefault("originalName", "物流单.jpg")),
+                decodeBase64(body.get("contentBase64"))));
+    }
+
     @GetMapping("/logistics-documents/{id}/image")
     public ResponseEntity<byte[]> image(@PathVariable Long id) {
         LogisticsDocument document = logisticsDocumentService.getImage(id);
@@ -66,5 +78,20 @@ public class LogisticsDocumentController {
                 .contentLength(imageData.length)
                 .contentType(MediaType.parseMediaType(document.getContentType()))
                 .body(imageData);
+    }
+
+    @GetMapping("/logistics-documents/{id}/image-data")
+    public ApiResponse<FileDataPayload> imageData(@PathVariable Long id) {
+        LogisticsDocument document = logisticsDocumentService.getImage(id);
+        return ApiResponse.ok(FileDataPayload.of(
+                document.getOriginalName(), document.getContentType(), document.getImageData()));
+    }
+
+    private byte[] decodeBase64(Object value) {
+        try {
+            return Base64.getDecoder().decode(value == null ? "" : String.valueOf(value));
+        } catch (IllegalArgumentException exception) {
+            throw new BusinessException("物流单图片读取失败，请重新选择");
+        }
     }
 }

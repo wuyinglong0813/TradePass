@@ -97,6 +97,27 @@ page {
   font-size: 26rpx;
 }
 
+.business-notice {
+  align-items: center;
+  background: linear-gradient(135deg, #fff9ea, #fffdf7);
+  border: 1rpx solid #f3dca8;
+  border-radius: 20rpx;
+  box-shadow: 0 8rpx 22rpx rgba(151, 103, 18, .08);
+  display: flex;
+  margin: 18rpx 28rpx 0;
+  padding: 18rpx 20rpx;
+}
+.business-notice-icon {
+  align-items: center; background: #fff0c9; border-radius: 14rpx; color: #b87812;
+  display: flex; flex-shrink: 0; font-size: 23rpx; font-weight: 700; height: 58rpx;
+  justify-content: center; width: 58rpx;
+}
+.business-notice-copy { flex: 1; margin-left: 15rpx; min-width: 0; }
+.business-notice-title { color: #3f321d; font-size: 24rpx; font-weight: 700; }
+.business-notice-desc { color: #8e7448; font-size: 20rpx; margin-top: 4rpx; }
+.business-notice-count { background: #e5a62f; border-radius: 20rpx; color: #fff; font-size: 19rpx; line-height: 34rpx; min-width: 34rpx; padding: 0 5rpx; text-align: center; }
+.business-notice-arrow { color: #b99351; font-size: 38rpx; margin-left: 10rpx; }
+
 .company-switch-mask {
   align-items: flex-end;
   background: rgba(13, 30, 51, .5);

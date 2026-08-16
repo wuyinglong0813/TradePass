@@ -131,7 +131,8 @@ Page({
       const iconMap = {
         APPROVAL: '/images/icons/team.svg',
         CERT: '/images/icons/company.svg',
-        CONTRACT: '/images/icons/approval.svg'
+        CONTRACT: '/images/icons/approval.svg',
+        SALES_ORDER: '/images/icons/order.svg'
       };
       const enhanced = (todos || []).map(t => ({ ...t, iconPath: iconMap[t.type] || '/images/icons/contracts.svg' }));
       this.setData({ todos: enhanced });
@@ -140,6 +141,11 @@ Page({
 
   goTodo(e) {
     const target = e.currentTarget.dataset.target;
+    if (String(target || '').startsWith('sales-order-detail:')) {
+      const id = String(target).split(':')[1];
+      if (id) wx.navigateTo({ url: `/pages/sales-order-detail/sales-order-detail?id=${id}` });
+      return;
+    }
     const map = {
       'auth-manage': '/pages/auth-manage/auth-manage',
       'company-cert': '/pages/company-cert/company-cert',

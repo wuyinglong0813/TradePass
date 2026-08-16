@@ -19,10 +19,12 @@ import com.tradepass.dto.request.WechatLoginRequest;
 import com.tradepass.dto.response.TodoItem;
 import com.tradepass.entity.Company;
 import com.tradepass.entity.CompanyMember;
+import com.tradepass.entity.BusinessDocument;
 import com.tradepass.entity.SysUser;
 import com.tradepass.entity.TradeContract;
 import com.tradepass.mapper.CompanyMapper;
 import com.tradepass.mapper.CompanyMemberMapper;
+import com.tradepass.mapper.BusinessDocumentMapper;
 import com.tradepass.mapper.PermDefMapper;
 import com.tradepass.mapper.SysUserMapper;
 import com.tradepass.mapper.TradeContractMapper;
@@ -41,6 +43,7 @@ public class AuthService {
     private final CompanyMemberMapper companyMemberMapper;
     private final PermDefMapper permDefMapper;
     private final TradeContractMapper tradeContractMapper;
+    private final BusinessDocumentMapper businessDocumentMapper;
     private final WechatService wechatService;
     private final RolePermissionService rolePermissionService;
     private final AccessControlService accessControlService;
@@ -53,6 +56,7 @@ public class AuthService {
                        CompanyMemberMapper companyMemberMapper,
                        PermDefMapper permDefMapper,
                        TradeContractMapper tradeContractMapper,
+                       BusinessDocumentMapper businessDocumentMapper,
                        WechatService wechatService,
                        RolePermissionService rolePermissionService,
                        AccessControlService accessControlService,
@@ -64,6 +68,7 @@ public class AuthService {
         this.companyMemberMapper = companyMemberMapper;
         this.permDefMapper = permDefMapper;
         this.tradeContractMapper = tradeContractMapper;
+        this.businessDocumentMapper = businessDocumentMapper;
         this.wechatService = wechatService;
         this.rolePermissionService = rolePermissionService;
         this.accessControlService = accessControlService;
@@ -162,27 +167,48 @@ public class AuthService {
 
         boolean manager = accessControlService.hasPermission(companyId, "member_manage")
                 || accessControlService.hasPermission(companyId, "auth_manage");
-        if (!manager) {
-            return todos;
+        if (manager) {
+            Long pending = companyMemberMapper.selectCount(new LambdaQueryWrapper<CompanyMember>()
+                    .eq(CompanyMember::getCompanyId, companyId)
+                    .eq(CompanyMember::getStatus, "PENDING"));
+            if (pending > 0) {
+                todos.add(new TodoItem("APPROVAL", "成员待审批", pending + " 位同事申请加入企业", pending.intValue(), "auth-manage"));
+            }
+
+            Company company = companyMapper.selectById(companyId);
+            if (company != null && company.getCertificationStatus() != null && !"VERIFIED".equals(company.getCertificationStatus())) {
+                todos.add(new TodoItem("CERT", "企业认证待完成", "完成认证后可使用全部签约能力", 1, "company-cert"));
+            }
+            if (company != null) {
+                Long pendingContracts = tradeContractMapper.selectCount(new LambdaQueryWrapper<TradeContract>()
+                        .eq(TradeContract::getCounterpartyCompanyId, companyId)
+                        .eq(TradeContract::getStatus, "PENDING"));
+                if (pendingContracts > 0) {
+                    todos.add(new TodoItem("CONTRACT", "合同待审批", pendingContracts + " 份合同等待你方签署", pendingContracts.intValue(), "contract-approval"));
+                }
+            }
         }
 
-        Long pending = companyMemberMapper.selectCount(new LambdaQueryWrapper<CompanyMember>()
-                .eq(CompanyMember::getCompanyId, companyId)
-                .eq(CompanyMember::getStatus, "PENDING"));
-        if (pending > 0) {
-            todos.add(new TodoItem("APPROVAL", "成员待审批", pending + " 位同事申请加入企业", pending.intValue(), "auth-manage"));
-        }
-
-        Company company = companyMapper.selectById(companyId);
-        if (company != null && company.getCertificationStatus() != null && !"VERIFIED".equals(company.getCertificationStatus())) {
-            todos.add(new TodoItem("CERT", "企业认证待完成", "完成认证后可使用全部签约能力", 1, "company-cert"));
-        }
-        if (company != null) {
-            Long pendingContracts = tradeContractMapper.selectCount(new LambdaQueryWrapper<TradeContract>()
-                    .eq(TradeContract::getCounterpartyCompanyId, companyId)
-                    .eq(TradeContract::getStatus, "PENDING"));
-            if (pendingContracts > 0) {
-                todos.add(new TodoItem("CONTRACT", "合同待审批", pendingContracts + " 份合同等待你方签署", pendingContracts.intValue(), "contract-approval"));
+        if (accessControlService.hasPermission(companyId, "sales_order_receive")) {
+            LambdaQueryWrapper<BusinessDocument> pendingSalesOrderQuery =
+                    new LambdaQueryWrapper<BusinessDocument>()
+                            .eq(BusinessDocument::getRecipientCompanyId, companyId)
+                            .eq(BusinessDocument::getDocumentType, BusinessDocumentService.SALES_ORDER)
+                            .eq(BusinessDocument::getStatus, "ISSUED");
+            Long pendingSalesOrders = businessDocumentMapper.selectCount(pendingSalesOrderQuery);
+            if (pendingSalesOrders > 0) {
+                BusinessDocument latest = businessDocumentMapper.selectOne(
+                        new LambdaQueryWrapper<BusinessDocument>()
+                                .eq(BusinessDocument::getRecipientCompanyId, companyId)
+                                .eq(BusinessDocument::getDocumentType, BusinessDocumentService.SALES_ORDER)
+                                .eq(BusinessDocument::getStatus, "ISSUED")
+                                .orderByDesc(BusinessDocument::getCreatedAt)
+                                .orderByDesc(BusinessDocument::getId)
+                                .last("LIMIT 1"));
+                String target = latest == null ? "" : "sales-order-detail:" + latest.getId();
+                todos.add(new TodoItem("SALES_ORDER", "销售单待确认",
+                        pendingSalesOrders + " 份销售单等待你方确认",
+                        pendingSalesOrders.intValue(), target));
             }
         }
         return todos;

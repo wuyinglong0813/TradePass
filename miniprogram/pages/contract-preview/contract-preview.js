@@ -1,3 +1,5 @@
+const { downloadApiFile, uploadApiFile } = require('../../utils/fileTransfer');
+
 function today() {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
@@ -50,6 +52,12 @@ Page({
     // 结构化合同
     hasStructured: false,
     sData: null,
+    contractTableTitle: '商品明细',
+    contractTableColumns: [],
+    contractTableRows: [],
+    contractClauses: [],
+    contractTotalAmount: '',
+    contractTotalAmountCn: '',
     canCreateSalesOrder: false,
     createAsDraft: false,
     salesOrderCreateText: '创建销售单',
@@ -123,6 +131,16 @@ Page({
       } catch (e) { /* 非 JSON，使用旧版显示 */ }
 
       const structuredFields = (sData && sData.fields) || [];
+      const structuredSections = (sData && Array.isArray(sData.sections)) ? sData.sections : [];
+      const contractTable = structuredSections.find(item => item && item.type === 'table') || {};
+      const contractTableRows = (Array.isArray(contractTable.rows) ? contractTable.rows : [])
+        .filter(row => Array.isArray(row) && row.some(value => String(value == null ? '' : value).trim()));
+      const contractClauses = structuredSections
+        .filter(item => item && item.type === 'clause')
+        .map((item, index) => ({
+          ...item,
+          label: `${index + 2}、${item.title || `合同条款${index + 1}`}`
+        }));
       const fieldValue = key => {
         const field = structuredFields.find(item => item.key === key);
         return (field && field.value) || '';
@@ -154,6 +172,14 @@ Page({
         counterpartyName: viewerCounterpartyName || this.data.counterpartyName,
         hasStructured: !!sData,
         sData,
+        contractTableTitle: contractTable.title || '商品明细',
+        contractTableColumns: Array.isArray(contractTable.columns) ? contractTable.columns : [],
+        contractTableRows,
+        contractClauses,
+        contractTotalAmount: contractTable.summary && contractTable.summary.totalAmount
+          ? String(contractTable.summary.totalAmount) : String(contract.amount || ''),
+        contractTotalAmountCn: contractTable.summary && contractTable.summary.totalAmountCn
+          ? String(contractTable.summary.totalAmountCn) : '',
         canCreateSalesOrder,
         createAsDraft,
         salesOrderCreateText: '创建草稿',
@@ -203,18 +229,11 @@ Page({
     this.downloadContractPdfFile(true);
   },
 
-  downloadContractPdfFile(showDownloadedToast) {
-    const app = getApp();
-    const token = app.globalData.token || wx.getStorageSync('tradepass_token') || '';
-    const companyId = app.globalData.currentCompanyId || wx.getStorageSync('tradepass_company_id') || '';
+  async downloadContractPdfFile(showDownloadedToast) {
     const safeName = String(this.data.pdfTitle || '购销合同')
       .replace(/[\\/:*?"<>|\r\n]/g, '_')
       .trim() || '购销合同';
     const filePath = `${wx.env.USER_DATA_PATH}/${safeName}.pdf`;
-    const header = {};
-    if (token) header.Authorization = token;
-    if (companyId) header['X-Company-Id'] = String(companyId);
-
     try {
       wx.getFileSystemManager().unlinkSync(filePath);
     } catch (e) {
@@ -223,35 +242,19 @@ Page({
 
     this.setData({ pdfLoading: true });
     wx.showLoading({ title: '生成PDF中...' });
-    wx.downloadFile({
-      url: `${app.globalData.baseUrl}/contracts/${this.data.contractId}/pdf`,
-      header,
-      filePath,
-      timeout: 30000,
-      success: response => {
-        if (response.statusCode !== 200) {
-          wx.showToast({ title: `PDF下载失败（${response.statusCode}）`, icon: 'none' });
-          return;
-        }
-        const downloadedPath = response.filePath || response.tempFilePath || filePath;
-        this.setData({
-          pdfReady: true,
-          pdfFilePath: downloadedPath
-        });
-        if (showDownloadedToast) {
-          wx.showToast({ title: 'PDF已下载', icon: 'success' });
-        }
-        this.openPdfDocument(downloadedPath);
-      },
-      fail: error => {
-        const message = error && error.errMsg ? error.errMsg : '网络异常';
-        wx.showToast({ title: `PDF下载失败：${message}`, icon: 'none' });
-      },
-      complete: () => {
-        wx.hideLoading();
-        this.setData({ pdfLoading: false });
-      }
-    });
+    try {
+      const result = await downloadApiFile(
+        `/contracts/${this.data.contractId}/pdf-data`, filePath
+      );
+      this.setData({ pdfReady: true, pdfFilePath: result.filePath });
+      if (showDownloadedToast) wx.showToast({ title: 'PDF已下载', icon: 'success' });
+      this.openPdfDocument(result.filePath);
+    } catch (error) {
+      wx.showToast({ title: `PDF下载失败：${error.message || '网络异常'}`, icon: 'none' });
+    } finally {
+      wx.hideLoading();
+      this.setData({ pdfLoading: false });
+    }
   },
 
   openPdfDocument(filePath) {
@@ -306,49 +309,25 @@ Page({
     });
   },
 
-  uploadLogisticsImage(filePath) {
-    const app = getApp();
-    const token = app.globalData.token || wx.getStorageSync('tradepass_token') || '';
-    const companyId = app.globalData.currentCompanyId || wx.getStorageSync('tradepass_company_id') || '';
-    const header = {};
-    if (token) header.Authorization = token;
-    if (companyId) header['X-Company-Id'] = String(companyId);
+  async uploadLogisticsImage(filePath) {
     const originalName = this.buildLogisticsFileName(filePath);
 
     this.setData({ logisticsUploading: true });
     wx.showLoading({ title: '上传图片中...' });
-    wx.uploadFile({
-      url: `${app.globalData.baseUrl}/contracts/${this.data.contractId}/logistics-documents`,
-      filePath,
-      name: 'file',
-      formData: { originalName },
-      header,
-      timeout: 30000,
-      success: response => {
-        let body = null;
-        try {
-          body = JSON.parse(response.data || '{}');
-        } catch (error) {
-          // 交由统一错误提示处理。
-        }
-        if (response.statusCode >= 200 && response.statusCode < 300 && body && body.code === 0) {
-          wx.showToast({ title: '物流单已上传', icon: 'success' });
-          this.loadLogisticsDocuments();
-          return;
-        }
-        wx.showToast({
-          title: (body && body.message) || `上传失败（${response.statusCode || '未知状态'}）`,
-          icon: 'none'
-        });
-      },
-      fail: error => {
-        wx.showToast({ title: error.errMsg || '物流单上传失败', icon: 'none' });
-      },
-      complete: () => {
-        wx.hideLoading();
-        this.setData({ logisticsUploading: false });
-      }
-    });
+    try {
+      await uploadApiFile(
+        `/contracts/${this.data.contractId}/logistics-documents/base64`,
+        filePath,
+        { originalName }
+      );
+      wx.showToast({ title: '物流单已上传', icon: 'success' });
+      await this.loadLogisticsDocuments();
+    } catch (error) {
+      wx.showToast({ title: error.message || '物流单上传失败', icon: 'none' });
+    } finally {
+      wx.hideLoading();
+      this.setData({ logisticsUploading: false });
+    }
   },
 
   buildLogisticsFileName(filePath) {
@@ -371,15 +350,9 @@ Page({
     return `物流单-${timestamp}.${extension}`;
   },
 
-  previewLogisticsImage(e) {
+  async previewLogisticsImage(e) {
     const document = e.currentTarget.dataset.document;
     if (!document || !document.id) return;
-    const app = getApp();
-    const token = app.globalData.token || wx.getStorageSync('tradepass_token') || '';
-    const companyId = app.globalData.currentCompanyId || wx.getStorageSync('tradepass_company_id') || '';
-    const header = {};
-    if (token) header.Authorization = token;
-    if (companyId) header['X-Company-Id'] = String(companyId);
     const extensionMap = {
       'image/png': 'png',
       'image/gif': 'gif',
@@ -394,28 +367,20 @@ Page({
     }
 
     wx.showLoading({ title: '加载图片中...' });
-    wx.downloadFile({
-      url: `${app.globalData.baseUrl}/logistics-documents/${document.id}/image`,
-      header,
-      filePath,
-      timeout: 30000,
-      success: response => {
-        if (response.statusCode !== 200) {
-          wx.showToast({ title: `图片加载失败（${response.statusCode}）`, icon: 'none' });
-          return;
-        }
-        const imagePath = response.filePath || response.tempFilePath || filePath;
-        wx.previewImage({
-          current: imagePath,
-          urls: [imagePath],
-          fail: () => wx.showToast({ title: '图片打开失败', icon: 'none' })
-        });
-      },
-      fail: error => {
-        wx.showToast({ title: error.errMsg || '图片加载失败', icon: 'none' });
-      },
-      complete: () => wx.hideLoading()
-    });
+    try {
+      const result = await downloadApiFile(
+        `/logistics-documents/${document.id}/image-data`, filePath
+      );
+      wx.previewImage({
+        current: result.filePath,
+        urls: [result.filePath],
+        fail: () => wx.showToast({ title: '图片打开失败', icon: 'none' })
+      });
+    } catch (error) {
+      wx.showToast({ title: error.message || '图片加载失败', icon: 'none' });
+    } finally {
+      wx.hideLoading();
+    }
   },
 
   formatFileSize(size) {
@@ -773,47 +738,29 @@ Page({
     }, () => this.uploadAttachment('INVOICE', attachment.filePath, attachment.originalName, metadata));
   },
 
-  uploadAttachment(category, filePath, originalName, metadata = {}) {
-    const app = getApp();
-    const token = app.globalData.token || wx.getStorageSync('tradepass_token') || '';
-    const companyId = app.globalData.currentCompanyId || wx.getStorageSync('tradepass_company_id') || '';
-    const header = {};
-    if (token) header.Authorization = token;
-    if (companyId) header['X-Company-Id'] = String(companyId);
+  async uploadAttachment(category, filePath, originalName, metadata = {}) {
     this.setData({ attachmentUploading: true });
     wx.showLoading({ title: '上传资料中...' });
-    wx.uploadFile({
-      url: `${app.globalData.baseUrl}/contracts/${this.data.contractId}/attachments`,
-      filePath,
-      name: 'file',
-      formData: { category, originalName, ...metadata },
-      header,
-      timeout: 30000,
-      success: response => {
-        let body = null;
-        try { body = JSON.parse(response.data || '{}'); } catch (error) { /* 统一提示 */ }
-        if (response.statusCode >= 200 && response.statusCode < 300 && body && body.code === 0) {
-          const label = category === 'PAYMENT_VOUCHER'
-            ? '转款凭证'
-            : category === 'INVOICE' ? '发票' : '资料';
-          wx.showToast({
-            title: category === 'OTHER' ? `${label}已上传` : `${label}已提交确认`,
-            icon: 'success'
-          });
-          this.loadAttachments(category);
-          return;
-        }
-        wx.showToast({
-          title: (body && body.message) || `上传失败（${response.statusCode || '未知状态'}）`,
-          icon: 'none'
-        });
-      },
-      fail: error => wx.showToast({ title: error.errMsg || '资料上传失败', icon: 'none' }),
-      complete: () => {
-        wx.hideLoading();
-        this.setData({ attachmentUploading: false });
-      }
-    });
+    try {
+      await uploadApiFile(
+        `/contracts/${this.data.contractId}/attachments/base64`,
+        filePath,
+        { category, originalName, ...metadata }
+      );
+      const label = category === 'PAYMENT_VOUCHER'
+        ? '转款凭证'
+        : category === 'INVOICE' ? '发票' : '资料';
+      wx.showToast({
+        title: category === 'OTHER' ? `${label}已上传` : `${label}已提交确认`,
+        icon: 'success'
+      });
+      await this.loadAttachments(category);
+    } catch (error) {
+      wx.showToast({ title: error.message || '资料上传失败', icon: 'none' });
+    } finally {
+      wx.hideLoading();
+      this.setData({ attachmentUploading: false });
+    }
   },
 
   approveAttachment(e) {
@@ -902,61 +849,47 @@ Page({
     return `${wx.env.USER_DATA_PATH}/${safeBaseName}-${attachment.id}.${extension}`;
   },
 
-  downloadAttachmentFile(attachment, download) {
+  async downloadAttachmentFile(attachment, download) {
     if (!attachment || !attachment.id) return;
-    const app = getApp();
-    const token = app.globalData.token || wx.getStorageSync('tradepass_token') || '';
-    const companyId = app.globalData.currentCompanyId || wx.getStorageSync('tradepass_company_id') || '';
-    const header = {};
-    if (token) header.Authorization = token;
-    if (companyId) header['X-Company-Id'] = String(companyId);
-    const localFilePath = download ? this.attachmentDownloadPath(attachment) : '';
-    if (localFilePath) {
-      try {
-        wx.getFileSystemManager().unlinkSync(localFilePath);
-      } catch (error) {
-        // 首次下载时目标文件不存在。
-      }
+    const localFilePath = this.attachmentDownloadPath(attachment);
+    try {
+      wx.getFileSystemManager().unlinkSync(localFilePath);
+    } catch (error) {
+      // 首次下载时目标文件不存在。
     }
     wx.showLoading({ title: download ? '下载中...' : '打开中...' });
-    const options = {
-      url: `${app.globalData.baseUrl}/contract-attachments/${attachment.id}/content?download=${download}`,
-      header,
-      timeout: 30000,
-      success: response => {
-        if (response.statusCode !== 200) {
-          wx.showToast({ title: `文件获取失败（${response.statusCode}）`, icon: 'none' });
+    try {
+      const result = await downloadApiFile(
+        `/contract-attachments/${attachment.id}/content-data`, localFilePath
+      );
+      const path = result.filePath;
+      if (attachment.isImage) {
+        if (download) {
+          wx.saveImageToPhotosAlbum({
+            filePath: path,
+            success: () => wx.showToast({ title: '图片已保存到相册', icon: 'success' }),
+            fail: () => wx.showToast({ title: '图片保存失败，请检查相册权限', icon: 'none' })
+          });
           return;
         }
-        const path = response.filePath || response.tempFilePath || localFilePath;
-        if (attachment.isImage) {
-          if (download) {
-            wx.saveImageToPhotosAlbum({
-              filePath: path,
-              success: () => wx.showToast({ title: '图片已保存到相册', icon: 'success' }),
-              fail: () => wx.showToast({ title: '图片保存失败，请检查相册权限', icon: 'none' })
-            });
-            return;
-          }
-          wx.previewImage({ current: path, urls: [path] });
-          return;
-        }
-        const extension = String(attachment.originalName || '').split('.').pop().toLowerCase();
-        wx.openDocument({
-          filePath: path,
-          fileType: ['pdf', 'doc', 'docx'].includes(extension) ? extension : undefined,
-          showMenu: true,
-          success: () => {
-            if (download) wx.showToast({ title: '文件已下载', icon: 'success' });
-          },
-          fail: () => wx.showToast({ title: '文件打开失败', icon: 'none' })
-        });
-      },
-      fail: error => wx.showToast({ title: error.errMsg || '文件获取失败', icon: 'none' }),
-      complete: () => wx.hideLoading()
-    };
-    if (localFilePath) options.filePath = localFilePath;
-    wx.downloadFile(options);
+        wx.previewImage({ current: path, urls: [path] });
+        return;
+      }
+      const extension = String(attachment.originalName || '').split('.').pop().toLowerCase();
+      wx.openDocument({
+        filePath: path,
+        fileType: ['pdf', 'doc', 'docx'].includes(extension) ? extension : undefined,
+        showMenu: true,
+        success: () => {
+          if (download) wx.showToast({ title: '文件已下载', icon: 'success' });
+        },
+        fail: () => wx.showToast({ title: '文件打开失败', icon: 'none' })
+      });
+    } catch (error) {
+      wx.showToast({ title: error.message || '文件获取失败', icon: 'none' });
+    } finally {
+      wx.hideLoading();
+    }
   },
 
   async loadBusinessDocuments(documentType) {
@@ -1286,44 +1219,28 @@ Page({
     this.downloadBusinessDocumentFile(e.currentTarget.dataset.document, true);
   },
 
-  downloadBusinessDocumentFile(document, showDownloadedToast) {
+  async downloadBusinessDocumentFile(document, showDownloadedToast) {
     if (!document || !document.id) return;
-    const app = getApp();
-    const token = app.globalData.token || wx.getStorageSync('tradepass_token') || '';
-    const companyId = app.globalData.currentCompanyId || wx.getStorageSync('tradepass_company_id') || '';
     const label = '销售单';
     const safeNo = String(document.documentNo || document.id).replace(/[\\/:*?"<>|\r\n]/g, '_');
     const filePath = `${wx.env.USER_DATA_PATH}/${label}-${safeNo}.pdf`;
-    const header = {};
-    if (token) header.Authorization = token;
-    if (companyId) header['X-Company-Id'] = String(companyId);
     try {
       wx.getFileSystemManager().unlinkSync(filePath);
     } catch (error) {
       // 首次生成时目标文件不存在。
     }
     wx.showLoading({ title: '下载PDF中...' });
-    wx.downloadFile({
-      url: `${app.globalData.baseUrl}/trade-documents/${document.id}/pdf`,
-      header,
-      filePath,
-      timeout: 30000,
-      success: response => {
-        if (response.statusCode !== 200) {
-          wx.showToast({ title: `PDF下载失败（${response.statusCode}）`, icon: 'none' });
-          return;
-        }
-        const downloadedPath = response.filePath || response.tempFilePath || filePath;
-        if (showDownloadedToast) {
-          wx.showToast({ title: 'PDF已下载', icon: 'success' });
-        }
-        this.openPdfDocument(downloadedPath);
-      },
-      fail: error => {
-        wx.showToast({ title: error.errMsg || 'PDF下载失败', icon: 'none' });
-      },
-      complete: () => wx.hideLoading()
-    });
+    try {
+      const result = await downloadApiFile(
+        `/trade-documents/${document.id}/pdf-data`, filePath
+      );
+      if (showDownloadedToast) wx.showToast({ title: 'PDF已下载', icon: 'success' });
+      this.openPdfDocument(result.filePath);
+    } catch (error) {
+      wx.showToast({ title: error.message || 'PDF下载失败', icon: 'none' });
+    } finally {
+      wx.hideLoading();
+    }
   },
 
   openSalesOrderDetail(e) {

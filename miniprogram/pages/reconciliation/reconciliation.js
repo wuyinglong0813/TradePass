@@ -1,4 +1,5 @@
 const { request } = require('../../utils/request');
+const { downloadApiFile } = require('../../utils/fileTransfer');
 
 Page({
   data: {
@@ -63,33 +64,26 @@ Page({
     this.downloadWorkbookFile(e.currentTarget.dataset.account, true);
   },
 
-  downloadWorkbookFile(account, download) {
+  async downloadWorkbookFile(account, download) {
     if (!account || !account.counterpartyCompanyId) return;
-    const app = getApp();
-    const token = app.globalData.token || wx.getStorageSync('tradepass_token') || '';
-    const companyId = app.globalData.currentCompanyId || wx.getStorageSync('tradepass_company_id') || '';
-    const header = {};
-    if (token) header.Authorization = token;
-    if (companyId) header['X-Company-Id'] = String(companyId);
+    const safeName = String(account.counterpartyName || account.counterpartyCompanyId)
+      .replace(/[\\/:*?"<>|\r\n]/g, '_');
+    const filePath = `${wx.env.USER_DATA_PATH}/对账单-${safeName}.xlsx`;
     wx.showLoading({ title: download ? '下载对账单中...' : '打开对账单中...' });
-    wx.downloadFile({
-      url: `${app.globalData.baseUrl}/reconciliation-accounts/${account.counterpartyCompanyId}/workbook?download=${download}`,
-      header,
-      timeout: 30000,
-      success: response => {
-        if (response.statusCode !== 200) {
-          wx.showToast({ title: `对账单获取失败（${response.statusCode}）`, icon: 'none' });
-          return;
-        }
-        wx.openDocument({
-          filePath: response.filePath || response.tempFilePath,
-          fileType: 'xlsx',
-          showMenu: true,
-          fail: () => wx.showToast({ title: 'Excel打开失败', icon: 'none' })
-        });
-      },
-      fail: error => wx.showToast({ title: error.errMsg || '对账单获取失败', icon: 'none' }),
-      complete: () => wx.hideLoading()
-    });
+    try {
+      const result = await downloadApiFile(
+        `/reconciliation-accounts/${account.counterpartyCompanyId}/workbook-data`, filePath
+      );
+      wx.openDocument({
+        filePath: result.filePath,
+        fileType: 'xlsx',
+        showMenu: true,
+        fail: () => wx.showToast({ title: 'Excel打开失败', icon: 'none' })
+      });
+    } catch (error) {
+      wx.showToast({ title: error.message || '对账单获取失败', icon: 'none' });
+    } finally {
+      wx.hideLoading();
+    }
   }
 });

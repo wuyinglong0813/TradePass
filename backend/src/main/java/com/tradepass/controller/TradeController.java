@@ -6,6 +6,7 @@ import com.tradepass.dto.request.AddCounterpartyRequest;
 import com.tradepass.dto.request.CreateContractRequest;
 import com.tradepass.dto.request.CreateOrderRequest;
 import com.tradepass.dto.response.ContractPayload;
+import com.tradepass.dto.response.FileDataPayload;
 import com.tradepass.dto.response.PagePayload;
 import com.tradepass.dto.response.TradeOrderPayload;
 import com.tradepass.service.ContractPdfService;
@@ -141,21 +142,34 @@ public class TradeController {
 
     @GetMapping(value = "/contracts/{id:\\d+}/pdf", produces = MediaType.APPLICATION_PDF_VALUE)
     public ResponseEntity<byte[]> downloadContractPdf(@PathVariable Long id) {
+        ContractPdfFile file = contractPdfFile(id);
+        ContentDisposition disposition = ContentDisposition.attachment()
+                .filename(file.fileName(), StandardCharsets.UTF_8)
+                .build();
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+                .header(HttpHeaders.CACHE_CONTROL, "private, no-store")
+                .contentLength(file.data().length)
+                .contentType(MediaType.APPLICATION_PDF)
+                .body(file.data());
+    }
+
+    @GetMapping("/contracts/{id:\\d+}/pdf-data")
+    public ApiResponse<FileDataPayload> contractPdfData(@PathVariable Long id) {
+        ContractPdfFile file = contractPdfFile(id);
+        return ApiResponse.ok(FileDataPayload.of(file.fileName(), MediaType.APPLICATION_PDF_VALUE, file.data()));
+    }
+
+    private ContractPdfFile contractPdfFile(Long id) {
         ContractPayload contract = tradeService.getContract(id);
         ContractArchiveService.PdfPayload archived = contractArchiveService == null
                 ? null : contractArchiveService.getPdf(contract, AuthContext.userId());
         byte[] pdf = archived == null ? contractPdfService.generate(contract) : archived.data();
         String fileName = archived == null ? contractPdfService.fileName(contract) : archived.fileName();
-        ContentDisposition disposition = ContentDisposition.attachment()
-                .filename(fileName, StandardCharsets.UTF_8)
-                .build();
-        return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
-                .header(HttpHeaders.CACHE_CONTROL, "private, no-store")
-                .contentLength(pdf.length)
-                .contentType(MediaType.APPLICATION_PDF)
-                .body(pdf);
+        return new ContractPdfFile(fileName, pdf);
     }
+
+    private record ContractPdfFile(String fileName, byte[] data) {}
 
     @GetMapping("/contracts/summary")
     public ApiResponse<Map<String, Object>> contractSummary() {

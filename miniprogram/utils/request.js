@@ -35,6 +35,7 @@ function request(options) {
       method: options.method || 'GET',
       data: options.data || {},
       header,
+      timeout: options.timeout || 15000,
       success: ({ statusCode, data }) => {
         if (statusCode === 401 || (data && data.code === 401)) {
           if (options.handleUnauthorized !== false) handleUnauthorized(app);
@@ -69,8 +70,7 @@ function request(options) {
 
     wx.request({
       ...callbacks,
-      url: `${app.globalData.baseUrl}${options.url}`,
-      timeout: options.timeout || 15000
+      url: `${app.globalData.baseUrl}${options.url}`
     });
   });
 }

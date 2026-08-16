@@ -14,10 +14,12 @@ import com.tradepass.dto.request.WechatLoginRequest;
 import com.tradepass.dto.response.TodoItem;
 import com.tradepass.entity.Company;
 import com.tradepass.entity.CompanyMember;
+import com.tradepass.entity.BusinessDocument;
 import com.tradepass.entity.PermDef;
 import com.tradepass.entity.SysUser;
 import com.tradepass.mapper.CompanyMapper;
 import com.tradepass.mapper.CompanyMemberMapper;
+import com.tradepass.mapper.BusinessDocumentMapper;
 import com.tradepass.mapper.PermDefMapper;
 import com.tradepass.mapper.SysUserMapper;
 import com.tradepass.mapper.TradeContractMapper;
@@ -45,6 +47,7 @@ class AuthServiceTest {
     private CompanyMemberMapper memberMapper;
     private PermDefMapper permissionMapper;
     private TradeContractMapper contractMapper;
+    private BusinessDocumentMapper businessDocumentMapper;
     private WechatService wechatService;
     private AccessControlService accessControlService;
     private AuthSessionService sessionService;
@@ -52,12 +55,13 @@ class AuthServiceTest {
 
     @BeforeEach
     void setUp() {
-        MybatisTestSupport.initialize(SysUser.class, CompanyMember.class, PermDef.class);
+        MybatisTestSupport.initialize(SysUser.class, CompanyMember.class, PermDef.class, BusinessDocument.class);
         userMapper = mock(SysUserMapper.class);
         companyMapper = mock(CompanyMapper.class);
         memberMapper = mock(CompanyMemberMapper.class);
         permissionMapper = mock(PermDefMapper.class);
         contractMapper = mock(TradeContractMapper.class);
+        businessDocumentMapper = mock(BusinessDocumentMapper.class);
         wechatService = mock(WechatService.class);
         accessControlService = mock(AccessControlService.class);
         sessionService = mock(AuthSessionService.class);
@@ -172,6 +176,26 @@ class AuthServiceTest {
     }
 
     @Test
+    void notifiesRecipientWhenSalesOrderNeedsConfirmation() {
+        AuthService service = service(true);
+        AuthContext.set(7L, 3L);
+        when(accessControlService.hasPermission(3L, "member_manage")).thenReturn(false);
+        when(accessControlService.hasPermission(3L, "auth_manage")).thenReturn(false);
+        when(accessControlService.hasPermission(3L, "sales_order_receive")).thenReturn(true);
+        when(businessDocumentMapper.selectCount(any(Wrapper.class))).thenReturn(2L);
+        BusinessDocument document = new BusinessDocument();
+        document.setId(44L);
+        when(businessDocumentMapper.selectOne(any(Wrapper.class))).thenReturn(document);
+
+        List<TodoItem> todos = service.myTodos();
+
+        assertThat(todos).hasSize(1);
+        assertThat(todos.get(0).type()).isEqualTo("SALES_ORDER");
+        assertThat(todos.get(0).count()).isEqualTo(2);
+        assertThat(todos.get(0).target()).isEqualTo("sales-order-detail:44");
+    }
+
+    @Test
     void preventsSwitchingIntoAnotherTenant() {
         AuthContext.set(7L, 3L);
         when(memberMapper.selectCount(any(Wrapper.class))).thenReturn(0L);
@@ -235,7 +259,7 @@ class AuthServiceTest {
 
     private AuthService service(boolean devEnabled) {
         return new AuthService(userMapper, companyMapper, memberMapper, permissionMapper, contractMapper,
-                wechatService, new RolePermissionService(), accessControlService, sessionService,
+                businessDocumentMapper, wechatService, new RolePermissionService(), accessControlService, sessionService,
                 experienceTestAccountService, devEnabled);
     }
 

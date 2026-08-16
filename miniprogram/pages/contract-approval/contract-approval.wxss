@@ -19,6 +19,22 @@ page { background: #f4f8fd; }
 .cc-amount { color: #52615e; font-size: 24rpx; margin-top: 12rpx; }
 .cc-amount-value { color: #2478df; font-size: 31rpx; font-weight: 700; margin-left: 8rpx; }
 .cc-terms { background: #f5f8f7; border-radius: 15rpx; color: #697673; font-size: 23rpx; line-height: 1.65; margin-top: 12rpx; padding: 14rpx; }
+.contract-content { background: #f8fbff; border: 1rpx solid #e0ebf7; border-radius: 16rpx; margin-top: 16rpx; padding: 18rpx; }
+.content-title { color: #20344c; font-size: 25rpx; font-weight: 700; margin-bottom: 10rpx; }
+.content-field { border-bottom: 1rpx solid #e5edf6; display: flex; font-size: 21rpx; justify-content: space-between; padding: 8rpx 0; }
+.content-field text:first-child { color: #7b8998; }
+.content-field text:last-child { color: #26384c; margin-left: 18rpx; text-align: right; }
+.content-section-title { color: #30445b; font-size: 22rpx; font-weight: 600; margin-top: 14rpx; }
+.content-table-scroll { margin-top: 9rpx; width: 100%; }
+.content-table { border-left: 1rpx solid #ccd9e7; border-top: 1rpx solid #ccd9e7; min-width: 650rpx; }
+.content-table-row { display: flex; }
+.content-table-row.header { background: #edf5fd; font-weight: 600; }
+.content-table-row view { border-bottom: 1rpx solid #ccd9e7; border-right: 1rpx solid #ccd9e7; box-sizing: border-box; color: #33465b; flex: 1; font-size: 19rpx; min-width: 96rpx; padding: 8rpx 6rpx; text-align: center; }
+.content-total { color: #2478df; font-size: 21rpx; font-weight: 600; margin-top: 10rpx; text-align: right; }
+.content-clause { color: #26384c; font-size: 21rpx; line-height: 1.6; margin-top: 13rpx; }
+.content-clause view { font-weight: 600; }
+.content-clause text { color: #657587; }
+.view-contract { color: #2688e5; font-size: 22rpx; margin-top: 14rpx; padding: 8rpx 0; text-align: right; }
 .cc-created { color: #a1aaa8; font-size: 20rpx; margin-top: 12rpx; }
 .cc-actions { display: flex; gap: 14rpx; margin-top: 24rpx; }
 .cc-btn { border: none; border-radius: 18rpx; flex: 1; font-size: 26rpx; font-weight: 600; height: 78rpx; line-height: 78rpx; padding: 0; }

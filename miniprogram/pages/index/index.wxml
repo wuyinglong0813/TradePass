@@ -118,6 +118,16 @@
         </view>
       </view>
 
+      <view class="business-notice" wx:if="{{pendingSalesOrderTodo}}" bindtap="openSalesOrderNotice">
+        <view class="business-notice-icon">销</view>
+        <view class="business-notice-copy">
+          <view class="business-notice-title">{{pendingSalesOrderTodo.title}}</view>
+          <view class="business-notice-desc">{{pendingSalesOrderTodo.desc}}</view>
+        </view>
+        <view class="business-notice-count">{{pendingSalesOrderTodo.count}}</view>
+        <view class="business-notice-arrow">›</view>
+      </view>
+
       <view class="company-switch-mask" wx:if="{{showCompanySwitcher}}" bindtap="closeCompanySwitcher">
         <view class="company-switch-sheet" catchtap="noop">
           <view class="company-switch-head">

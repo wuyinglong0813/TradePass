@@ -54,17 +54,22 @@
             <view>日期：{{pdfDate}}</view>
           </view>
         </view>
-        <view class="pdf-section-line">一、产品名称、规格、数量、单价、金额、供货时间及数量</view>
-        <view class="pdf-mini-table">
+        <view class="pdf-section-line">一、{{contractTableTitle}}</view>
+        <view class="pdf-mini-table" wx:if="{{contractTableColumns.length > 0}}">
           <view class="pdf-mini-row pdf-mini-header">
-            <view>名称</view><view>规格型号</view><view>单位</view><view>数量</view><view>单价</view><view>金额</view><view>备注</view>
+            <view wx:for="{{contractTableColumns}}" wx:for-item="column" wx:key="*this">{{column}}</view>
           </view>
-          <view class="pdf-mini-row" wx:for="{{[1, 2, 3, 4, 5]}}" wx:key="*this">
-            <view></view><view></view><view></view><view></view><view></view><view></view><view></view>
+          <view class="pdf-mini-row" wx:for="{{contractTableRows}}" wx:for-item="row" wx:for-index="rowIndex" wx:key="rowIndex">
+            <view wx:for="{{row}}" wx:for-item="cell" wx:for-index="cellIndex" wx:key="cellIndex">{{cell}}</view>
           </view>
+          <view class="pdf-mini-empty" wx:if="{{contractTableRows.length === 0}}">暂无商品明细</view>
         </view>
-        <view class="pdf-clause-lines">
-          <view></view><view></view><view></view><view></view><view></view><view></view>
+        <view class="pdf-contract-total" wx:if="{{contractTotalAmount}}">
+          合计：¥{{contractTotalAmount}} <text wx:if="{{contractTotalAmountCn}}">（{{contractTotalAmountCn}}）</text>
+        </view>
+        <view class="pdf-clause-content" wx:for="{{contractClauses}}" wx:key="label">
+          <view class="pdf-clause-title">{{item.label}}</view>
+          <view class="pdf-clause-text">{{item.content || '—'}}</view>
         </view>
         <view class="pdf-sign-table">
           <view><text>供方</text><text>单位名称（章）</text><text>法定代表人</text><text>开户银行及账号</text></view>

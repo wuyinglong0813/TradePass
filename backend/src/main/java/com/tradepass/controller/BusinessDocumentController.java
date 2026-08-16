@@ -2,6 +2,7 @@ package com.tradepass.controller;
 
 import com.tradepass.common.ApiResponse;
 import com.tradepass.entity.BusinessDocument;
+import com.tradepass.dto.response.FileDataPayload;
 import com.tradepass.service.BusinessDocumentPdfService;
 import com.tradepass.service.BusinessDocumentService;
 import org.springframework.http.ContentDisposition;
@@ -83,5 +84,13 @@ public class BusinessDocumentController {
                 .contentLength(pdf.length)
                 .contentType(MediaType.APPLICATION_PDF)
                 .body(pdf);
+    }
+
+    @GetMapping("/trade-documents/{id}/pdf-data")
+    public ApiResponse<FileDataPayload> pdfData(@PathVariable Long id) {
+        BusinessDocument document = businessDocumentService.getDocument(id);
+        byte[] pdf = businessDocumentPdfService.generate(document);
+        return ApiResponse.ok(FileDataPayload.of(
+                businessDocumentPdfService.fileName(document), MediaType.APPLICATION_PDF_VALUE, pdf));
     }
 }

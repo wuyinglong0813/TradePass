@@ -2,6 +2,7 @@ package com.tradepass.controller;
 
 import com.tradepass.common.ApiResponse;
 import com.tradepass.common.BusinessException;
+import com.tradepass.dto.response.FileDataPayload;
 import com.tradepass.service.ContractAttachmentService;
 import com.tradepass.service.PersonalMemoService;
 import com.tradepass.service.ReconciliationAccountService;
@@ -22,6 +23,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+import java.util.Base64;
 
 @RestController
 @RequestMapping("/api")
@@ -71,6 +73,23 @@ public class CollaborationController {
         }
     }
 
+    @PostMapping(value = "/contracts/{contractId}/attachments/base64",
+            consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ApiResponse<Map<String, Object>> uploadAttachmentBase64(
+            @PathVariable Long contractId,
+            @RequestBody Map<String, Object> body) {
+        return ApiResponse.ok(attachmentService.upload(
+                contractId,
+                string(body, "category"),
+                string(body, "originalName"),
+                decodeBase64(body.get("contentBase64")),
+                string(body, "voucherDate"),
+                string(body, "voucherAmount"),
+                string(body, "invoiceNo"),
+                string(body, "invoiceDate"),
+                string(body, "invoiceAmount")));
+    }
+
     @PostMapping("/contract-attachments/{id}/decision")
     public ApiResponse<Map<String, Object>> decideAttachment(@PathVariable Long id,
                                                               @RequestBody Map<String, Object> body) {
@@ -84,6 +103,12 @@ public class CollaborationController {
                                                      @RequestParam(defaultValue = "false") boolean download) {
         ContractAttachmentService.FilePayload file = attachmentService.getFile(id);
         return fileResponse(file.originalName(), file.contentType(), file.data(), download);
+    }
+
+    @GetMapping("/contract-attachments/{id}/content-data")
+    public ApiResponse<FileDataPayload> attachmentContentData(@PathVariable Long id) {
+        ContractAttachmentService.FilePayload file = attachmentService.getFile(id);
+        return ApiResponse.ok(FileDataPayload.of(file.originalName(), file.contentType(), file.data()));
     }
 
     @GetMapping("/contracts/{id}/memo")
@@ -136,6 +161,15 @@ public class CollaborationController {
         return fileResponse(workbook.originalName(), workbook.contentType(), workbook.data(), download);
     }
 
+    @GetMapping("/reconciliation-accounts/{counterpartyCompanyId}/workbook-data")
+    public ApiResponse<FileDataPayload> reconciliationWorkbookData(
+            @PathVariable Long counterpartyCompanyId) {
+        ReconciliationAccountService.WorkbookPayload workbook =
+                accountService.workbook(counterpartyCompanyId);
+        return ApiResponse.ok(FileDataPayload.of(
+                workbook.originalName(), workbook.contentType(), workbook.data()));
+    }
+
     @PostMapping(value = "/reconciliation-statements", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<Map<String, Object>> uploadStatement(
             @RequestParam Long counterpartyCompanyId,
@@ -160,6 +194,25 @@ public class CollaborationController {
                                                     @RequestParam(defaultValue = "false") boolean download) {
         ReconciliationStatementService.FilePayload file = statementService.getFile(id);
         return fileResponse(file.originalName(), file.contentType(), file.data(), download);
+    }
+
+    @GetMapping("/reconciliation-statements/{id}/content-data")
+    public ApiResponse<FileDataPayload> statementContentData(@PathVariable Long id) {
+        ReconciliationStatementService.FilePayload file = statementService.getFile(id);
+        return ApiResponse.ok(FileDataPayload.of(file.originalName(), file.contentType(), file.data()));
+    }
+
+    private byte[] decodeBase64(Object value) {
+        try {
+            return Base64.getDecoder().decode(value == null ? "" : String.valueOf(value));
+        } catch (IllegalArgumentException exception) {
+            throw new BusinessException("文件读取失败，请重新选择");
+        }
+    }
+
+    private String string(Map<String, Object> body, String key) {
+        Object value = body.get(key);
+        return value == null ? null : String.valueOf(value);
     }
 
     private ResponseEntity<byte[]> fileResponse(String fileName, String contentType,
