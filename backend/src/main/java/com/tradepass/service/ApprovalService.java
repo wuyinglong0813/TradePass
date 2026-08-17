@@ -3,6 +3,7 @@ package com.tradepass.service;
 import com.tradepass.common.AuthContext;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.sql.Timestamp;
@@ -37,6 +38,116 @@ public class ApprovalService {
                 item -> String.valueOf(item.getOrDefault("createdAt", "")),
                 Comparator.reverseOrder()));
         return items;
+    }
+
+    public List<Map<String, Object>> results() {
+        long companyId = AuthContext.requireCompanyId();
+        return jdbc.query("""
+                        SELECT notification.id, notification.source_company_id,
+                               company.name AS source_company_name,
+                               notification.result_type, notification.source_id,
+                               notification.contract_id, notification.result_status,
+                               notification.title, notification.detail,
+                               notification.rejected_reason, notification.read_at,
+                               notification.created_at
+                        FROM approval_result_notification notification
+                        JOIN company ON company.id = notification.source_company_id
+                        WHERE notification.recipient_company_id = ?
+                        ORDER BY notification.created_at DESC, notification.id DESC
+                        LIMIT 100
+                        """, (rs, rowNum) -> {
+                    Map<String, Object> item = new LinkedHashMap<>();
+                    item.put("id", rs.getLong("id"));
+                    item.put("sourceCompanyId", rs.getLong("source_company_id"));
+                    item.put("sourceCompanyName", rs.getString("source_company_name"));
+                    item.put("resultType", rs.getString("result_type"));
+                    item.put("sourceId", rs.getLong("source_id"));
+                    item.put("contractId", rs.getObject("contract_id", Long.class));
+                    item.put("resultStatus", rs.getString("result_status"));
+                    item.put("title", rs.getString("title"));
+                    item.put("detail", rs.getString("detail"));
+                    item.put("rejectedReason", rs.getString("rejected_reason"));
+                    item.put("isRead", rs.getTimestamp("read_at") != null);
+                    Timestamp createdAt = rs.getTimestamp("created_at");
+                    item.put("createdAt", createdAt == null ? null : createdAt.toLocalDateTime());
+                    return item;
+                }, companyId);
+    }
+
+    public Map<String, Object> summary() {
+        long companyId = AuthContext.requireCompanyId();
+        long pendingContracts = 0;
+        if (accessControlService.hasPermission(companyId, "contract_sign")) {
+            pendingContracts = count("""
+                    SELECT COUNT(1) FROM trade_contract
+                    WHERE counterparty_company_id = ? AND status = 'PENDING'
+                    """, companyId);
+        }
+        long pendingFulfillment = 0;
+        if (accessControlService.hasPermission(companyId, "sales_order_receive")) {
+            pendingFulfillment += count("""
+                    SELECT COUNT(1) FROM business_document
+                    WHERE recipient_company_id = ? AND document_type = 'SALES_ORDER'
+                      AND status = 'ISSUED'
+                    """, companyId);
+        }
+        if (canReviewAttachments(companyId)) {
+            pendingFulfillment += count("""
+                    SELECT COUNT(1) FROM contract_attachment
+                    WHERE recipient_company_id = ? AND status = 'PENDING_CONFIRMATION'
+                      AND category IN ('PAYMENT_VOUCHER', 'INVOICE')
+                    """, companyId);
+        }
+        long unreadResults = count("""
+                SELECT COUNT(1) FROM approval_result_notification
+                WHERE recipient_company_id = ? AND read_at IS NULL
+                """, companyId);
+        Map<String, Object> summary = new LinkedHashMap<>();
+        summary.put("pendingContractCount", pendingContracts);
+        summary.put("pendingFulfillmentCount", pendingFulfillment);
+        summary.put("pendingCount", pendingContracts + pendingFulfillment);
+        summary.put("unreadResultCount", unreadResults);
+        summary.put("hasMessage", pendingContracts + pendingFulfillment + unreadResults > 0);
+        return summary;
+    }
+
+    @Transactional
+    public void markResultRead(Long id) {
+        long companyId = AuthContext.requireCompanyId();
+        jdbc.update("""
+                UPDATE approval_result_notification
+                SET read_at = COALESCE(read_at, CURRENT_TIMESTAMP)
+                WHERE id = ? AND recipient_company_id = ?
+                """, id, companyId);
+    }
+
+    @Transactional
+    public void recordResult(long recipientCompanyId, long sourceCompanyId,
+                             String resultType, long sourceId, Long contractId,
+                             String resultStatus, String title, String detail,
+                             String rejectedReason) {
+        jdbc.update("""
+                INSERT INTO approval_result_notification
+                    (recipient_company_id, source_company_id, result_type, source_id,
+                     contract_id, result_status, title, detail, rejected_reason)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE
+                    source_company_id = VALUES(source_company_id),
+                    contract_id = VALUES(contract_id),
+                    result_status = VALUES(result_status),
+                    title = VALUES(title),
+                    detail = VALUES(detail),
+                    rejected_reason = VALUES(rejected_reason),
+                    read_at = NULL,
+                    created_at = CURRENT_TIMESTAMP
+                """, recipientCompanyId, sourceCompanyId, resultType, sourceId,
+                contractId, resultStatus, title, detail,
+                rejectedReason == null || rejectedReason.isBlank() ? null : rejectedReason.trim());
+    }
+
+    private long count(String sql, long companyId) {
+        Long value = jdbc.queryForObject(sql, Long.class, companyId);
+        return value == null ? 0 : value;
     }
 
     private boolean canReviewAttachments(long companyId) {

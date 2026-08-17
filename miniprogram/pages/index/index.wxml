@@ -230,10 +230,10 @@
       <view class="section">
         <view class="section-head"><view><view class="section-title">业务工作台</view><view class="section-sub">跨公司事项统一处理</view></view></view>
         <view class="workbench-grid">
-          <view class="workbench-item" data-key="approval" bindtap="openWorkbench"><image src="/images/icons/approval.svg" mode="aspectFit"/><view class="workbench-name">待审批</view><view class="workbench-meta">合同与履约</view></view>
-          <view class="workbench-item" data-key="inventory" bindtap="openWorkbench"><image src="/images/icons/inventory.svg" mode="aspectFit"/><view class="workbench-name">库存管理</view><view class="workbench-meta">库存与入库</view></view>
           <view class="workbench-item" data-key="contracts" bindtap="openWorkbench"><image src="/images/icons/contracts.svg" mode="aspectFit"/><view class="workbench-name">全部合同</view><view class="workbench-meta">合同台账</view></view>
+          <view class="workbench-item" data-key="approval" bindtap="openWorkbench"><image src="/images/icons/approval.svg" mode="aspectFit"/><view class="workbench-dot" wx:if="{{approvalHasMessage}}"></view><view class="workbench-name">审批中心</view><view class="workbench-meta">待办与通知</view></view>
           <view class="workbench-item" data-key="reconciliation" bindtap="openWorkbench"><image src="/images/icons/reconcile.svg" mode="aspectFit"/><view class="workbench-name">对账中心</view><view class="workbench-meta">跨公司汇总</view></view>
+          <view class="workbench-item" data-key="inventory" bindtap="openWorkbench"><image src="/images/icons/inventory.svg" mode="aspectFit"/><view class="workbench-name">库存管理</view><view class="workbench-meta">库存与入库</view></view>
         </view>
       </view>
 

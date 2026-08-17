@@ -4,6 +4,11 @@ function newClientRequestId() {
   return `contract-${Date.now()}-${Math.random().toString(16).slice(2, 14)}`;
 }
 
+function normalizeNumericText(value) {
+  const text = String(value == null ? '' : value).trim();
+  return /^0+\d/.test(text) ? text.replace(/^0+(?=\d)/, '') : text;
+}
+
 Page({
   data: {
     counterpartyName: '',
@@ -138,7 +143,28 @@ Page({
   onTableCellChange(e) {
     const { row, col } = e.currentTarget.dataset;
     const rows = [...this.data.tableRows];
-    rows[row][col] = e.detail.value;
+    const value = Number(col) === 3 || Number(col) === 4
+      ? normalizeNumericText(e.detail.value)
+      : e.detail.value;
+    rows[row][col] = value;
+    this.recalcTable(rows);
+    return value;
+  },
+
+  onNumberCellFocus(e) {
+    const { row, col } = e.currentTarget.dataset;
+    const value = String((this.data.tableRows[row] || [])[col] || '').trim();
+    if (/^0(?:\.0*)?$/.test(value)) {
+      this.setData({ [`tableRows[${row}][${col}]`]: '' });
+    }
+  },
+
+  onNumberCellBlur(e) {
+    const { row, col } = e.currentTarget.dataset;
+    if (String(e.detail.value || '').trim()) return;
+    const rows = [...this.data.tableRows];
+    if (!rows[row]) rows[row] = [];
+    rows[row][col] = '0';
     this.recalcTable(rows);
   },
 

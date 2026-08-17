@@ -1,20 +1,20 @@
 <view class="approval-page">
-  <view class="approval-hero">
-    <image class="hero-mark" src="/images/brand-logo.svg" mode="aspectFit"/>
-    <view class="hero-title">待审批</view>
-    <view class="hero-desc">合同与履约资料集中处理</view>
-  </view>
-
   <view class="current-company">
-    <image src="/images/icons/company.svg" mode="aspectFit"/>
+    <view class="company-icon-shell"><image src="/images/icons/company.svg" mode="aspectFit"/></view>
     <view class="company-context">
       <view class="company-context-name">{{currentCompanyName}}</view>
-      <view class="company-context-desc">仅展示当前企业收到的待审批事项</view>
+      <view class="company-context-desc">当前企业</view>
     </view>
-    <view class="current-badge">当前企业</view>
   </view>
 
-  <view class="approval-tabs">
+  <view class="center-tabs">
+    <view class="center-tab {{activeSection === item.key ? 'active' : ''}}"
+      wx:for="{{sectionTabs}}" wx:key="key" data-key="{{item.key}}" bindtap="switchSection">
+      <text>{{item.label}}</text><text class="center-tab-count" wx:if="{{item.count > 0}}">{{item.count}}</text>
+    </view>
+  </view>
+
+  <view class="approval-tabs" wx:if="{{activeSection === 'PENDING'}}">
     <view class="approval-tab {{activeTab === item.key ? 'active' : ''}}"
       wx:for="{{tabs}}" wx:key="key" data-key="{{item.key}}" bindtap="switchTab">
       <text>{{item.label}}</text><text class="tab-count">{{item.count}}</text>
@@ -30,20 +30,45 @@
     </picker>
   </view>
 
-  <view class="loading-hint" wx:if="{{loading}}">待审批事项加载中...</view>
+  <view class="loading-hint" wx:if="{{loading}}">审批中心加载中...</view>
   <view class="empty-hint" wx:elif="{{visibleGroups.length === 0}}">
     <image src="/images/icons/approval.svg" mode="aspectFit"/>
-    <view class="empty-title">{{activeTab === 'CONTRACT' ? '暂无待审批合同' : '暂无待审批履约资料'}}</view>
+    <view class="empty-title" wx:if="{{activeSection === 'RESULT'}}">暂无处理结果</view>
+    <view class="empty-title" wx:elif="{{activeTab === 'CONTRACT'}}">暂无待审批合同</view>
+    <view class="empty-title" wx:else>暂无待审批履约资料</view>
   </view>
 
   <view class="approval-groups" wx:else>
     <view class="company-group" wx:for="{{visibleGroups}}" wx:key="companyId" wx:for-item="group">
       <view class="group-head">
         <view class="group-avatar">{{group.initial}}</view>
-        <view class="group-copy"><view class="group-name">{{group.companyName}}</view><view class="group-count">{{group.items.length}} 项待处理</view></view>
+        <view class="group-copy">
+          <view class="group-name">{{group.companyName}}</view>
+          <view class="group-count">{{group.countText}}</view>
+        </view>
       </view>
 
-      <block wx:if="{{activeTab === 'CONTRACT'}}">
+      <block wx:if="{{activeSection === 'RESULT'}}">
+        <view class="result-list">
+          <view class="result-card {{result.isRead ? 'read' : 'unread'}}"
+            wx:for="{{group.items}}" wx:key="id" wx:for-item="result"
+            data-item="{{result}}" bindtap="openResult">
+            <view class="result-icon {{result.typeClass}} {{result.statusClass}}">{{result.iconText}}</view>
+            <view class="result-copy">
+              <view class="result-title-row">
+                <view class="unread-dot" wx:if="{{!result.isRead}}"></view>
+                <view class="result-title">{{result.title}}</view>
+              </view>
+              <view class="result-detail">{{result.detail}}</view>
+              <view class="result-reason" wx:if="{{result.rejectedReason}}">原因：{{result.rejectedReason}}</view>
+              <view class="result-time">{{result.timeText}}</view>
+            </view>
+            <view class="result-arrow">›</view>
+          </view>
+        </view>
+      </block>
+
+      <block wx:elif="{{activeTab === 'CONTRACT'}}">
         <view class="approval-card" wx:for="{{group.items}}" wx:key="id" wx:for-item="contract">
           <view class="card-top">
             <view class="type-icon contract">合</view>

@@ -41,6 +41,7 @@ public class SalesOrderInventoryService {
     private final ReconciliationAccountService reconciliationAccountService;
     private final SalesOrderSignatureService signatureService;
     private final UserIdentityService userIdentityService;
+    private ApprovalService approvalService;
 
     @Autowired
     public SalesOrderInventoryService(JdbcTemplate jdbc,
@@ -61,6 +62,11 @@ public class SalesOrderInventoryService {
         this.reconciliationAccountService = reconciliationAccountService;
         this.signatureService = signatureService;
         this.userIdentityService = userIdentityService;
+    }
+
+    @Autowired
+    void setApprovalService(ApprovalService approvalService) {
+        this.approvalService = approvalService;
     }
 
     SalesOrderInventoryService(JdbcTemplate jdbc,
@@ -249,6 +255,8 @@ public class SalesOrderInventoryService {
             documentMapper.updateById(document);
             auditLogService.log(companyId, "SALES_ORDER_RECEIPT", documentId,
                     "REJECT", "驳回销售单 " + document.getDocumentNo() + "：" + reason);
+            recordSalesOrderResult(document, companyId, "REJECTED",
+                    "销售单已被驳回", "对方已驳回销售单 " + document.getDocumentNo(), reason);
             return documentDetail(documentId);
         }
         if ("INBOUNDED".equals(document.getStatus())) return documentDetail(documentId);
@@ -304,6 +312,8 @@ public class SalesOrderInventoryService {
             recordReconciliation(document);
             auditLogService.log(companyId, "SALES_ORDER_RECEIPT", receiptId,
                     "RECEIVE", "接收销售单 " + document.getDocumentNo() + "，暂不入库");
+            recordSalesOrderResult(document, companyId, "APPROVED",
+                    "销售单已确认", "对方已确认销售单 " + document.getDocumentNo(), null);
             return documentDetail(documentId);
         }
 
@@ -315,6 +325,8 @@ public class SalesOrderInventoryService {
             document.setStatus("INBOUNDED");
             documentMapper.updateById(document);
             recordReconciliation(document);
+            recordSalesOrderResult(document, companyId, "INBOUNDED",
+                    "销售单已确认并入库", "对方已确认并入库销售单 " + document.getDocumentNo(), null);
             return documentDetail(documentId);
         }
 
@@ -374,7 +386,18 @@ public class SalesOrderInventoryService {
         recordReconciliation(document);
         auditLogService.log(companyId, "INVENTORY_INBOUND", inboundId,
                 "CREATE", "销售单 " + document.getDocumentNo() + " 接收并入库至仓库 " + warehouseId);
+        recordSalesOrderResult(document, companyId, "INBOUNDED",
+                "销售单已确认并入库", "对方已确认并入库销售单 " + document.getDocumentNo(), null);
         return documentDetail(documentId);
+    }
+
+    private void recordSalesOrderResult(BusinessDocument document, long sourceCompanyId,
+                                        String resultStatus, String title, String detail,
+                                        String rejectedReason) {
+        if (approvalService == null || document.getCompanyId() == null || document.getId() == null) return;
+        approvalService.recordResult(document.getCompanyId(), sourceCompanyId,
+                "SALES_ORDER", document.getId(), document.getContractId(), resultStatus,
+                title, detail, rejectedReason);
     }
 
     private BusinessDocument requireDocumentParty(Long documentId, long companyId) {

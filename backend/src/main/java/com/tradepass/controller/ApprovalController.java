@@ -3,6 +3,8 @@ package com.tradepass.controller;
 import com.tradepass.common.ApiResponse;
 import com.tradepass.service.ApprovalService;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -21,5 +23,21 @@ public class ApprovalController {
     @GetMapping("/fulfillment")
     public ApiResponse<List<Map<String, Object>>> pendingFulfillment() {
         return ApiResponse.ok(approvalService.pendingFulfillment());
+    }
+
+    @GetMapping("/results")
+    public ApiResponse<List<Map<String, Object>>> results() {
+        return ApiResponse.ok(approvalService.results());
+    }
+
+    @GetMapping("/summary")
+    public ApiResponse<Map<String, Object>> summary() {
+        return ApiResponse.ok(approvalService.summary());
+    }
+
+    @PostMapping("/results/{id}/read")
+    public ApiResponse<Void> markResultRead(@PathVariable Long id) {
+        approvalService.markResultRead(id);
+        return ApiResponse.ok(null);
     }
 }

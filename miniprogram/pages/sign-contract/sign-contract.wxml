@@ -82,7 +82,7 @@
                 <input class="td-input num auto" type="digit" value="{{row[ci]}}" disabled/>
               </block>
               <block wx:elif="{{ci === 3 || ci === 4}}">
-                <input class="td-input num" type="digit" value="{{row[ci]}}" data-row="{{ri}}" data-col="{{ci}}" bindinput="onTableCellChange"/>
+                <input class="td-input num" type="digit" value="{{row[ci]}}" data-row="{{ri}}" data-col="{{ci}}" bindfocus="onNumberCellFocus" bindblur="onNumberCellBlur" bindinput="onTableCellChange"/>
               </block>
               <block wx:else>
                 <input class="td-input" type="text" value="{{row[ci]}}" data-row="{{ri}}" data-col="{{ci}}" bindinput="onTableCellChange"/>

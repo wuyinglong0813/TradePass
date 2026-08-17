@@ -32,6 +32,7 @@ public class ContractAttachmentService {
     private final ObjectStorageService objectStorageService;
     private final StorageProperties storageProperties;
     private final ReconciliationAccountService reconciliationAccountService;
+    private ApprovalService approvalService;
 
     @Autowired
     public ContractAttachmentService(JdbcTemplate jdbc,
@@ -48,6 +49,11 @@ public class ContractAttachmentService {
         this.objectStorageService = objectStorageService;
         this.storageProperties = storageProperties;
         this.reconciliationAccountService = reconciliationAccountService;
+    }
+
+    @Autowired
+    void setApprovalService(ApprovalService approvalService) {
+        this.approvalService = approvalService;
     }
 
     ContractAttachmentService(JdbcTemplate jdbc,
@@ -230,6 +236,10 @@ public class ContractAttachmentService {
                     """, AuthContext.userId(), safeReason, id);
             auditLogService.log(companyId, "CONTRACT_ATTACHMENT", id,
                     "REJECT", "驳回" + categoryLabel(attachment.category()) + "：" + safeReason);
+            recordAttachmentResult(attachment, companyId, "REJECTED",
+                    categoryLabel(attachment.category()) + "已被驳回",
+                    "对方已驳回" + categoryLabel(attachment.category()) + " " + attachment.originalName(),
+                    safeReason);
             return findView(attachment.contractId(), attachment.category(), id);
         }
 
@@ -252,7 +262,20 @@ public class ContractAttachmentService {
         }
         auditLogService.log(companyId, "CONTRACT_ATTACHMENT", id,
                 "APPROVE", "确认" + categoryLabel(attachment.category()) + " " + attachment.originalName());
+        recordAttachmentResult(attachment, companyId, "APPROVED",
+                categoryLabel(attachment.category()) + "已通过",
+                "对方已确认" + categoryLabel(attachment.category()) + " " + attachment.originalName(),
+                null);
         return findView(attachment.contractId(), attachment.category(), id);
+    }
+
+    private void recordAttachmentResult(AttachmentRecord attachment, long sourceCompanyId,
+                                        String resultStatus, String title, String detail,
+                                        String rejectedReason) {
+        if (approvalService == null || attachment.uploaderCompanyId() == null) return;
+        approvalService.recordResult(attachment.uploaderCompanyId(), sourceCompanyId,
+                attachment.category(), attachment.id(), attachment.contractId(), resultStatus,
+                title, detail, rejectedReason);
     }
 
     public FilePayload getFile(Long id) {

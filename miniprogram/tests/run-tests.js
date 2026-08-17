@@ -170,7 +170,7 @@ test('experience build uses one native tab bar and size-safe file transfer', () 
   assert.ok(transfer.includes("header['X-Company-Id']"));
 });
 
-test('home merges approval entries and moves sales-order confirmations into pending approval', () => {
+test('home exposes the ordered approval center with a message indicator', () => {
   const homeScript = fs.readFileSync(
     path.join(__dirname, '..', 'pages', 'index', 'index.js'), 'utf8'
   );
@@ -181,7 +181,14 @@ test('home merges approval entries and moves sales-order confirmations into pend
   assert.ok(!homeTemplate.includes('pendingSalesOrderTodo'));
   assert.ok(homeTemplate.includes('data-key="approval"'));
   assert.ok(homeTemplate.includes('data-key="inventory"'));
-  assert.ok(homeTemplate.includes('待审批'));
+  assert.ok(homeTemplate.includes('审批中心'));
+  assert.ok(homeTemplate.includes('approvalHasMessage'));
+  assert.ok(homeScript.includes('/approvals/summary'));
+  const workbenchKeys = [...homeTemplate.matchAll(/data-key="(contracts|approval|reconciliation|inventory)"/g)]
+    .map(match => match[1]);
+  assert.deepStrictEqual(workbenchKeys.slice(-4), [
+    'contracts', 'approval', 'reconciliation', 'inventory'
+  ]);
   const approvalScript = fs.readFileSync(
     path.join(__dirname, '..', 'pages', 'contract-approval', 'contract-approval.js'), 'utf8'
   );
@@ -189,9 +196,58 @@ test('home merges approval entries and moves sales-order confirmations into pend
     path.join(__dirname, '..', 'pages', 'contract-approval', 'contract-approval.wxml'), 'utf8'
   );
   assert.ok(approvalScript.includes('/approvals/fulfillment'));
+  assert.ok(approvalScript.includes('/approvals/results'));
+  assert.ok(approvalScript.includes("label: '待我处理'"));
+  assert.ok(approvalScript.includes("label: '处理结果'"));
   assert.ok(approvalScript.includes('sales-order-detail'));
-  assert.ok(approvalScript.includes("label: '合同待审批'"));
-  assert.ok(approvalScript.includes("label: '履约资料待审批'"));
+  assert.ok(approvalScript.includes("label: '合同'"));
+  assert.ok(approvalScript.includes("label: '履约资料'"));
+  assert.ok(approvalTemplate.includes('result-reason'));
+  assert.ok(!approvalTemplate.includes('approval-hero'));
+  const approvalStyles = fs.readFileSync(
+    path.join(__dirname, '..', 'pages', 'contract-approval', 'contract-approval.wxss'), 'utf8'
+  );
+  assert.ok(approvalStyles.includes('border-bottom-color: #2185e8'));
+});
+
+test('contract ledger gives each company group a distinct section boundary', () => {
+  const styles = fs.readFileSync(
+    path.join(__dirname, '..', 'pages', 'contract-center', 'contract-center.wxss'), 'utf8'
+  );
+  assert.ok(styles.includes('.company-group + .company-group'));
+  assert.ok(styles.includes('border-left: 7rpx solid #2e91ea'));
+  assert.ok(styles.includes('background: #e5f1fd'));
+});
+
+test('contract numeric cells clear zero on focus and normalize leading zeros', () => {
+  const signContract = loadPage('../pages/sign-contract/sign-contract');
+  let focusedPatch;
+  signContract.onNumberCellFocus.call({
+    data: { tableRows: [['商品', '', '件', '0', '0', '0']] },
+    setData: patch => { focusedPatch = patch; }
+  }, { currentTarget: { dataset: { row: 0, col: 3 } } });
+  assert.deepStrictEqual(focusedPatch, { 'tableRows[0][3]': '' });
+
+  let recalculatedRows;
+  const normalized = signContract.onTableCellChange.call({
+    data: { tableRows: [['商品', '', '件', '0', '0', '0']] },
+    recalcTable: rows => { recalculatedRows = rows; }
+  }, {
+    currentTarget: { dataset: { row: 0, col: 3 } },
+    detail: { value: '0100' }
+  });
+  assert.strictEqual(normalized, '100');
+  assert.strictEqual(recalculatedRows[0][3], '100');
+
+  const signTemplate = fs.readFileSync(
+    path.join(__dirname, '..', 'pages', 'sign-contract', 'sign-contract.wxml'), 'utf8'
+  );
+  const templateEditor = fs.readFileSync(
+    path.join(__dirname, '..', 'pages', 'contract-template-detail', 'contract-template-detail.wxml'), 'utf8'
+  );
+  assert.ok(signTemplate.includes('bindfocus="onNumberCellFocus"'));
+  assert.ok(signTemplate.includes('bindblur="onNumberCellBlur"'));
+  assert.ok(templateEditor.includes('bindfocus="onNumberCellFocus"'));
 });
 
 test('company search confirmation does not depend on sensitive company fields', () => {

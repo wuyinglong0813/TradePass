@@ -44,6 +44,7 @@ class SalesOrderInventoryServiceTest {
     private AccessControlService accessControlService;
     private SalesOrderSignatureService signatureService;
     private UserIdentityService userIdentityService;
+    private ApprovalService approvalService;
     private SalesOrderInventoryService service;
     private BusinessDocument document;
     private TradeContract contract;
@@ -58,12 +59,14 @@ class SalesOrderInventoryServiceTest {
         accessControlService = mock(AccessControlService.class);
         signatureService = mock(SalesOrderSignatureService.class);
         userIdentityService = mock(UserIdentityService.class);
+        approvalService = mock(ApprovalService.class);
         when(accessControlService.hasPermission(4L, "sales_order_receive")).thenReturn(true);
         when(accessControlService.hasPermission(4L, "inventory_receive")).thenReturn(true);
         when(userIdentityService.requireCurrentVerifiedName(4L)).thenReturn("张采购");
         service = new SalesOrderInventoryService(jdbc, documentMapper, contractMapper,
                 accessControlService, mock(AuditLogService.class), new ObjectMapper(),
                 null, signatureService, userIdentityService);
+        service.setApprovalService(approvalService);
 
         document = new BusinessDocument();
         document.setId(31L);
@@ -240,6 +243,8 @@ class SalesOrderInventoryServiceTest {
                 .containsEntry("canInbound", true);
         assertThat(document.getAcknowledgedBy()).isEqualTo(8L);
         verify(signatureService).save(4L, 31L, 60L, "张采购", "签名.png", SIGNATURE);
+        verify(approvalService).recordResult(3L, 4L, "SALES_ORDER", 31L, 12L,
+                "APPROVED", "销售单已确认", "对方已确认销售单 XS-31", null);
 
         assertThatThrownBy(() -> service.receive(31L, "bad", null))
                 .isInstanceOf(BusinessException.class).hasMessage("接收方式不正确");
@@ -264,6 +269,8 @@ class SalesOrderInventoryServiceTest {
         assertThat(result).containsEntry("status", "REJECTED")
                 .containsEntry("statusText", "已驳回")
                 .containsEntry("rejectedReason", "金额需要核对");
+        verify(approvalService).recordResult(3L, 4L, "SALES_ORDER", 31L, 12L,
+                "REJECTED", "销售单已被驳回", "对方已驳回销售单 XS-31", "金额需要核对");
         assertThatThrownBy(() -> service.receive(31L, "REJECT", null, ""))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("当前状态不能驳回");

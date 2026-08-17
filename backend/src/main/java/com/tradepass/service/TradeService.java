@@ -51,6 +51,7 @@ public class TradeService {
     private final AuditLogService auditLogService;
     private final RankingCacheService rankingCache;
     private final ContractArchiveService contractArchiveService;
+    private ApprovalService approvalService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Autowired
@@ -74,6 +75,11 @@ public class TradeService {
         this.auditLogService = auditLogService;
         this.rankingCache = rankingCache;
         this.contractArchiveService = contractArchiveService;
+    }
+
+    @Autowired
+    void setApprovalService(ApprovalService approvalService) {
+        this.approvalService = approvalService;
     }
 
     TradeService(TradeOrderMapper tradeOrderMapper,
@@ -479,6 +485,8 @@ public class TradeService {
         }
         auditLogService.log(companyId, "CONTRACT", id, "APPROVE",
                 "签署合同 " + contract.getContractNo());
+        recordContractResult(contract, companyId, "APPROVED",
+                "合同已签署并生效", "对方已签署合同 " + contract.getContractNo());
         return "合同已签署生效";
     }
 
@@ -495,7 +503,17 @@ public class TradeService {
                 .set(TradeContract::getApprovedAt, LocalDateTime.now()));
         auditLogService.log(companyId, "CONTRACT", id, "REJECT",
                 "拒绝合同 " + contract.getContractNo());
+        recordContractResult(contract, companyId, "REJECTED",
+                "合同已被拒绝", "对方已拒绝合同 " + contract.getContractNo());
         return "合同已拒绝";
+    }
+
+    private void recordContractResult(TradeContract contract, long sourceCompanyId,
+                                      String resultStatus, String title, String detail) {
+        if (approvalService == null || contract.getCompanyId() == null || contract.getId() == null) return;
+        approvalService.recordResult(contract.getCompanyId(), sourceCompanyId,
+                "CONTRACT", contract.getId(), contract.getId(), resultStatus,
+                title, detail, null);
     }
 
     public List<ContractPayload> myInitiatedContracts() {
@@ -513,7 +531,9 @@ public class TradeService {
         if (companyId == null) {
             return List.of();
         }
-        accessControlService.requirePermission(companyId, "contract_sign");
+        if (!accessControlService.hasPermission(companyId, "contract_sign")) {
+            return List.of();
+        }
         return tradeContractMapper.selectList(new LambdaQueryWrapper<TradeContract>()
                         .eq(TradeContract::getCounterpartyCompanyId, companyId)
                         .eq(TradeContract::getStatus, "PENDING")

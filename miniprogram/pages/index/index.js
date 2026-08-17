@@ -39,6 +39,7 @@ Page({
     counterpartyEmptyBtn: '',
     isLoggedIn: false,
     userName: '',
+    approvalHasMessage: false,
 
     // 数据统计
     stats: { totalAmount: 0, totalOrders: 0, counterpartyCount: 0 },
@@ -100,6 +101,7 @@ Page({
     if (!this.data.showJoinForm) {
       this.loadHome();
       this.loadCounterparties();
+      this.loadApprovalIndicator();
     }
   },
 
@@ -110,7 +112,7 @@ Page({
       return;
     }
     if (!this.data.showJoinForm) {
-      Promise.all([this.loadHome(), this.loadCounterparties()]).finally(() => {
+      Promise.all([this.loadHome(), this.loadCounterparties(), this.loadApprovalIndicator()]).finally(() => {
         wx.stopPullDownRefresh();
       });
     } else {
@@ -186,7 +188,7 @@ Page({
       });
       setTabBarHidden(this, false);
       this.initRoleFromMember();
-      await Promise.all([this.loadHome(), this.loadCounterparties()]);
+      await Promise.all([this.loadHome(), this.loadCounterparties(), this.loadApprovalIndicator()]);
       wx.showToast({ title: '企业已切换', icon: 'success' });
     } catch (e) {
       this.setData({ switchingCompanyId: '' });
@@ -311,6 +313,20 @@ Page({
     } catch (error) {
       this.setData({ counterparties: [], relationCounterparties: [] });
       this.refreshPartnerCompanies();
+    }
+  },
+
+  async loadApprovalIndicator() {
+    try {
+      const companyId = app.getCurrentCompanyId();
+      if (!companyId) {
+        this.setData({ approvalHasMessage: false });
+        return;
+      }
+      const summary = await request({ url: '/approvals/summary' });
+      this.setData({ approvalHasMessage: !!(summary && summary.hasMessage) });
+    } catch (error) {
+      this.setData({ approvalHasMessage: false });
     }
   },
 

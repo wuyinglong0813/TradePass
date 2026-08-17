@@ -624,6 +624,18 @@ page {
   width: 88rpx;
 }
 
+.workbench-dot {
+  background: #f04b4b;
+  border: 4rpx solid #fff;
+  border-radius: 50%;
+  box-sizing: border-box;
+  height: 22rpx;
+  left: calc(50% + 25rpx);
+  position: absolute;
+  top: -2rpx;
+  width: 22rpx;
+}
+
 .workbench-name {
   color: #25343f;
   font-size: 23rpx;

@@ -15,16 +15,34 @@ function currentCompanyName() {
   return (company && company.companyName) || '当前企业';
 }
 
+function resultIcon(type) {
+  if (type === 'CONTRACT') return '合';
+  if (type === 'SALES_ORDER') return '销';
+  if (type === 'INVOICE') return '票';
+  return '款';
+}
+
+function formatResultTime(value) {
+  const text = String(value || '').replace('T', ' ');
+  return text ? text.substring(0, 16) : '';
+}
+
 Page({
   data: {
     currentCompanyName: '',
+    activeSection: 'PENDING',
+    sectionTabs: [
+      { key: 'PENDING', label: '待我处理', count: 0 },
+      { key: 'RESULT', label: '处理结果', count: 0 }
+    ],
     activeTab: 'CONTRACT',
     tabs: [
-      { key: 'CONTRACT', label: '合同待审批', count: 0 },
-      { key: 'FULFILLMENT', label: '履约资料待审批', count: 0 }
+      { key: 'CONTRACT', label: '合同', count: 0 },
+      { key: 'FULFILLMENT', label: '履约资料', count: 0 }
     ],
     contracts: [],
     fulfillmentItems: [],
+    results: [],
     visibleGroups: [],
     companyOptions: [{ id: '', name: '全部往来公司' }],
     companyIndex: 0,
@@ -45,9 +63,10 @@ Page({
     if (this.data.loading) return;
     this.setData({ loading: true });
     try {
-      const [contractList, fulfillmentList] = await Promise.all([
+      const [contractList, fulfillmentList, resultList] = await Promise.all([
         request({ url: '/contracts/pending' }),
-        request({ url: '/approvals/fulfillment' })
+        request({ url: '/approvals/fulfillment' }),
+        request({ url: '/approvals/results' })
       ]);
       const contracts = (contractList || []).map(item => ({
         ...item,
@@ -69,20 +88,46 @@ Page({
           : (item.approvalType === 'INVOICE' ? '票' : '款'),
         typeClass: String(item.approvalType || '').toLowerCase()
       }));
+      const results = (resultList || []).map(item => ({
+        ...item,
+        id: Number(item.id),
+        sourceId: Number(item.sourceId),
+        contractId: item.contractId == null ? null : Number(item.contractId),
+        companyId: String(item.sourceCompanyId || ''),
+        companyName: item.sourceCompanyName || '往来公司',
+        iconText: resultIcon(item.resultType),
+        typeClass: String(item.resultType || '').toLowerCase(),
+        statusClass: item.resultStatus === 'REJECTED' ? 'rejected' : 'approved',
+        isRead: !!item.isRead,
+        timeText: formatResultTime(item.createdAt)
+      }));
+      const unreadResultCount = results.filter(item => !item.isRead).length;
       this.setData({
         contracts,
         fulfillmentItems,
+        results,
+        sectionTabs: [
+          { key: 'PENDING', label: '待我处理', count: contracts.length + fulfillmentItems.length },
+          { key: 'RESULT', label: '处理结果', count: unreadResultCount }
+        ],
         tabs: [
-          { key: 'CONTRACT', label: '合同待审批', count: contracts.length },
-          { key: 'FULFILLMENT', label: '履约资料待审批', count: fulfillmentItems.length }
+          { key: 'CONTRACT', label: '合同', count: contracts.length },
+          { key: 'FULFILLMENT', label: '履约资料', count: fulfillmentItems.length }
         ]
       });
       this.rebuildGroups(false);
     } catch (error) {
-      wx.showToast({ title: error.message || '待审批事项加载失败', icon: 'none' });
+      wx.showToast({ title: error.message || '审批中心加载失败', icon: 'none' });
     } finally {
       this.setData({ loading: false });
     }
+  },
+
+  switchSection(e) {
+    const activeSection = e.currentTarget.dataset.key;
+    if (!activeSection || activeSection === this.data.activeSection) return;
+    this.setData({ activeSection, selectedCompanyId: '', companyIndex: 0 });
+    this.rebuildGroups(true);
   },
 
   switchTab(e) {
@@ -100,8 +145,10 @@ Page({
   },
 
   rebuildGroups(resetCompany) {
-    const source = this.data.activeTab === 'CONTRACT'
-      ? this.data.contracts : this.data.fulfillmentItems;
+    const viewingResults = this.data.activeSection === 'RESULT';
+    const source = viewingResults
+      ? this.data.results
+      : (this.data.activeTab === 'CONTRACT' ? this.data.contracts : this.data.fulfillmentItems);
     const companies = [];
     const seen = new Set();
     source.forEach(item => {
@@ -128,17 +175,56 @@ Page({
             companyId: id,
             companyName: item.companyName || '往来公司',
             initial: String(item.companyName || '企').substring(0, 1),
+            unreadCount: 0,
             items: []
           });
         }
-        grouped.get(id).items.push(item);
+        const group = grouped.get(id);
+        group.items.push(item);
+        if (viewingResults && !item.isRead) group.unreadCount += 1;
       });
+    const visibleGroups = Array.from(grouped.values()).map(group => ({
+      ...group,
+      countText: viewingResults
+        ? (group.unreadCount > 0 ? `${group.unreadCount} 条未读结果` : `${group.items.length} 条结果通知`)
+        : `${group.items.length} 项待处理`
+    }));
     this.setData({
       companyOptions,
       companyIndex,
       selectedCompanyId,
-      visibleGroups: Array.from(grouped.values())
+      visibleGroups
     });
+  },
+
+  async openResult(e) {
+    const item = e.currentTarget.dataset.item;
+    if (!item || !item.id) return;
+    if (!item.isRead) {
+      try {
+        await request({ url: `/approvals/results/${item.id}/read`, method: 'POST' });
+        const results = this.data.results.map(result => (
+          result.id === item.id ? { ...result, isRead: true } : result
+        ));
+        const unreadResultCount = results.filter(result => !result.isRead).length;
+        this.setData({
+          results,
+          sectionTabs: this.data.sectionTabs.map(tab => (
+            tab.key === 'RESULT' ? { ...tab, count: unreadResultCount } : tab
+          ))
+        });
+        this.rebuildGroups(false);
+      } catch (error) {
+        wx.showToast({ title: error.message || '通知状态更新失败', icon: 'none' });
+      }
+    }
+    if (item.resultType === 'SALES_ORDER') {
+      wx.navigateTo({ url: `/pages/sales-order-detail/sales-order-detail?id=${item.sourceId}` });
+      return;
+    }
+    if (item.contractId) {
+      wx.navigateTo({ url: `/pages/contract-preview/contract-preview?contractId=${item.contractId}` });
+    }
   },
 
   viewContract(e) {

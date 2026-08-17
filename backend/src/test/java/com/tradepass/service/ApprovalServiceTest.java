@@ -1,0 +1,48 @@
+package com.tradepass.service;
+
+import com.tradepass.common.AuthContext;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.springframework.jdbc.core.JdbcTemplate;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+
+class ApprovalServiceTest {
+    private final JdbcTemplate jdbc = mock(JdbcTemplate.class);
+    private final ApprovalService service = new ApprovalService(
+            jdbc, mock(AccessControlService.class));
+
+    @AfterEach
+    void clearContext() {
+        AuthContext.clear();
+    }
+
+    @Test
+    void recordsCompanyResultAsUnreadAndPreservesRejectionReason() {
+        service.recordResult(3L, 4L, "INVOICE", 18L, 12L,
+                "REJECTED", "发票已被驳回", "对方已驳回发票 invoice.pdf", "金额不一致");
+
+        ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<Object[]> values = ArgumentCaptor.forClass(Object[].class);
+        verify(jdbc).update(sql.capture(), values.capture());
+        assertThat(sql.getValue()).contains("approval_result_notification", "read_at = NULL");
+        assertThat(values.getValue()).containsExactly(
+                3L, 4L, "INVOICE", 18L, 12L, "REJECTED",
+                "发票已被驳回", "对方已驳回发票 invoice.pdf", "金额不一致");
+    }
+
+    @Test
+    void marksOnlyCurrentCompanyResultAsRead() {
+        AuthContext.set(7L, 3L);
+
+        service.markResultRead(22L);
+
+        ArgumentCaptor<Object[]> values = ArgumentCaptor.forClass(Object[].class);
+        verify(jdbc).update(anyString(), values.capture());
+        assertThat(values.getValue()).containsExactly(22L, 3L);
+    }
+}

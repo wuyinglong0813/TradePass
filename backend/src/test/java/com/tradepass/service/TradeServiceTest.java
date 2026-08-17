@@ -50,6 +50,7 @@ class TradeServiceTest {
     private AuditLogService auditLogService;
     private RankingCacheService rankingCache;
     private ContractArchiveService contractArchiveService;
+    private ApprovalService approvalService;
     private TradeService service;
 
     @BeforeEach
@@ -68,9 +69,11 @@ class TradeServiceTest {
         auditLogService = mock(AuditLogService.class);
         rankingCache = mock(RankingCacheService.class);
         contractArchiveService = mock(ContractArchiveService.class);
+        approvalService = mock(ApprovalService.class);
         service = new TradeService(orderMapper, relationMapper, categoryMapper, templateMapper,
                 contractMapper, companyMapper, accessControl, auditLogService,
                 rankingCache, contractArchiveService);
+        service.setApprovalService(approvalService);
         AuthContext.set(7L, 3L);
     }
 
@@ -270,7 +273,11 @@ class TradeServiceTest {
         assertThat(service.approveContract(20L)).isEqualTo("合同已签署生效");
         verify(contractArchiveService).archiveOnApproval(any(ContractPayload.class),
                 org.mockito.ArgumentMatchers.eq(7L));
+        verify(approvalService).recordResult(9L, 3L, "CONTRACT", 20L, 20L,
+                "APPROVED", "合同已签署并生效", "对方已签署合同 HT-TEST", null);
         assertThat(service.rejectContract(20L)).isEqualTo("合同已拒绝");
+        verify(approvalService).recordResult(9L, 3L, "CONTRACT", 20L, 20L,
+                "REJECTED", "合同已被拒绝", "对方已拒绝合同 HT-TEST", null);
     }
 
     @Test
@@ -290,6 +297,7 @@ class TradeServiceTest {
         pending.setName("待签合同");
         pending.setStatus("PENDING");
         pending.setInitiatedBy(8L);
+        when(accessControl.hasPermission(3L, "contract_sign")).thenReturn(true);
         when(contractMapper.selectList(any(Wrapper.class))).thenReturn(List.of(pending));
 
         assertThat(service.pendingContracts()).extracting(ContractPayload::id).containsExactly("1");
