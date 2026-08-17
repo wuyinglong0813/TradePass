@@ -22,13 +22,18 @@ button::after { border: 0; }
 .empty-inline { color: #929eac; font-size: 22rpx; padding: 25rpx; text-align: center; }
 .inventory-head { padding-top: 32rpx; }
 .balance-list { padding: 0 24rpx; }
-.balance-card { align-items: center; background: #fff; border: 1rpx solid #dfe8f3; border-radius: 17rpx; display: flex; justify-content: space-between; margin-bottom: 13rpx; padding: 21rpx; }
+.balance-card { background: #fff; border: 1rpx solid #dfe8f3; border-radius: 17rpx; margin-bottom: 13rpx; padding: 21rpx; }
+.balance-head { align-items: center; display: flex; justify-content: space-between; }
 .balance-main { min-width: 0; }
 .product-name { color: #26394f; font-size: 26rpx; font-weight: 700; }
 .product-meta { color: #96a1af; font-size: 20rpx; margin-top: 5rpx; }
 .quantity { color: #2586e2; flex-shrink: 0; margin-left: 15rpx; }
 .quantity text { font-size: 34rpx; font-weight: 700; }
 .quantity label { font-size: 21rpx; margin-left: 5rpx; }
+.price-row { border-top: 1rpx solid #edf1f6; display: grid; gap: 18rpx; grid-template-columns: 1fr 1fr; margin-top: 18rpx; padding-top: 17rpx; }
+.price-row view { display: flex; flex-direction: column; min-width: 0; }
+.price-row label { color: #96a1af; font-size: 19rpx; }
+.price-row text { color: #2b3c50; font-size: 23rpx; font-weight: 650; margin-top: 5rpx; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .empty { align-items: center; color: #8290a0; display: flex; flex-direction: column; padding: 70rpx 20rpx; }
 .empty image { height: 86rpx; opacity: .65; width: 86rpx; }
 .empty view { font-size: 26rpx; margin-top: 13rpx; }

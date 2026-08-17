@@ -27,7 +27,13 @@ Page({
         request({ url: '/inventory/overview' }),
         request({ url: '/warehouses' })
       ]);
-      this.setData({ overview: overview || this.data.overview, warehouses: warehouses || [] });
+      const nextOverview = overview || this.data.overview;
+      nextOverview.balances = (nextOverview.balances || []).map(item => ({
+        ...item,
+        unitPriceText: Number(item.unitPrice || 0).toFixed(2),
+        inventoryAmountText: Number(item.inventoryAmount || 0).toFixed(2)
+      }));
+      this.setData({ overview: nextOverview, warehouses: warehouses || [] });
     } catch (error) {
       wx.showToast({ title: error.message || '库存加载失败', icon: 'none' });
     } finally {

@@ -40,6 +40,7 @@ public class BusinessDocumentService {
     private final AuditLogService auditLogService;
     private final ObjectMapper objectMapper;
     private final SalesOrderInventoryService inventoryService;
+    private final UserIdentityService userIdentityService;
 
     @Autowired
     public BusinessDocumentService(BusinessDocumentTemplateMapper templateMapper,
@@ -49,7 +50,8 @@ public class BusinessDocumentService {
                                    AccessControlService accessControlService,
                                    AuditLogService auditLogService,
                                    ObjectMapper objectMapper,
-                                   SalesOrderInventoryService inventoryService) {
+                                   SalesOrderInventoryService inventoryService,
+                                   UserIdentityService userIdentityService) {
         this.templateMapper = templateMapper;
         this.documentMapper = documentMapper;
         this.contractMapper = contractMapper;
@@ -58,6 +60,7 @@ public class BusinessDocumentService {
         this.auditLogService = auditLogService;
         this.objectMapper = objectMapper;
         this.inventoryService = inventoryService;
+        this.userIdentityService = userIdentityService;
     }
 
     BusinessDocumentService(BusinessDocumentTemplateMapper templateMapper,
@@ -68,7 +71,7 @@ public class BusinessDocumentService {
                             AuditLogService auditLogService,
                             ObjectMapper objectMapper) {
         this(templateMapper, documentMapper, contractMapper, companyMapper,
-                accessControlService, auditLogService, objectMapper, null);
+                accessControlService, auditLogService, objectMapper, null, null);
     }
 
     public List<Map<String, Object>> listTemplates(String type) {
@@ -181,7 +184,9 @@ public class BusinessDocumentService {
         document.setDocumentNo(createDocumentNo(type));
         document.setTemplateId(template.getId());
         document.setTemplateName(template.getName());
-        String snapshot = createSnapshot(type, template, contract, company);
+        String preparedByName = userIdentityService == null
+                ? "用户" + AuthContext.userId() : userIdentityService.currentDisplayName();
+        String snapshot = createSnapshot(type, template, contract, company, preparedByName);
         document.setContent(applySnapshotEdits(snapshot, body.get("content")));
         document.setCreatedBy(AuthContext.userId());
         documentMapper.insert(document);
@@ -278,7 +283,7 @@ public class BusinessDocumentService {
     }
 
     private String createSnapshot(String type, BusinessDocumentTemplate template,
-                                  TradeContract contract, Company company) {
+                                  TradeContract contract, Company company, String preparedByName) {
         try {
             JsonNode templateContent = objectMapper.readTree(
                     normalizeTemplateContent(type, template.getContent()));
@@ -294,6 +299,7 @@ public class BusinessDocumentService {
             snapshot.put("documentNo", "");
             snapshot.put("date", LocalDate.now().toString());
             snapshot.put("templateName", template.getName());
+            snapshot.put("preparedByName", safe(preparedByName));
             snapshot.put("blankRows", Math.max(
                     8,
                     templateContent.path("blankRows").asInt(0)));

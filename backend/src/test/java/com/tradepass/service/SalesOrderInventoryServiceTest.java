@@ -24,6 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doReturn;
@@ -33,10 +34,16 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class SalesOrderInventoryServiceTest {
+    private static final byte[] SIGNATURE = new byte[]{
+            (byte) 0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a
+    };
+
     private JdbcTemplate jdbc;
     private BusinessDocumentMapper documentMapper;
     private TradeContractMapper contractMapper;
     private AccessControlService accessControlService;
+    private SalesOrderSignatureService signatureService;
+    private UserIdentityService userIdentityService;
     private SalesOrderInventoryService service;
     private BusinessDocument document;
     private TradeContract contract;
@@ -49,10 +56,14 @@ class SalesOrderInventoryServiceTest {
         documentMapper = mock(BusinessDocumentMapper.class);
         contractMapper = mock(TradeContractMapper.class);
         accessControlService = mock(AccessControlService.class);
+        signatureService = mock(SalesOrderSignatureService.class);
+        userIdentityService = mock(UserIdentityService.class);
         when(accessControlService.hasPermission(4L, "sales_order_receive")).thenReturn(true);
         when(accessControlService.hasPermission(4L, "inventory_receive")).thenReturn(true);
+        when(userIdentityService.requireCurrentVerifiedName(4L)).thenReturn("张采购");
         service = new SalesOrderInventoryService(jdbc, documentMapper, contractMapper,
-                accessControlService, mock(AuditLogService.class), new ObjectMapper());
+                accessControlService, mock(AuditLogService.class), new ObjectMapper(),
+                null, signatureService, userIdentityService);
 
         document = new BusinessDocument();
         document.setId(31L);
@@ -223,13 +234,24 @@ class SalesOrderInventoryServiceTest {
         doReturn(List.of(item)).when(jdbc).query(anyString(), any(RowMapper.class), any(Object[].class));
         when(jdbc.queryForObject(anyString(), eq(Long.class))).thenReturn(60L);
 
-        Map<String, Object> result = service.receive(31L, "receive_only", null);
+        Map<String, Object> result = service.receive(
+                31L, "receive_only", null, null, "签名.png", SIGNATURE);
         assertThat(result).containsEntry("status", "ACKNOWLEDGED")
                 .containsEntry("canInbound", true);
         assertThat(document.getAcknowledgedBy()).isEqualTo(8L);
+        verify(signatureService).save(4L, 31L, 60L, "张采购", "签名.png", SIGNATURE);
 
         assertThatThrownBy(() -> service.receive(31L, "bad", null))
                 .isInstanceOf(BusinessException.class).hasMessage("接收方式不正确");
+    }
+
+    @Test
+    void initialConfirmationRequiresHandwrittenSignature() {
+        document.setStatus("ISSUED");
+
+        assertThatThrownBy(() -> service.receive(31L, "RECEIVE_ONLY", null))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("请先完成手写签名");
     }
 
     @Test
@@ -259,10 +281,13 @@ class SalesOrderInventoryServiceTest {
         when(jdbc.queryForObject(anyString(), eq(BigDecimal.class), any(Object[].class)))
                 .thenReturn(new BigDecimal("2.0000"));
 
-        Map<String, Object> result = service.receive(31L, "INBOUND", 55L);
+        Map<String, Object> result = service.receive(
+                31L, "INBOUND", 55L, null, "签名.png", SIGNATURE);
         assertThat(result).containsEntry("status", "INBOUNDED")
                 .containsEntry("canInbound", false);
         verify(accessControlService).requirePermission(4L, "inventory_receive");
+        verify(jdbc, atLeastOnce()).update(
+                argThat(sql -> sql.contains("inventory_amount")), any(Object[].class));
     }
 
     @Test
@@ -274,7 +299,8 @@ class SalesOrderInventoryServiceTest {
         AuthContext.set(8L, 4L);
         doReturn(null).when(jdbc).query(anyString(), any(ResultSetExtractor.class), any(Object[].class));
         when(jdbc.queryForObject(anyString(), eq(Long.class))).thenReturn(60L);
-        assertThatThrownBy(() -> service.receive(31L, "INBOUND", null))
+        assertThatThrownBy(() -> service.receive(
+                31L, "INBOUND", null, null, "签名.png", SIGNATURE))
                 .isInstanceOf(BusinessException.class).hasMessage("请选择入库仓库");
     }
 

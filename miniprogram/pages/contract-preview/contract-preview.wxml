@@ -135,7 +135,7 @@
 
     <view class="fulfillment-section">
       <view class="fulfillment-head">
-        <view><view class="fulfillment-title"><text class="section-mark invoice">票</text>发票<text class="section-count">{{invoiceList.length}}</text></view><view class="document-sub">填写号码、日期和金额，对方通过后计入对账</view></view>
+        <view><view class="fulfillment-title"><text class="section-mark invoice">票</text>发票<text class="section-count">{{invoiceList.length}}</text></view><view class="document-sub">填写日期和金额，对方通过后计入对账</view></view>
         <button class="section-upload" loading="{{attachmentUploading}}" disabled="{{attachmentUploading}}" data-category="INVOICE" bindtap="chooseAttachment">上传</button>
       </view>
       <view class="document-card inner" wx:for="{{invoiceList}}" wx:key="id">
@@ -228,13 +228,11 @@
         <view class="payment-sheet-close" bindtap="closeInvoiceEditor">×</view>
       </view>
       <view class="payment-file-card"><view class="payment-file-icon">票</view><view class="payment-file-copy"><view class="payment-file-label">已选择发票文件</view><view class="payment-file-name">{{pendingInvoiceAttachment.originalName}}</view></view><view class="payment-file-check">✓</view></view>
-      <view class="payment-field-label">发票号码</view>
-      <view class="payment-text-field"><input value="{{invoiceNo}}" maxlength="128" placeholder="请输入发票号码" bindinput="onInvoiceNoInput"/></view>
       <view class="payment-field-label">开票日期</view>
       <picker mode="date" value="{{invoiceDate}}" bindchange="onInvoiceDateChange"><view class="payment-text-field">{{invoiceDate}} <text>›</text></view></picker>
       <view class="payment-field-label">发票金额</view>
       <view class="payment-amount-field {{invoiceError ? 'error' : ''}}"><text class="payment-currency">¥</text><input class="payment-amount-input" type="digit" maxlength="19" value="{{invoiceAmount}}" placeholder="0.00" bindinput="onInvoiceAmountInput"/><text class="payment-unit">元</text></view>
-      <view class="payment-field-message {{invoiceError ? 'error' : ''}}">{{invoiceError || '发票号码、日期和金额将在确认后计入对账'}}</view>
+      <view class="payment-field-message {{invoiceError ? 'error' : ''}}">{{invoiceError || '日期和金额将在确认后计入对账'}}</view>
       <view class="payment-sheet-actions"><button class="payment-cancel" bindtap="closeInvoiceEditor">取消</button><button class="payment-confirm" bindtap="confirmInvoiceUpload">提交对方确认</button></view>
     </view>
   </view>

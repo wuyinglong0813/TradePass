@@ -6,6 +6,7 @@ import com.lowagie.text.Document;
 import com.lowagie.text.DocumentException;
 import com.lowagie.text.Element;
 import com.lowagie.text.Font;
+import com.lowagie.text.Image;
 import com.lowagie.text.PageSize;
 import com.lowagie.text.Paragraph;
 import com.lowagie.text.Phrase;
@@ -16,6 +17,7 @@ import com.lowagie.text.pdf.PdfPTable;
 import com.lowagie.text.pdf.PdfWriter;
 import com.tradepass.common.BusinessException;
 import com.tradepass.entity.BusinessDocument;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.awt.Color;
@@ -25,6 +27,7 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.time.format.DateTimeFormatter;
 
 @Service
 public class BusinessDocumentPdfService {
@@ -32,10 +35,18 @@ public class BusinessDocumentPdfService {
     private static final Color BORDER_COLOR = new Color(25, 25, 25);
 
     private final ObjectMapper objectMapper;
+    private final SalesOrderSignatureService signatureService;
     private volatile byte[] fontBytes;
 
-    public BusinessDocumentPdfService(ObjectMapper objectMapper) {
+    @Autowired
+    public BusinessDocumentPdfService(ObjectMapper objectMapper,
+                                      SalesOrderSignatureService signatureService) {
         this.objectMapper = objectMapper;
+        this.signatureService = signatureService;
+    }
+
+    BusinessDocumentPdfService(ObjectMapper objectMapper) {
+        this(objectMapper, null);
     }
 
     public byte[] generate(BusinessDocument businessDocument) {
@@ -70,7 +81,9 @@ public class BusinessDocumentPdfService {
 
             addDocumentHeader(document, businessDocument, snapshot, bodyFont);
             addProductTable(document, snapshot, headerFont, bodyFont);
-            addFooter(document, businessDocument.getDocumentType(), snapshot, footerFont);
+            SalesOrderSignatureService.Confirmation confirmation = signatureService == null
+                    ? null : signatureService.find(businessDocument.getId());
+            addFooter(document, businessDocument.getDocumentType(), snapshot, footerFont, confirmation);
 
             document.close();
             return output.toByteArray();
@@ -128,7 +141,8 @@ public class BusinessDocumentPdfService {
     }
 
     private void addFooter(Document document, String type, Snapshot snapshot,
-                           Font font) throws DocumentException {
+                           Font font, SalesOrderSignatureService.Confirmation confirmation)
+            throws DocumentException {
         Paragraph total = new Paragraph("合计金额（元）：" + snapshot.totalAmount(), font);
         total.setAlignment(Element.ALIGN_RIGHT);
         total.setSpacingBefore(8);
@@ -136,10 +150,38 @@ public class BusinessDocumentPdfService {
         PdfPTable signatures = new PdfPTable(3);
         signatures.setWidthPercentage(100);
         signatures.setSpacingBefore(28);
-        signatures.addCell(borderlessCell("制单人：", font, Element.ALIGN_LEFT));
+        signatures.addCell(borderlessCell("制单人：" + snapshot.preparedByName(), font, Element.ALIGN_LEFT));
         signatures.addCell(borderlessCell("审核人：", font, Element.ALIGN_CENTER));
-        signatures.addCell(borderlessCell("客户确认：", font, Element.ALIGN_RIGHT));
+        signatures.addCell(customerSignatureCell(confirmation, font));
         document.add(signatures);
+    }
+
+    private PdfPCell customerSignatureCell(SalesOrderSignatureService.Confirmation confirmation,
+                                            Font font) {
+        PdfPCell cell = new PdfPCell();
+        cell.setBorder(Rectangle.NO_BORDER);
+        cell.setHorizontalAlignment(Element.ALIGN_RIGHT);
+        cell.setPadding(1);
+        Paragraph label = new Paragraph("客户确认：", font);
+        label.setAlignment(Element.ALIGN_RIGHT);
+        cell.addElement(label);
+        if (confirmation == null || confirmation.data() == null || confirmation.data().length == 0) {
+            return cell;
+        }
+        try {
+            Image signature = Image.getInstance(confirmation.data());
+            signature.scaleToFit(82, 34);
+            signature.setAlignment(Element.ALIGN_RIGHT);
+            cell.addElement(signature);
+            String time = confirmation.signedAt() == null ? ""
+                    : confirmation.signedAt().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"));
+            Paragraph signer = new Paragraph(confirmation.signerName() + "  " + time, font);
+            signer.setAlignment(Element.ALIGN_RIGHT);
+            cell.addElement(signer);
+        } catch (Exception exception) {
+            throw new BusinessException("销售单签名图片损坏，无法生成 PDF");
+        }
+        return cell;
     }
 
     private Snapshot parseSnapshot(BusinessDocument document) {
@@ -163,6 +205,7 @@ public class BusinessDocumentPdfService {
                     root.path("contractNo").asText(""),
                     root.path("date").asText(""),
                     root.path("totalAmount").asText("0"),
+                    root.path("preparedByName").asText(""),
                     Math.max(1, root.path("blankRows").asInt(10)),
                     columns,
                     rows);
@@ -235,7 +278,8 @@ public class BusinessDocumentPdfService {
     }
 
     private record Snapshot(String title, String companyName, String counterpartyName,
-                            String contractNo, String date, String totalAmount, int blankRows,
+                            String contractNo, String date, String totalAmount,
+                            String preparedByName, int blankRows,
                             List<String> columns, List<List<String>> rows) {
     }
 }

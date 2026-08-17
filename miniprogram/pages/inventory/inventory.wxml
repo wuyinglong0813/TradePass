@@ -20,8 +20,14 @@
   <view class="section-head inventory-head"><view><view class="section-title">库存余额</view><view class="section-sub">按仓库、商品、规格汇总</view></view></view>
   <view class="balance-list" wx:if="{{overview.balances.length > 0}}">
     <view class="balance-card" wx:for="{{overview.balances}}" wx:key="id">
-      <view class="balance-main"><view class="product-name">{{item.productName}}</view><view class="product-meta">{{item.specification || '无规格'}} · {{item.warehouseName}}</view></view>
-      <view class="quantity"><text>{{item.quantity}}</text><label>{{item.baseUnit}}</label></view>
+      <view class="balance-head">
+        <view class="balance-main"><view class="product-name">{{item.productName}}</view><view class="product-meta">{{item.specification || '无规格'}} · {{item.warehouseName}}</view></view>
+        <view class="quantity"><text>{{item.quantity}}</text><label>{{item.baseUnit}}</label></view>
+      </view>
+      <view class="price-row">
+        <view><label>库存单价</label><text>¥{{item.unitPriceText}} / {{item.baseUnit}}</text></view>
+        <view><label>库存金额</label><text>¥{{item.inventoryAmountText}}</text></view>
+      </view>
     </view>
   </view>
   <view class="empty" wx:if="{{!loading && overview.balances.length === 0}}"><image src="/images/icons/inventory.svg" mode="aspectFit"/><view>暂无库存</view><text>在销售单详情中选择“接收并入库”后显示</text></view>

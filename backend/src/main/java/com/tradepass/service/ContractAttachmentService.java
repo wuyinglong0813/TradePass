@@ -148,13 +148,10 @@ public class ContractAttachmentService {
         if (PAYMENT_VOUCHER.equals(normalized) && parsedDate == null) {
             throw new BusinessException("请选择转款日期");
         }
-        String safeInvoiceNo = invoiceNo == null ? "" : invoiceNo.trim();
+        String safeInvoiceNo = INVOICE.equals(normalized) ? createInvoiceNo() : "";
         LocalDate parsedInvoiceDate = parseInvoiceDate(invoiceDate);
         BigDecimal parsedInvoiceAmount = parseInvoiceAmount(invoiceAmount);
         if (INVOICE.equals(normalized)) {
-            if (safeInvoiceNo.isBlank() || safeInvoiceNo.length() > 128) {
-                throw new BusinessException("请输入发票号码且不能超过 128 字");
-            }
             if (parsedInvoiceDate == null) throw new BusinessException("请选择开票日期");
             if (parsedInvoiceAmount == null) throw new BusinessException("请输入发票金额");
         }
@@ -385,6 +382,13 @@ public class ContractAttachmentService {
         }
     }
 
+    private String createInvoiceNo() {
+        String date = LocalDate.now().format(java.time.format.DateTimeFormatter.BASIC_ISO_DATE);
+        String suffix = UUID.randomUUID().toString().replace("-", "")
+                .substring(0, 8).toUpperCase(Locale.ROOT);
+        return "FP-" + date + "-" + suffix;
+    }
+
     private AttachmentRecord requireAttachment(Long id) {
         List<AttachmentRecord> rows = jdbc.query("""
                         SELECT id, contract_id, uploader_company_id, recipient_company_id,
@@ -413,7 +417,7 @@ public class ContractAttachmentService {
         if (INVOICE.equals(attachment.category())
                 && (attachment.invoiceNo() == null || attachment.invoiceNo().isBlank()
                 || attachment.invoiceDate() == null || attachment.invoiceAmount() == null)) {
-            throw new BusinessException("发票号码、日期或金额不完整，请上传方重新提交");
+            throw new BusinessException("发票系统编号、日期或金额不完整，请上传方重新提交");
         }
     }
 

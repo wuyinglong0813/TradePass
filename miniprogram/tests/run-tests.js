@@ -152,7 +152,7 @@ test('contract approval and detail render structured contract content instead of
   assert.ok(previewTemplate.includes('contractClauses'));
 });
 
-test('experience build uses one native tab bar and cloud-routed file transfer', () => {
+test('experience build uses one native tab bar and size-safe file transfer', () => {
   const config = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'app.json'), 'utf8'));
   assert.strictEqual(config.tabBar.custom, false);
   const scripts = [
@@ -164,6 +164,10 @@ test('experience build uses one native tab bar and cloud-routed file transfer', 
   assert.ok(!scripts.includes('wx.uploadFile'));
   assert.ok(scripts.includes('downloadApiFile'));
   assert.ok(scripts.includes('uploadApiFile'));
+  assert.ok(scripts.includes('uploadMultipartApiFile'));
+  const transfer = fs.readFileSync(path.join(__dirname, '..', 'utils', 'fileTransfer.js'), 'utf8');
+  assert.ok(transfer.includes('wx.uploadFile'));
+  assert.ok(transfer.includes("header['X-Company-Id']"));
 });
 
 test('home displays a direct sales-order confirmation notice', () => {
@@ -227,7 +231,33 @@ const app = {
 global.getApp = () => app;
 global.wx = {};
 const { request } = require('../utils/request');
+const { uploadMultipartApiFile } = require('../utils/fileTransfer');
 const { setTabBarHidden, syncTabBar, tabIndicatorTransform } = require('../utils/tabBar');
+
+test('multipart upload sends auth, tenant and form fields without base64 packaging', async () => {
+  let captured;
+  wx.getStorageSync = () => '';
+  wx.uploadFile = options => {
+    captured = options;
+    options.success({ statusCode: 200, data: '{"code":0,"message":"ok","data":{"id":18}}' });
+  };
+
+  const result = await uploadMultipartApiFile(
+    '/contracts/12/attachments', '/tmp/invoice.jpg',
+    { category: 'INVOICE', invoiceAmount: 88.5, ignored: null }
+  );
+
+  assert.deepStrictEqual(result, { id: 18 });
+  assert.strictEqual(captured.url, 'https://api.example.test/contracts/12/attachments');
+  assert.strictEqual(captured.filePath, '/tmp/invoice.jpg');
+  assert.strictEqual(captured.name, 'file');
+  assert.deepStrictEqual(captured.header, {
+    Authorization: 'token-1',
+    'X-Company-Id': 'company-3'
+  });
+  assert.deepStrictEqual(captured.formData, { category: 'INVOICE', invoiceAmount: '88.5' });
+  assert.ok(!Object.prototype.hasOwnProperty.call(captured.formData, 'contentBase64'));
+});
 
 test('custom tab bar moves its indicator by one slot per navigation item', () => {
   assert.strictEqual(tabIndicatorTransform(0), 'translate3d(0%, 0, 0)');
@@ -314,7 +344,7 @@ test('payment voucher requires a manually entered amount before upload', () => {
   assert.strictEqual(context.data.showPaymentAmountEditor, false);
 });
 
-test('invoice requires number date and amount before counterpart confirmation', () => {
+test('invoice requires date and amount while the server generates its number', () => {
   const contractPreview = loadPage('../pages/contract-preview/contract-preview');
   let uploaded;
   const context = {
@@ -329,7 +359,6 @@ test('invoice requires number date and amount before counterpart confirmation', 
   };
   contractPreview.prepareAttachmentUpload.call(context, 'INVOICE', '/tmp/invoice.pdf', '发票.pdf');
   assert.strictEqual(context.data.showInvoiceEditor, true);
-  contractPreview.onInvoiceNoInput.call(context, { detail: { value: 'FP-001' } });
   contractPreview.onInvoiceAmountInput.call(context, { detail: { value: '88.5' } });
   const invoiceDate = context.data.invoiceDate;
   contractPreview.confirmInvoiceUpload.call(context);
@@ -337,8 +366,13 @@ test('invoice requires number date and amount before counterpart confirmation', 
     category: 'INVOICE',
     filePath: '/tmp/invoice.pdf',
     originalName: '发票.pdf',
-    metadata: { invoiceNo: 'FP-001', invoiceDate, invoiceAmount: '88.50' }
+    metadata: { invoiceDate, invoiceAmount: '88.50' }
   });
+  const template = fs.readFileSync(
+    path.join(__dirname, '..', 'pages', 'contract-preview', 'contract-preview.wxml'), 'utf8'
+  );
+  assert.ok(!template.includes('发票号码'));
+  assert.ok(!template.includes('无需录入发票号码'));
 });
 
 test('contract attachments download to a safe persistent path for every category', () => {
@@ -554,9 +588,25 @@ test('live reconciliation and sales-order confirmation pages are wired', () => {
   assert.ok(reconciliation.includes('/reconciliation-accounts'));
   assert.ok(reconciliation.includes('/workbook-data'));
   assert.ok(!reconciliation.includes('/reconciliation-statements'));
-  assert.ok(salesDetail.includes("this.submitReceive('RECEIVE_ONLY')"));
-  assert.ok(salesDetail.includes("this.submitReceive('INBOUND', warehouse.id)"));
+  assert.ok(salesDetail.includes("this.openSignatureEditor('RECEIVE_ONLY')"));
+  assert.ok(salesDetail.includes("this.openSignatureEditor('INBOUND', warehouse.id)"));
+  assert.ok(salesDetail.includes('`/sales-orders/${this.data.id}/receive`'));
   assert.ok(salesDetail.includes("this.submitReceive('REJECT'"));
+  const template = fs.readFileSync(
+    path.join(__dirname, '..', 'pages', 'sales-order-detail', 'sales-order-detail.wxml'), 'utf8'
+  );
+  assert.ok(template.includes('id="salesOrderSignatureCanvas"'));
+  assert.ok(template.includes('签名会自动填写到销售单 PDF 的“客户确认”'));
+});
+
+test('inventory balance displays unit price and inventory amount', () => {
+  const pageDir = path.join(__dirname, '..', 'pages', 'inventory');
+  const script = fs.readFileSync(path.join(pageDir, 'inventory.js'), 'utf8');
+  const template = fs.readFileSync(path.join(pageDir, 'inventory.wxml'), 'utf8');
+  assert.ok(script.includes('unitPriceText'));
+  assert.ok(script.includes('inventoryAmountText'));
+  assert.ok(template.includes('库存单价'));
+  assert.ok(template.includes('库存金额'));
 });
 
 test('home company switching uses the custom switcher instead of a native action sheet', () => {

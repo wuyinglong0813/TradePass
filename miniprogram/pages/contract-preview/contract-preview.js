@@ -1,4 +1,4 @@
-const { downloadApiFile, uploadApiFile } = require('../../utils/fileTransfer');
+const { downloadApiFile, uploadApiFile, uploadMultipartApiFile } = require('../../utils/fileTransfer');
 
 function today() {
   const now = new Date();
@@ -33,7 +33,6 @@ Page({
     paymentAmountError: '',
     pendingPaymentAttachment: null,
     showInvoiceEditor: false,
-    invoiceNo: '',
     invoiceDate: today(),
     invoiceAmount: '',
     invoiceError: '',
@@ -315,8 +314,8 @@ Page({
     this.setData({ logisticsUploading: true });
     wx.showLoading({ title: '上传图片中...' });
     try {
-      await uploadApiFile(
-        `/contracts/${this.data.contractId}/logistics-documents/base64`,
+      await uploadMultipartApiFile(
+        `/contracts/${this.data.contractId}/logistics-documents`,
         filePath,
         { originalName }
       );
@@ -616,7 +615,6 @@ Page({
     if (category === 'INVOICE') {
       this.setData({
         showInvoiceEditor: true,
-        invoiceNo: '',
         invoiceDate: today(),
         invoiceAmount: '',
         invoiceError: '',
@@ -683,10 +681,6 @@ Page({
     });
   },
 
-  onInvoiceNoInput(e) {
-    this.setData({ invoiceNo: e.detail.value, invoiceError: '' });
-  },
-
   onInvoiceAmountInput(e) {
     this.setData({ invoiceAmount: e.detail.value, invoiceError: '' });
   },
@@ -699,7 +693,6 @@ Page({
     if (this.data.attachmentUploading) return;
     this.setData({
       showInvoiceEditor: false,
-      invoiceNo: '',
       invoiceDate: today(),
       invoiceAmount: '',
       invoiceError: '',
@@ -709,12 +702,7 @@ Page({
 
   confirmInvoiceUpload() {
     if (this.data.attachmentUploading) return;
-    const invoiceNo = String(this.data.invoiceNo || '').trim();
     const amount = String(this.data.invoiceAmount || '').trim();
-    if (!invoiceNo) {
-      this.setData({ invoiceError: '请输入发票号码' });
-      return;
-    }
     if (!/^\d{1,16}(\.\d{1,2})?$/.test(amount)) {
       this.setData({ invoiceError: '请输入正确金额，最多保留两位小数' });
       return;
@@ -724,13 +712,11 @@ Page({
     const [integerPart, decimalPart = ''] = amount.split('.');
     const normalizedAmount = `${integerPart}.${decimalPart.padEnd(2, '0')}`;
     const metadata = {
-      invoiceNo,
       invoiceDate: this.data.invoiceDate,
       invoiceAmount: normalizedAmount
     };
     this.setData({
       showInvoiceEditor: false,
-      invoiceNo: '',
       invoiceDate: today(),
       invoiceAmount: '',
       invoiceError: '',
@@ -742,11 +728,19 @@ Page({
     this.setData({ attachmentUploading: true });
     wx.showLoading({ title: '上传资料中...' });
     try {
-      await uploadApiFile(
-        `/contracts/${this.data.contractId}/attachments/base64`,
-        filePath,
-        { category, originalName, ...metadata }
-      );
+      if (category === 'PAYMENT_VOUCHER' || category === 'INVOICE') {
+        await uploadMultipartApiFile(
+          `/contracts/${this.data.contractId}/attachments`,
+          filePath,
+          { category, originalName, ...metadata }
+        );
+      } else {
+        await uploadApiFile(
+          `/contracts/${this.data.contractId}/attachments/base64`,
+          filePath,
+          { category, originalName, ...metadata }
+        );
+      }
       const label = category === 'PAYMENT_VOUCHER'
         ? '转款凭证'
         : category === 'INVOICE' ? '发票' : '资料';
@@ -1264,7 +1258,7 @@ Page({
       showDetail: true,
       detailTitle: '发票详情',
       detailFields: [
-        { label: '发票编号', value: inv.invoiceNo },
+        { label: '系统编号', value: inv.invoiceNo },
         { label: '发票类型', value: inv.type },
         { label: '开票状态', value: inv.status, highlight: true },
         { label: '发票金额', value: `¥${inv.amount}`, amount: true },

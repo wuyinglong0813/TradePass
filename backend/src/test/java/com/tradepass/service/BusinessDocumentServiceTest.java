@@ -130,6 +130,7 @@ class BusinessDocumentServiceTest {
         assertThat(content.path("rows").get(0).get(1).asText()).isEqualTo("测试商品");
         assertThat(content.path("totalAmount").asText()).isEqualTo("88.5");
         assertThat(content.path("templateName").asText()).isEqualTo("标准销售单");
+        assertThat(content.path("preparedByName").asText()).isEqualTo("用户7");
     }
 
     @Test

@@ -9,6 +9,7 @@ import com.tradepass.support.MybatisTestSupport;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 
@@ -87,7 +88,7 @@ class ContractAttachmentServiceTest {
     }
 
     @Test
-    void acceptsOnlyImagesOrPdfForInvoices() throws Exception {
+    void acceptsOnlyImagesOrPdfForInvoicesAndGeneratesInvoiceNumber() throws Exception {
         byte[] pdf = "%PDF-1.7".getBytes();
         byte[] docx = ooxml("word/document.xml");
         Map<String, Object> row = Map.of("id", 10L, "originalName", "发票.pdf");
@@ -95,8 +96,12 @@ class ContractAttachmentServiceTest {
         doReturn(List.of(row)).when(jdbc).query(anyString(), any(RowMapper.class), any(Object[].class));
 
         assertThat(service.upload(12L, "INVOICE", "发票.pdf", pdf, null, null,
-                "FP-2026-001", "2026-07-28", "88.50"))
+                null, "2026-07-28", "88.50"))
                 .containsEntry("id", 10L);
+        ArgumentCaptor<Object[]> values = ArgumentCaptor.forClass(Object[].class);
+        verify(jdbc).update(anyString(), values.capture());
+        assertThat(values.getValue()).anyMatch(value -> value instanceof String text
+                && text.matches("FP-\\d{8}-[A-Z0-9]{8}"));
         assertThatThrownBy(() -> service.upload(12L, "INVOICE", "发票.docx",
                 docx, null, null))
                 .isInstanceOf(BusinessException.class)

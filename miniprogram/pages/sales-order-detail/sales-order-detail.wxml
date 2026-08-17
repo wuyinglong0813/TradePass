@@ -32,6 +32,7 @@
     <view class="card summary-card">
       <view class="summary-row"><text>关联合同</text><view>{{detail.contractNo}}</view></view>
       <view class="summary-row"><text>单据日期</text><view>{{detail.date}}</view></view>
+      <view class="summary-row"><text>制单人</text><view>{{detail.preparedByName}}</view></view>
       <view class="summary-row"><text>合计金额</text><view class="amount">¥{{detail.totalAmount}}</view></view>
       <view class="pdf-actions"><button bindtap="viewPdf">查看 PDF</button><button bindtap="downloadPdf">下载 PDF</button></view>
     </view>
@@ -48,7 +49,7 @@
 
     <view class="receive-card" wx:if="{{detail.canReceive || detail.canInbound || detail.canReject}}">
       <view class="receive-title">销售单确认</view>
-      <view class="receive-tip">通过后销售单正式进入双方对账；也可以通过并直接形成入库记录。</view>
+      <view class="receive-tip">首次通过需要当前用户手写签名；通过后销售单正式进入双方对账，也可以直接形成入库记录。</view>
       <view class="receive-actions">
         <button wx:if="{{detail.canReject}}" class="secondary" loading="{{receiving}}" disabled="{{receiving}}" bindtap="rejectSalesOrder">驳回</button>
         <button wx:if="{{detail.canReceive}}" class="secondary" loading="{{receiving}}" disabled="{{receiving}}" bindtap="receiveOnly">通过，暂不入库</button>
@@ -66,6 +67,34 @@
       <textarea value="{{memoDraft}}" maxlength="4000" bindinput="onMemoInput" placeholder="记录接收、入库或后续处理进展…" focus="{{showMemoEditor}}"/>
       <view class="memo-sheet-meta"><text>{{memoDraft.length}} / 4000</text><text wx:if="{{memoUpdatedAt}}">上次保存 {{memoUpdatedAt}}</text></view>
       <button class="memo-save" loading="{{memoSaving}}" disabled="{{memoSaving}}" bindtap="saveMemo">保存我的进展</button>
+    </view>
+  </view>
+
+  <view class="signature-mask" wx:if="{{showSignatureEditor}}" bindtap="closeSignatureEditor">
+    <view class="signature-sheet" catchtap="noop">
+      <view class="signature-handle"></view>
+      <view class="signature-head">
+        <view><view class="signature-title">请手写签名</view><view class="signature-signer">签署人：{{signatureSignerName}}</view></view>
+        <view class="signature-close" bindtap="closeSignatureEditor">×</view>
+      </view>
+      <view class="signature-canvas-wrap">
+        <canvas
+          type="2d"
+          id="salesOrderSignatureCanvas"
+          class="signature-canvas"
+          disable-scroll="true"
+          bindtouchstart="onSignatureTouchStart"
+          catchtouchmove="onSignatureTouchMove"
+          bindtouchend="onSignatureTouchEnd"
+          bindtouchcancel="onSignatureTouchEnd"
+        ></canvas>
+        <view class="signature-placeholder">请在此区域签名</view>
+      </view>
+      <view class="signature-notice">签名会自动填写到销售单 PDF 的“客户确认”位置</view>
+      <view class="signature-actions">
+        <button class="signature-clear" disabled="{{receiving}}" bindtap="clearSignature">清除重签</button>
+        <button class="signature-confirm" loading="{{receiving}}" disabled="{{receiving}}" bindtap="confirmSignature">{{signatureActionText}}</button>
+      </view>
     </view>
   </view>
 

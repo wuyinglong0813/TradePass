@@ -39,6 +39,8 @@ public class SalesOrderInventoryService {
     private final AuditLogService auditLogService;
     private final ObjectMapper objectMapper;
     private final ReconciliationAccountService reconciliationAccountService;
+    private final SalesOrderSignatureService signatureService;
+    private final UserIdentityService userIdentityService;
 
     @Autowired
     public SalesOrderInventoryService(JdbcTemplate jdbc,
@@ -47,7 +49,9 @@ public class SalesOrderInventoryService {
                                       AccessControlService accessControlService,
                                       AuditLogService auditLogService,
                                       ObjectMapper objectMapper,
-                                      ReconciliationAccountService reconciliationAccountService) {
+                                      ReconciliationAccountService reconciliationAccountService,
+                                      SalesOrderSignatureService signatureService,
+                                      UserIdentityService userIdentityService) {
         this.jdbc = jdbc;
         this.documentMapper = documentMapper;
         this.contractMapper = contractMapper;
@@ -55,6 +59,8 @@ public class SalesOrderInventoryService {
         this.auditLogService = auditLogService;
         this.objectMapper = objectMapper;
         this.reconciliationAccountService = reconciliationAccountService;
+        this.signatureService = signatureService;
+        this.userIdentityService = userIdentityService;
     }
 
     SalesOrderInventoryService(JdbcTemplate jdbc,
@@ -64,7 +70,7 @@ public class SalesOrderInventoryService {
                                AuditLogService auditLogService,
                                ObjectMapper objectMapper) {
         this(jdbc, documentMapper, contractMapper, accessControlService, auditLogService,
-                objectMapper, null);
+                objectMapper, null, null, null);
     }
 
     @Transactional
@@ -174,7 +180,8 @@ public class SalesOrderInventoryService {
         List<Map<String, Object>> balances = jdbc.query("""
                         SELECT balance.id, warehouse.id AS warehouse_id, warehouse.name AS warehouse_name,
                                product.id AS product_id, product.product_name, product.specification,
-                               product.base_unit, balance.quantity, balance.updated_at
+                               product.base_unit, balance.quantity, balance.unit_price,
+                               balance.inventory_amount, balance.updated_at
                         FROM inventory_balance balance
                         JOIN warehouse ON warehouse.id = balance.warehouse_id
                         JOIN inventory_product product ON product.id = balance.product_id
@@ -190,6 +197,8 @@ public class SalesOrderInventoryService {
                     view.put("specification", rs.getString("specification"));
                     view.put("baseUnit", rs.getString("base_unit"));
                     view.put("quantity", rs.getBigDecimal("quantity"));
+                    view.put("unitPrice", rs.getBigDecimal("unit_price"));
+                    view.put("inventoryAmount", rs.getBigDecimal("inventory_amount"));
                     view.put("updatedAt", rs.getTimestamp("updated_at").toLocalDateTime());
                     return view;
                 }, companyId);
@@ -203,12 +212,19 @@ public class SalesOrderInventoryService {
 
     @Transactional
     public Map<String, Object> receive(Long documentId, String decision, Long warehouseId) {
-        return receive(documentId, decision, warehouseId, null);
+        return receive(documentId, decision, warehouseId, null, null, null);
     }
 
     @Transactional
     public Map<String, Object> receive(Long documentId, String decision, Long warehouseId,
                                        String rejectedReason) {
+        return receive(documentId, decision, warehouseId, rejectedReason, null, null);
+    }
+
+    @Transactional
+    public Map<String, Object> receive(Long documentId, String decision, Long warehouseId,
+                                       String rejectedReason, String signatureName,
+                                       byte[] signatureData) {
         long companyId = AuthContext.requireCompanyId();
         accessControlService.requirePermission(companyId, "sales_order_receive");
         String normalized = decision == null ? "" : decision.trim().toUpperCase(Locale.ROOT);
@@ -243,6 +259,21 @@ public class SalesOrderInventoryService {
             return documentDetail(documentId);
         }
 
+        boolean requiresSignature = "ISSUED".equals(document.getStatus());
+        String signerName = null;
+        if (requiresSignature) {
+            if (signatureData == null || signatureData.length == 0) {
+                throw new BusinessException("请先完成手写签名");
+            }
+            signerName = userIdentityService == null
+                    ? "用户" + AuthContext.userId()
+                    : userIdentityService.requireCurrentVerifiedName(companyId);
+        }
+        if (INBOUND.equals(normalized)) {
+            accessControlService.requirePermission(companyId, "inventory_receive");
+            requireWarehouse(companyId, warehouseId);
+        }
+
         Long receiptId = existingReceipt(companyId, documentId);
         if (receiptId == null) {
             jdbc.update("""
@@ -257,6 +288,13 @@ public class SalesOrderInventoryService {
             jdbc.update("UPDATE sales_order_receipt SET decision = ?, status = ? WHERE id = ?",
                     normalized, INBOUND.equals(normalized) ? "INBOUNDING" : "RECEIVED_PENDING_INBOUND", receiptId);
         }
+        if (requiresSignature) {
+            if (signatureService == null) {
+                throw new BusinessException("销售单签名服务尚未启用");
+            }
+            signatureService.save(companyId, documentId, receiptId, signerName,
+                    signatureName, signatureData);
+        }
 
         if (RECEIVE_ONLY.equals(normalized)) {
             document.setStatus("ACKNOWLEDGED");
@@ -269,8 +307,6 @@ public class SalesOrderInventoryService {
             return documentDetail(documentId);
         }
 
-        accessControlService.requirePermission(companyId, "inventory_receive");
-        requireWarehouse(companyId, warehouseId);
         Long existingInbound = jdbc.query("""
                         SELECT id FROM inventory_inbound
                         WHERE company_id = ? AND source_document_id = ? LIMIT 1
@@ -294,23 +330,35 @@ public class SalesOrderInventoryService {
         for (Map<String, Object> item : items) {
             BigDecimal quantity = (BigDecimal) item.get("quantity");
             if (quantity == null || quantity.signum() <= 0) throw new BusinessException("销售单商品数量必须大于 0");
+            BigDecimal unitPrice = (BigDecimal) item.get("unitPrice");
+            if (unitPrice == null || unitPrice.signum() < 0) throw new BusinessException("销售单商品单价不能小于 0");
+            BigDecimal inboundAmount = quantity.multiply(unitPrice).setScale(2, RoundingMode.HALF_UP);
             Long productId = findOrCreateProduct(companyId,
                     String.valueOf(item.get("productName")), String.valueOf(item.get("specification")),
                     String.valueOf(item.get("baseUnit")));
             jdbc.update("""
-                    INSERT INTO inventory_balance (company_id, warehouse_id, product_id, quantity)
-                    VALUES (?, ?, ?, ?)
-                    ON DUPLICATE KEY UPDATE quantity = quantity + VALUES(quantity), updated_at = CURRENT_TIMESTAMP
-                    """, companyId, warehouseId, productId, quantity);
+                    INSERT INTO inventory_balance
+                    (company_id, warehouse_id, product_id, quantity, unit_price, inventory_amount)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    ON DUPLICATE KEY UPDATE
+                        unit_price = CASE
+                            WHEN quantity + VALUES(quantity) = 0 THEN 0
+                            ELSE (inventory_amount + VALUES(inventory_amount))
+                                / (quantity + VALUES(quantity))
+                        END,
+                        inventory_amount = inventory_amount + VALUES(inventory_amount),
+                        quantity = quantity + VALUES(quantity),
+                        updated_at = CURRENT_TIMESTAMP
+                    """, companyId, warehouseId, productId, quantity, unitPrice, inboundAmount);
             BigDecimal balance = jdbc.queryForObject("""
                     SELECT quantity FROM inventory_balance
                     WHERE company_id = ? AND warehouse_id = ? AND product_id = ?
                     """, BigDecimal.class, companyId, warehouseId, productId);
             jdbc.update("""
                     INSERT INTO inventory_inbound_item
-                    (inbound_id, document_item_id, product_id, quantity)
-                    VALUES (?, ?, ?, ?)
-                    """, inboundId, item.get("id"), productId, quantity);
+                    (inbound_id, document_item_id, product_id, quantity, unit_price, amount)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """, inboundId, item.get("id"), productId, quantity, unitPrice, inboundAmount);
             jdbc.update("""
                     INSERT INTO inventory_transaction
                     (company_id, warehouse_id, product_id, biz_type, biz_id,

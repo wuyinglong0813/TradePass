@@ -1,5 +1,5 @@
 const { request } = require('../../utils/request');
-const { downloadApiFile } = require('../../utils/fileTransfer');
+const { downloadApiFile, uploadMultipartApiFile } = require('../../utils/fileTransfer');
 
 Page({
   data: {
@@ -27,6 +27,11 @@ Page({
     draftRows: [],
     draftBlankRows: 8,
     draftTotalAmount: '0',
+    showSignatureEditor: false,
+    signatureDecision: '',
+    signatureWarehouseId: '',
+    signatureSignerName: '',
+    signatureActionText: '确认签字并通过',
     loading: false
   },
 
@@ -60,7 +65,8 @@ Page({
           counterpartyName: content.counterpartyName || '—',
           contractNo: content.contractNo || '—',
           date: content.date || String(detail.createdAt || '').slice(0, 10),
-          totalAmount: content.totalAmount || '0'
+          totalAmount: content.totalAmount || '0',
+          preparedByName: content.preparedByName || '—'
         },
         documentNo: detail.documentNo || this.data.documentNo,
         items: detail.items || [],
@@ -269,13 +275,7 @@ Page({
   },
 
   receiveOnly() {
-    wx.showModal({
-      title: '确认接收销售单',
-      content: '通过后销售单将正式生效并立即更新双方对账；暂不增加库存。',
-      success: result => {
-        if (result.confirm) this.submitReceive('RECEIVE_ONLY');
-      }
-    });
+    this.openSignatureEditor('RECEIVE_ONLY');
   },
 
   rejectSalesOrder() {
@@ -313,9 +313,173 @@ Page({
       itemList: this.data.warehouses.map(item => item.name),
       success: result => {
         const warehouse = this.data.warehouses[result.tapIndex];
-        if (warehouse) this.submitReceive('INBOUND', warehouse.id);
+        if (!warehouse) return;
+        if (this.data.detail && this.data.detail.status === 'ACKNOWLEDGED') {
+          this.submitReceive('INBOUND', warehouse.id);
+          return;
+        }
+        this.openSignatureEditor('INBOUND', warehouse.id);
       }
     });
+  },
+
+  openSignatureEditor(decision, warehouseId = '') {
+    const app = getApp();
+    const member = app.globalData.memberInfo || {};
+    const user = app.globalData.userInfo || {};
+    const signerName = user.nickname || member.userName || '当前用户';
+    this.signatureHasInk = false;
+    this.signatureStrokeLength = 0;
+    this.signatureLastPoint = null;
+    this.setData({
+      showSignatureEditor: true,
+      signatureDecision: decision,
+      signatureWarehouseId: warehouseId || '',
+      signatureSignerName: signerName,
+      signatureActionText: decision === 'INBOUND' ? '确认签字并入库' : '确认签字并通过'
+    }, () => this.initializeSignatureCanvas());
+  },
+
+  closeSignatureEditor() {
+    if (this.data.receiving) return;
+    this.signatureCanvas = null;
+    this.signatureContext = null;
+    this.signatureHasInk = false;
+    this.signatureStrokeLength = 0;
+    this.signatureLastPoint = null;
+    this.setData({
+      showSignatureEditor: false,
+      signatureDecision: '',
+      signatureWarehouseId: ''
+    });
+  },
+
+  initializeSignatureCanvas() {
+    wx.createSelectorQuery().select('#salesOrderSignatureCanvas')
+      .fields({ node: true, size: true })
+      .exec(result => {
+        const target = result && result[0];
+        if (!target || !target.node) {
+          wx.showToast({ title: '签名板加载失败，请重试', icon: 'none' });
+          return;
+        }
+        const canvas = target.node;
+        const ratio = Math.max(1, wx.getSystemInfoSync().pixelRatio || 1);
+        canvas.width = Math.round(target.width * ratio);
+        canvas.height = Math.round(target.height * ratio);
+        const context = canvas.getContext('2d');
+        context.scale(ratio, ratio);
+        context.lineWidth = 3;
+        context.lineCap = 'round';
+        context.lineJoin = 'round';
+        context.strokeStyle = '#172536';
+        this.signatureCanvas = canvas;
+        this.signatureContext = context;
+        this.signatureCanvasWidth = target.width;
+        this.signatureCanvasHeight = target.height;
+      });
+  },
+
+  signaturePoint(e) {
+    const touch = e.touches && e.touches[0];
+    if (!touch) return null;
+    return {
+      x: Number(touch.x !== undefined ? touch.x : touch.clientX),
+      y: Number(touch.y !== undefined ? touch.y : touch.clientY)
+    };
+  },
+
+  onSignatureTouchStart(e) {
+    const point = this.signaturePoint(e);
+    if (!point || !this.signatureContext) return;
+    this.signatureContext.beginPath();
+    this.signatureContext.moveTo(point.x, point.y);
+    this.signatureLastPoint = point;
+  },
+
+  onSignatureTouchMove(e) {
+    const point = this.signaturePoint(e);
+    if (!point || !this.signatureContext) return;
+    const last = this.signatureLastPoint;
+    if (last) {
+      this.signatureStrokeLength += Math.hypot(point.x - last.x, point.y - last.y);
+      this.signatureHasInk = this.signatureStrokeLength >= 12;
+    }
+    this.signatureContext.lineTo(point.x, point.y);
+    this.signatureContext.stroke();
+    this.signatureLastPoint = point;
+  },
+
+  onSignatureTouchEnd() {
+    if (this.signatureContext) this.signatureContext.closePath();
+    this.signatureLastPoint = null;
+  },
+
+  clearSignature() {
+    if (!this.signatureContext) return;
+    this.signatureContext.clearRect(
+      0, 0, this.signatureCanvasWidth || 0, this.signatureCanvasHeight || 0
+    );
+    this.signatureHasInk = false;
+    this.signatureStrokeLength = 0;
+    this.signatureLastPoint = null;
+  },
+
+  signatureTempFile() {
+    return new Promise((resolve, reject) => {
+      wx.canvasToTempFilePath({
+        canvas: this.signatureCanvas,
+        fileType: 'png',
+        destWidth: Math.round((this.signatureCanvasWidth || 320) * 2),
+        destHeight: Math.round((this.signatureCanvasHeight || 150) * 2),
+        success: result => resolve(result.tempFilePath),
+        fail: error => reject(new Error((error && error.errMsg) || '签名图片生成失败'))
+      });
+    });
+  },
+
+  async confirmSignature() {
+    if (this.data.receiving) return;
+    if (!this.signatureHasInk || !this.signatureCanvas) {
+      wx.showToast({ title: '请先手写签名', icon: 'none' });
+      return;
+    }
+    try {
+      this.setData({ receiving: true });
+      wx.showLoading({ title: '正在确认...' });
+      const filePath = await this.signatureTempFile();
+      const detail = await uploadMultipartApiFile(
+        `/sales-orders/${this.data.id}/receive`,
+        filePath,
+        {
+          decision: this.data.signatureDecision,
+          warehouseId: this.data.signatureWarehouseId
+        },
+        'signature'
+      );
+      this.signatureCanvas = null;
+      this.signatureContext = null;
+      this.signatureHasInk = false;
+      this.signatureStrokeLength = 0;
+      this.signatureLastPoint = null;
+      this.setData({
+        showSignatureEditor: false,
+        signatureDecision: '',
+        signatureWarehouseId: '',
+        detail: { ...this.data.detail, ...detail },
+        items: detail.items || this.data.items
+      });
+      wx.showToast({
+        title: detail.status === 'INBOUNDED' ? '已签字并入库' : '已签字并通过',
+        icon: 'success'
+      });
+      await this.loadAll();
+    } catch (error) {
+      wx.showToast({ title: error.message || '签字确认失败', icon: 'none' });
+    } finally {
+      wx.hideLoading();
+      this.setData({ receiving: false });
+    }
   },
 
   async submitReceive(decision, warehouseId, reason = '') {
