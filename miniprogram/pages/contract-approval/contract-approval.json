@@ -1,3 +1,4 @@
 {
-  "navigationBarTitleText": "合同审批"
+  "navigationBarTitleText": "待审批",
+  "enablePullDownRefresh": true
 }

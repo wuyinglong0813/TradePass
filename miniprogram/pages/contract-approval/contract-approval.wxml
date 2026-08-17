@@ -1,59 +1,92 @@
-<view class="page">
-  <view class="header-bar">
-    <image class="header-mark" src="/images/brand-logo.svg" mode="aspectFit"/>
-    <view class="h-title">合同审批</view>
-    <view class="h-desc">跨公司集中处理需要你方确认的合同</view>
+<view class="approval-page">
+  <view class="approval-hero">
+    <image class="hero-mark" src="/images/brand-logo.svg" mode="aspectFit"/>
+    <view class="hero-title">待审批</view>
+    <view class="hero-desc">合同与履约资料集中处理</view>
   </view>
 
-  <view class="list">
-    <view wx:if="{{loading}}" class="loading-hint">加载中...</view>
-
-    <view class="empty-hint" wx:elif="{{contracts.length === 0}}">
-      <image class="empty-icon" src="/images/icons/approval.svg" mode="aspectFit"/>
-      <view class="empty-text">暂无待审批合同</view>
+  <view class="current-company">
+    <image src="/images/icons/company.svg" mode="aspectFit"/>
+    <view class="company-context">
+      <view class="company-context-name">{{currentCompanyName}}</view>
+      <view class="company-context-desc">仅展示当前企业收到的待审批事项</view>
     </view>
+    <view class="current-badge">当前企业</view>
+  </view>
 
-    <view class="contract-card"
-      wx:for="{{contracts}}"
-      wx:key="id">
-      <view class="cc-top">
-        <view class="cc-name">{{item.name}}</view>
-        <view class="cc-status pending">待签署</view>
+  <view class="approval-tabs">
+    <view class="approval-tab {{activeTab === item.key ? 'active' : ''}}"
+      wx:for="{{tabs}}" wx:key="key" data-key="{{item.key}}" bindtap="switchTab">
+      <text>{{item.label}}</text><text class="tab-count">{{item.count}}</text>
+    </view>
+  </view>
+
+  <view class="company-filter" wx:if="{{companyOptions.length > 1}}">
+    <picker mode="selector" range="{{companyOptions}}" range-key="name" value="{{companyIndex}}" bindchange="selectCompany">
+      <view class="company-picker">
+        <view><view class="picker-label">按往来公司筛选</view><view class="picker-value">{{companyOptions[companyIndex].name}}</view></view>
+        <view class="picker-arrow">⌄</view>
       </view>
-      <view class="cc-party">发起方：{{item.counterpartyName}}</view>
-      <view class="cc-dates" wx:if="{{item.startDate}}">{{item.startDate}} ~ {{item.endDate}}</view>
-      <view class="cc-amount">合同金额：<text class="cc-amount-value">¥{{item.amount}}</text></view>
-      <view class="cc-template" wx:if="{{item.templateName}}">模板：{{item.templateName}}</view>
+    </picker>
+  </view>
 
-      <view class="contract-content" wx:if="{{item.fields.length || item.tableColumns.length || item.clauses.length}}">
-        <view class="content-title">合同正文</view>
-        <view class="content-field" wx:for="{{item.fields}}" wx:for-item="field" wx:key="key">
-          <text>{{field.label}}</text><text>{{field.value || '—'}}</text>
-        </view>
-        <view class="content-section-title" wx:if="{{item.tableColumns.length}}">{{item.tableTitle}}</view>
-        <scroll-view class="content-table-scroll" scroll-x wx:if="{{item.tableColumns.length}}">
-          <view class="content-table">
-            <view class="content-table-row header">
-              <view wx:for="{{item.tableColumns}}" wx:for-item="column" wx:key="*this">{{column}}</view>
+  <view class="loading-hint" wx:if="{{loading}}">待审批事项加载中...</view>
+  <view class="empty-hint" wx:elif="{{visibleGroups.length === 0}}">
+    <image src="/images/icons/approval.svg" mode="aspectFit"/>
+    <view class="empty-title">{{activeTab === 'CONTRACT' ? '暂无待审批合同' : '暂无待审批履约资料'}}</view>
+  </view>
+
+  <view class="approval-groups" wx:else>
+    <view class="company-group" wx:for="{{visibleGroups}}" wx:key="companyId" wx:for-item="group">
+      <view class="group-head">
+        <view class="group-avatar">{{group.initial}}</view>
+        <view class="group-copy"><view class="group-name">{{group.companyName}}</view><view class="group-count">{{group.items.length}} 项待处理</view></view>
+      </view>
+
+      <block wx:if="{{activeTab === 'CONTRACT'}}">
+        <view class="approval-card" wx:for="{{group.items}}" wx:key="id" wx:for-item="contract">
+          <view class="card-top">
+            <view class="type-icon contract">合</view>
+            <view class="card-copy">
+              <view class="card-title">{{contract.name}}</view>
+              <view class="card-meta">{{contract.contractNo}} · {{contract.createdDate}}</view>
             </view>
-            <view class="content-table-row" wx:for="{{item.tableRows}}" wx:for-item="row" wx:key="*this">
-              <view wx:for="{{row}}" wx:for-item="cell" wx:key="*this">{{cell}}</view>
-            </view>
+            <view class="pending-badge">待签署</view>
           </view>
-        </scroll-view>
-        <view class="content-total" wx:if="{{item.tableColumns.length}}">合计：¥{{item.totalAmount}} <text wx:if="{{item.totalAmountCn}}">（{{item.totalAmountCn}}）</text></view>
-        <view class="content-clause" wx:for="{{item.clauses}}" wx:for-item="clause" wx:key="label">
-          <view>{{clause.label}}</view><text>{{clause.content || '—'}}</text>
+          <view class="contract-summary">
+            <view><text>合同金额</text><view class="summary-strong">¥{{contract.amountText}}</view></view>
+            <view><text>合同期限</text><view class="summary-strong">{{contract.startDate || '—'}} 至 {{contract.endDate || '—'}}</view></view>
+          </view>
+          <view class="card-actions">
+            <button class="action ghost" data-contract="{{contract}}" catchtap="viewContract">查看合同</button>
+            <button class="action reject" data-contract="{{contract}}" catchtap="reject">拒绝</button>
+            <button class="action primary" data-contract="{{contract}}" catchtap="approve">同意签署</button>
+          </view>
         </view>
-      </view>
-      <view class="cc-terms" wx:elif="{{item.plainTerms}}">{{item.plainTerms}}</view>
-      <view class="view-contract" data-contract="{{item}}" bindtap="viewContract">查看完整合同 ›</view>
-      <view class="cc-created">发起时间：{{item.createdAt}}</view>
+      </block>
 
-      <view class="cc-actions">
-        <button class="cc-btn approve" data-contract="{{item}}" bindtap="approve">✓ 同意签署</button>
-        <button class="cc-btn reject" data-contract="{{item}}" bindtap="reject">✕ 拒绝</button>
-      </view>
+      <block wx:else>
+        <view class="approval-card fulfillment-card" wx:for="{{group.items}}" wx:key="id" wx:for-item="document">
+          <view class="card-top">
+            <view class="type-icon {{document.typeClass}}">{{document.iconText}}</view>
+            <view class="card-copy">
+              <view class="card-title">{{document.typeText}} · {{document.documentNo}}</view>
+              <view class="card-meta">关联合同：{{document.contractName || document.contractNo}}</view>
+              <view class="card-meta"><text wx:if="{{document.dateText}}">{{document.dateText}}</text><text wx:if="{{document.amountText}}"> · ¥{{document.amountText}}</text></view>
+              <view class="signature-hint" wx:if="{{document.approvalType === 'SALES_ORDER'}}">确认时需要手写签名</view>
+            </view>
+            <view class="pending-badge">待确认</view>
+          </view>
+          <view class="card-actions single" wx:if="{{document.approvalType === 'SALES_ORDER'}}">
+            <button class="action primary" data-item="{{document}}" catchtap="openFulfillment">查看并确认</button>
+          </view>
+          <view class="card-actions" wx:else>
+            <button class="action ghost" data-item="{{document}}" catchtap="viewAttachment">查看资料</button>
+            <button class="action reject" data-item="{{document}}" catchtap="rejectAttachment">驳回</button>
+            <button class="action primary" data-item="{{document}}" catchtap="approveAttachment">确认通过</button>
+          </view>
+        </view>
+      </block>
     </view>
   </view>
 </view>

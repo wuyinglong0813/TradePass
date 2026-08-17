@@ -39,7 +39,6 @@ Page({
     counterpartyEmptyBtn: '',
     isLoggedIn: false,
     userName: '',
-    pendingSalesOrderTodo: null,
 
     // 数据统计
     stats: { totalAmount: 0, totalOrders: 0, counterpartyCount: 0 },
@@ -101,7 +100,6 @@ Page({
     if (!this.data.showJoinForm) {
       this.loadHome();
       this.loadCounterparties();
-      this.loadSalesOrderNotice();
     }
   },
 
@@ -112,7 +110,7 @@ Page({
       return;
     }
     if (!this.data.showJoinForm) {
-      Promise.all([this.loadHome(), this.loadCounterparties(), this.loadSalesOrderNotice()]).finally(() => {
+      Promise.all([this.loadHome(), this.loadCounterparties()]).finally(() => {
         wx.stopPullDownRefresh();
       });
     } else {
@@ -188,29 +186,12 @@ Page({
       });
       setTabBarHidden(this, false);
       this.initRoleFromMember();
-      await Promise.all([this.loadHome(), this.loadCounterparties(), this.loadSalesOrderNotice()]);
+      await Promise.all([this.loadHome(), this.loadCounterparties()]);
       wx.showToast({ title: '企业已切换', icon: 'success' });
     } catch (e) {
       this.setData({ switchingCompanyId: '' });
       wx.showToast({ title: '切换失败', icon: 'none' });
     }
-  },
-
-  async loadSalesOrderNotice() {
-    try {
-      const todos = await request({ url: '/me/todos' });
-      const pendingSalesOrderTodo = (todos || []).find(item => item.type === 'SALES_ORDER') || null;
-      this.setData({ pendingSalesOrderTodo });
-    } catch (error) {
-      this.setData({ pendingSalesOrderTodo: null });
-    }
-  },
-
-  openSalesOrderNotice() {
-    const target = this.data.pendingSalesOrderTodo && this.data.pendingSalesOrderTodo.target;
-    if (!String(target || '').startsWith('sales-order-detail:')) return;
-    const id = String(target).split(':')[1];
-    if (id) wx.navigateTo({ url: `/pages/sales-order-detail/sales-order-detail?id=${id}` });
   },
 
   /* 角色切换（Tab 点击）*/
@@ -387,7 +368,7 @@ Page({
     const key = e.currentTarget.dataset.key;
     const routes = {
       approval: '/pages/contract-approval/contract-approval',
-      signature: '/pages/contract-center/contract-center?mode=signature',
+      inventory: '/pages/inventory/inventory',
       contracts: '/pages/contract-center/contract-center',
       reconciliation: '/pages/reconciliation/reconciliation'
     };

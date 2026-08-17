@@ -118,16 +118,6 @@
         </view>
       </view>
 
-      <view class="business-notice" wx:if="{{pendingSalesOrderTodo}}" bindtap="openSalesOrderNotice">
-        <view class="business-notice-icon">销</view>
-        <view class="business-notice-copy">
-          <view class="business-notice-title">{{pendingSalesOrderTodo.title}}</view>
-          <view class="business-notice-desc">{{pendingSalesOrderTodo.desc}}</view>
-        </view>
-        <view class="business-notice-count">{{pendingSalesOrderTodo.count}}</view>
-        <view class="business-notice-arrow">›</view>
-      </view>
-
       <view class="company-switch-mask" wx:if="{{showCompanySwitcher}}" bindtap="closeCompanySwitcher">
         <view class="company-switch-sheet" catchtap="noop">
           <view class="company-switch-head">
@@ -240,8 +230,8 @@
       <view class="section">
         <view class="section-head"><view><view class="section-title">业务工作台</view><view class="section-sub">跨公司事项统一处理</view></view></view>
         <view class="workbench-grid">
-          <view class="workbench-item" data-key="approval" bindtap="openWorkbench"><image src="/images/icons/approval.svg" mode="aspectFit"/><view class="workbench-name">合同审批</view><view class="workbench-meta">集中处理</view></view>
-          <view class="workbench-item" data-key="signature" bindtap="openWorkbench"><image src="/images/icons/sign.svg" mode="aspectFit"/><view class="workbench-name">待我签署</view><view class="workbench-meta">双方确认</view></view>
+          <view class="workbench-item" data-key="approval" bindtap="openWorkbench"><image src="/images/icons/approval.svg" mode="aspectFit"/><view class="workbench-name">待审批</view><view class="workbench-meta">合同与履约</view></view>
+          <view class="workbench-item" data-key="inventory" bindtap="openWorkbench"><image src="/images/icons/inventory.svg" mode="aspectFit"/><view class="workbench-name">库存管理</view><view class="workbench-meta">库存与入库</view></view>
           <view class="workbench-item" data-key="contracts" bindtap="openWorkbench"><image src="/images/icons/contracts.svg" mode="aspectFit"/><view class="workbench-name">全部合同</view><view class="workbench-meta">合同台账</view></view>
           <view class="workbench-item" data-key="reconciliation" bindtap="openWorkbench"><image src="/images/icons/reconcile.svg" mode="aspectFit"/><view class="workbench-name">对账中心</view><view class="workbench-meta">跨公司汇总</view></view>
         </view>

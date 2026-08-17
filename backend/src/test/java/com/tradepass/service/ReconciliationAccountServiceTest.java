@@ -16,6 +16,8 @@ import java.io.ByteArrayInputStream;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.nio.charset.StandardCharsets;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -152,5 +154,31 @@ class ReconciliationAccountServiceTest {
             assertThat(sheet.getRow(7).getCell(2).getCellStyle().getIndex())
                     .isEqualTo(sheet.getRow(5).getCell(2).getCellStyle().getIndex());
         }
+    }
+
+    @Test
+    void generatesAViewablePdfFromTheSameReconciliationAccountDetails() {
+        Map<String, Object> entry = new LinkedHashMap<>();
+        entry.put("businessDate", "2026-08-16");
+        entry.put("contractNo", "HT-001");
+        entry.put("sourceTypeText", "销售单");
+        entry.put("documentNo", "XS-001");
+        entry.put("directionText", "我方销售");
+        entry.put("amount", new BigDecimal("88.50"));
+        entry.put("approvedAt", "2026-08-16T10:30:00");
+        Map<String, Object> account = new LinkedHashMap<>();
+        account.put("mySalesAmount", new BigDecimal("88.50"));
+        account.put("myPurchaseAmount", BigDecimal.ZERO);
+        account.put("receivedPaymentAmount", BigDecimal.ZERO);
+        account.put("paidPaymentAmount", BigDecimal.ZERO);
+        account.put("receivableBalance", new BigDecimal("88.50"));
+        account.put("payableBalance", BigDecimal.ZERO);
+        account.put("entries", List.of(entry));
+
+        byte[] pdf = new ReconciliationPdfService(null, null)
+                .generatePdf("甲公司与乙公司对账单", account);
+
+        assertThat(pdf.length).isGreaterThan(1000);
+        assertThat(new String(pdf, 0, 4, StandardCharsets.US_ASCII)).isEqualTo("%PDF");
     }
 }

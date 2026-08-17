@@ -10,10 +10,27 @@ page { background: #f4f8fd; }
 .hero-summary > view:last-child { border-right: none; }
 .summary-value { font-size: 29rpx; font-weight: 700; }
 .summary-label { color: rgba(255,255,255,.65); font-size: 20rpx; margin-top: 4rpx; }
-.filter-tabs { background: #fff; border-bottom: 1rpx solid #e5ecf5; box-sizing: border-box; padding: 16rpx 24rpx; white-space: nowrap; }
+.current-company { align-items: center; background: #fff; border: 1rpx solid #dfe8f3; border-radius: 22rpx; box-shadow: 0 8rpx 24rpx rgba(28,60,96,.055); display: flex; margin: 20rpx 24rpx 0; padding: 20rpx; }
+.current-company image { height: 52rpx; margin-right: 14rpx; width: 52rpx; }
+.current-company-copy { flex: 1; min-width: 0; }
+.current-company-name { color: #22364d; font-size: 24rpx; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.current-company-desc { color: #96a2af; font-size: 19rpx; margin-top: 4rpx; }
+.current-company-badge { background: #eaf4ff; border-radius: 16rpx; color: #2c87de; font-size: 19rpx; padding: 5rpx 11rpx; }
+.filter-tabs { background: #fff; border-bottom: 1rpx solid #e5ecf5; border-top: 1rpx solid #e5ecf5; box-sizing: border-box; margin-top: 20rpx; padding: 16rpx 24rpx; white-space: nowrap; }
 .filter-tab { background: #f1f5fa; border-radius: 22rpx; color: #75827e; display: inline-block; font-size: 24rpx; margin-right: 12rpx; padding: 10rpx 24rpx; }
 .filter-tab.active { background: #3498ff; color: #fff; font-weight: 600; }
+.company-filter { margin: 18rpx 24rpx 0; }
+.company-picker { align-items: center; background: #fff; border: 1rpx solid #dfe8f3; border-radius: 20rpx; display: flex; padding: 18rpx 22rpx; }
+.picker-label { color: #96a1ae; font-size: 19rpx; }
+.picker-value { color: #2d4057; font-size: 24rpx; margin-top: 4rpx; }
+.picker-arrow { color: #7d8c9c; font-size: 28rpx; margin-left: auto; }
 .contract-list { margin: 22rpx 24rpx 0; }
+.company-group { margin-bottom: 24rpx; }
+.company-group-head { align-items: center; display: flex; margin: 0 4rpx 12rpx; }
+.company-avatar { align-items: center; background: #eaf4ff; border: 1rpx solid #d3e6fb; border-radius: 14rpx; color: #2788e4; display: flex; font-size: 24rpx; font-weight: 700; height: 56rpx; justify-content: center; width: 56rpx; }
+.company-group-copy { margin-left: 13rpx; min-width: 0; }
+.company-group-name { color: #263a50; font-size: 25rpx; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.company-group-count { color: #98a4b0; font-size: 19rpx; margin-top: 3rpx; }
 .contract-item { background: #fff; border: 1rpx solid #e3ebf5; border-radius: 26rpx; box-shadow: 0 10rpx 30rpx rgba(22, 49, 85,.05); margin-bottom: 18rpx; padding: 26rpx; }
 .item-top,.item-bottom { align-items: center; display: flex; }
 .item-top { justify-content: space-between; }

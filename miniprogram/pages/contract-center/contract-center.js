@@ -1,4 +1,5 @@
 const { request } = require('../../utils/request');
+const app = getApp();
 
 Page({
   data: {
@@ -12,6 +13,11 @@ Page({
     ],
     contracts: [],
     visibleContracts: [],
+    contractGroups: [],
+    currentCompanyName: '',
+    companyOptions: [{ id: '', name: '全部往来公司' }],
+    companyIndex: 0,
+    selectedCompanyId: '',
     signatureMode: false,
     page: 1,
     size: 20,
@@ -24,6 +30,10 @@ Page({
   },
 
   onShow() {
+    const currentCompanyId = String(app.getCurrentCompanyId() || '');
+    const company = (app.globalData.companies || [])
+      .find(item => String(item.companyId) === currentCompanyId);
+    this.setData({ currentCompanyName: (company && company.companyName) || '当前企业' });
     this.loadContracts(true);
   },
 
@@ -48,15 +58,20 @@ Page({
       ]);
       const list = Array.isArray(payload) ? payload : (payload.items || []);
       const statusText = { PENDING: '待签署', ACTIVE: '履约中', COMPLETED: '已完成', REJECTED: '已拒绝' };
-      const nextContracts = (list || []).map(item => ({
-        ...item,
-        counterpartyName: item.viewerCounterpartyName || item.counterpartyName,
-        direction: item.viewerDirection || item.direction,
-        id: parseInt(item.id),
-        amount: Number(item.amount || 0),
-        statusText: statusText[item.status] || item.status,
-        createdDate: (item.createdAt || '').substring(0, 10)
-      }));
+      const nextContracts = (list || []).map(item => {
+        const counterpartyName = item.viewerCounterpartyName || item.counterpartyName || '往来公司';
+        return {
+          ...item,
+          counterpartyName,
+          companyId: String(item.viewerCounterpartyCompanyId || item.counterpartyCompanyId
+            || `name:${counterpartyName}`),
+          direction: item.viewerDirection || item.direction,
+          id: parseInt(item.id),
+          amount: Number(item.amount || 0),
+          statusText: statusText[item.status] || item.status,
+          createdDate: (item.createdAt || '').substring(0, 10)
+        };
+      });
       const contracts = reset ? nextContracts : this.data.contracts.concat(nextContracts);
       const localAmount = contracts.reduce((sum, item) => sum + item.amount, 0);
       const summary = summaryPayload ? {
@@ -85,7 +100,11 @@ Page({
   },
 
   switchTab(event) {
-    this.setData({ activeTab: event.currentTarget.dataset.key });
+    this.setData({
+      activeTab: event.currentTarget.dataset.key,
+      selectedCompanyId: '',
+      companyIndex: 0
+    });
     if (this.data.signatureMode) this.applyFilter();
     else this.loadContracts(true);
   },
@@ -95,7 +114,49 @@ Page({
     const visibleContracts = activeTab === 'ALL'
       ? this.data.contracts
       : this.data.contracts.filter(item => item.status === activeTab);
-    this.setData({ visibleContracts });
+    const companies = [];
+    const seen = new Set();
+    visibleContracts.forEach(item => {
+      if (!item.companyId || seen.has(item.companyId)) return;
+      seen.add(item.companyId);
+      companies.push({ id: item.companyId, name: item.counterpartyName || '往来公司' });
+    });
+    const companyOptions = [
+      { id: '', name: `全部往来公司（${companies.length}）` },
+      ...companies
+    ];
+    let selectedCompanyId = this.data.selectedCompanyId;
+    if (selectedCompanyId && !seen.has(String(selectedCompanyId))) selectedCompanyId = '';
+    const companyIndex = Math.max(0,
+      companyOptions.findIndex(item => String(item.id) === String(selectedCompanyId)));
+    const grouped = new Map();
+    visibleContracts
+      .filter(item => !selectedCompanyId || item.companyId === String(selectedCompanyId))
+      .forEach(item => {
+        if (!grouped.has(item.companyId)) {
+          grouped.set(item.companyId, {
+            companyId: item.companyId,
+            companyName: item.counterpartyName || '往来公司',
+            initial: String(item.counterpartyName || '企').substring(0, 1),
+            items: []
+          });
+        }
+        grouped.get(item.companyId).items.push(item);
+      });
+    this.setData({
+      visibleContracts,
+      companyOptions,
+      companyIndex,
+      selectedCompanyId,
+      contractGroups: Array.from(grouped.values())
+    });
+  },
+
+  selectCompany(event) {
+    const companyIndex = Number(event.detail.value || 0);
+    const selected = this.data.companyOptions[companyIndex] || this.data.companyOptions[0];
+    this.setData({ companyIndex, selectedCompanyId: selected.id || '' });
+    this.applyFilter();
   },
 
   openContract(event) {

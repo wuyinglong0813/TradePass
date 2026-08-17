@@ -138,15 +138,15 @@ test('contract details and snapshots use the entered contract name', () => {
   ));
 });
 
-test('contract approval and detail render structured contract content instead of raw JSON', () => {
+test('pending approval opens the structured contract preview instead of rendering raw JSON', () => {
   const approvalDir = path.join(__dirname, '..', 'pages', 'contract-approval');
   const approvalScript = fs.readFileSync(path.join(approvalDir, 'contract-approval.js'), 'utf8');
   const approvalTemplate = fs.readFileSync(path.join(approvalDir, 'contract-approval.wxml'), 'utf8');
   const previewTemplate = fs.readFileSync(
     path.join(__dirname, '..', 'pages', 'contract-preview', 'contract-preview.wxml'), 'utf8'
   );
-  assert.ok(approvalScript.includes('JSON.parse(c.terms'));
-  assert.ok(approvalTemplate.includes('item.tableRows'));
+  assert.ok(approvalScript.includes('/pages/contract-preview/contract-preview?contractId='));
+  assert.ok(approvalTemplate.includes('查看合同'));
   assert.ok(!approvalTemplate.includes('{{item.terms}}'));
   assert.ok(previewTemplate.includes('contractTableRows'));
   assert.ok(previewTemplate.includes('contractClauses'));
@@ -170,16 +170,28 @@ test('experience build uses one native tab bar and size-safe file transfer', () 
   assert.ok(transfer.includes("header['X-Company-Id']"));
 });
 
-test('home displays a direct sales-order confirmation notice', () => {
+test('home merges approval entries and moves sales-order confirmations into pending approval', () => {
   const homeScript = fs.readFileSync(
     path.join(__dirname, '..', 'pages', 'index', 'index.js'), 'utf8'
   );
   const homeTemplate = fs.readFileSync(
     path.join(__dirname, '..', 'pages', 'index', 'index.wxml'), 'utf8'
   );
-  assert.ok(homeScript.includes("item.type === 'SALES_ORDER'"));
-  assert.ok(homeScript.includes('sales-order-detail:'));
-  assert.ok(homeTemplate.includes('pendingSalesOrderTodo'));
+  assert.ok(!homeScript.includes("item.type === 'SALES_ORDER'"));
+  assert.ok(!homeTemplate.includes('pendingSalesOrderTodo'));
+  assert.ok(homeTemplate.includes('data-key="approval"'));
+  assert.ok(homeTemplate.includes('data-key="inventory"'));
+  assert.ok(homeTemplate.includes('待审批'));
+  const approvalScript = fs.readFileSync(
+    path.join(__dirname, '..', 'pages', 'contract-approval', 'contract-approval.js'), 'utf8'
+  );
+  const approvalTemplate = fs.readFileSync(
+    path.join(__dirname, '..', 'pages', 'contract-approval', 'contract-approval.wxml'), 'utf8'
+  );
+  assert.ok(approvalScript.includes('/approvals/fulfillment'));
+  assert.ok(approvalScript.includes('sales-order-detail'));
+  assert.ok(approvalScript.includes("label: '合同待审批'"));
+  assert.ok(approvalScript.includes("label: '履约资料待审批'"));
 });
 
 test('company search confirmation does not depend on sensitive company fields', () => {
@@ -586,7 +598,8 @@ test('live reconciliation and sales-order confirmation pages are wired', () => {
   assert.ok(appConfig.pages.includes('pages/sales-order-detail/sales-order-detail'));
   assert.ok(appConfig.pages.includes('pages/inventory/inventory'));
   assert.ok(reconciliation.includes('/reconciliation-accounts'));
-  assert.ok(reconciliation.includes('/workbook-data'));
+  assert.ok(reconciliation.includes('/pdf-data'));
+  assert.ok(!reconciliation.includes('/workbook-data'));
   assert.ok(!reconciliation.includes('/reconciliation-statements'));
   assert.ok(salesDetail.includes("this.openSignatureEditor('RECEIVE_ONLY')"));
   assert.ok(salesDetail.includes("this.openSignatureEditor('INBOUND', warehouse.id)"));
@@ -597,6 +610,11 @@ test('live reconciliation and sales-order confirmation pages are wired', () => {
   );
   assert.ok(template.includes('id="salesOrderSignatureCanvas"'));
   assert.ok(template.includes('签名会自动填写到销售单 PDF 的“客户确认”'));
+  const reconciliationTemplate = fs.readFileSync(
+    path.join(__dirname, '..', 'pages', 'reconciliation', 'reconciliation.wxml'), 'utf8'
+  );
+  assert.ok(reconciliationTemplate.includes('查看明细'));
+  assert.ok(reconciliationTemplate.includes('下载 PDF'));
 });
 
 test('inventory balance displays unit price and inventory amount', () => {
