@@ -37,7 +37,7 @@
     <!-- 合同标题 -->
     <view class="card contract-title-card">
       <view class="ct-title">{{contractName || '请输入合同名称'}}</view>
-      <view class="ct-no">合同编号：签订时自动生成</view>
+      <view class="ct-no">合同编号：{{editMode ? (originalContractNo || '原合同编号') : '签订时自动生成'}}</view>
     </view>
 
     <!-- 头部字段 -->
@@ -82,7 +82,7 @@
                 <input class="td-input num auto" type="digit" value="{{row[ci]}}" disabled/>
               </block>
               <block wx:elif="{{ci === 3 || ci === 4}}">
-                <input class="td-input num" type="digit" value="{{row[ci]}}" data-row="{{ri}}" data-col="{{ci}}" bindfocus="onNumberCellFocus" bindblur="onNumberCellBlur" bindinput="onTableCellChange"/>
+                <input class="td-input num" type="digit" value="{{row[ci]}}" placeholder="0" cursor-spacing="120" adjust-position data-row="{{ri}}" data-col="{{ci}}" bindfocus="onNumberCellFocus" bindblur="onNumberCellBlur" bindinput="onTableCellChange"/>
               </block>
               <block wx:else>
                 <input class="td-input" type="text" value="{{row[ci]}}" data-row="{{ri}}" data-col="{{ci}}" bindinput="onTableCellChange"/>
@@ -94,6 +94,22 @@
           </view>
         </view>
       </scroll-view>
+      <view class="inventory-suggestions" wx:if="{{productSuggestions.length > 0}}">
+        <view class="suggestion-title">从库存商品中选择品名</view>
+        <view class="suggestion-item" wx:for="{{productSuggestions}}" wx:key="productName"
+          data-row="{{suggestionRow}}" data-name="{{item.productName}}" bindtap="selectInventoryProduct">
+          <text class="suggestion-name">{{item.productName}}</text>
+          <text class="suggestion-spec">{{item.specification || '无规格'}}</text>
+        </view>
+      </view>
+      <view class="inventory-suggestions" wx:if="{{specificationSuggestions.length > 0}}">
+        <view class="suggestion-title">选择对应规格型号</view>
+        <view class="suggestion-item" wx:for="{{specificationSuggestions}}" wx:key="id"
+          data-row="{{suggestionRow}}" data-id="{{item.id}}" bindtap="selectInventorySpecification">
+          <text class="suggestion-name">{{item.specification || '无规格'}}</text>
+          <text class="suggestion-spec">单位：{{item.baseUnit || '件'}}</text>
+        </view>
+      </view>
       <view class="table-add" bindtap="addTableRow">＋ 添加产品行</view>
 
       <view class="table-summary">
@@ -108,13 +124,23 @@
       </view>
     </view>
 
-    <!-- 条款（只读展示） -->
-    <view class="card" wx:if="{{clauses.length > 0}}">
-      <view class="section-title">合同条款</view>
-      <view class="clause-ro" wx:for="{{clauses}}" wx:for-item="clause" wx:key="idx">
-        <view class="clause-ro-title">{{clause._label}}{{clause.title}}</view>
-        <view class="clause-ro-content">{{clause.content || '（无内容）'}}</view>
+    <!-- 合同条款可在套用模板后继续修改 -->
+    <view class="card">
+      <view class="section-title clause-section-title">
+        <text>合同条款</text>
+        <text class="clause-add" bindtap="addClause">＋ 添加条款</text>
       </view>
+      <view class="clause-edit" wx:for="{{clauses}}" wx:for-item="clause" wx:key="index">
+        <view class="clause-edit-head">
+          <text class="clause-index">{{index + 1}}.</text>
+          <input class="clause-title-input" value="{{clause.title}}" placeholder="条款标题"
+            data-index="{{index}}" bindinput="onClauseTitleInput"/>
+          <text class="clause-delete" data-index="{{index}}" bindtap="deleteClause">删除</text>
+        </view>
+        <textarea class="clause-content-input" value="{{clause.content}}" placeholder="请输入条款内容"
+          auto-height maxlength="-1" cursor-spacing="120" data-index="{{index}}" bindinput="onClauseContentInput"/>
+      </view>
+      <view class="clause-empty" wx:if="{{clauses.length === 0}}">暂无条款，可点击上方添加</view>
     </view>
   </block>
 
@@ -127,7 +153,7 @@
 
   <!-- 提交 -->
   <view class="submit-area" wx:if="{{hasTemplate}}">
-    <button class="submit-btn" bindtap="onSubmit">{{contractActionText}}</button>
+    <button class="submit-btn" loading="{{submitting}}" disabled="{{submitting}}" bindtap="onSubmit">{{contractActionText}}</button>
   </view>
 
   <view class="safe-bottom"></view>

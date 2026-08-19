@@ -110,6 +110,8 @@ public class SalesOrderInventoryService {
         view.put("issuerCompanyId", document.getCompanyId());
         view.put("recipientCompanyId", document.getRecipientCompanyId());
         view.put("documentNo", document.getDocumentNo());
+        view.put("documentType", document.getDocumentType());
+        view.put("typeLabel", documentLabel(document));
         view.put("templateName", document.getTemplateName());
         view.put("sourceType", document.getSourceType());
         view.put("status", document.getStatus());
@@ -125,7 +127,11 @@ public class SalesOrderInventoryService {
         }
         view.put("items", documentItems(documentId));
         TradeContract contract = contractMapper.selectById(document.getContractId());
-        boolean canReceive = recipient && accessControlService.hasPermission(companyId, "sales_order_receive");
+        boolean canReceivePermission = accessControlService.hasPermission(companyId, "sales_order_receive")
+                || ("RETURN_ORDER".equals(document.getDocumentType())
+                && (accessControlService.hasPermission(companyId, "contract_sign")
+                || accessControlService.hasPermission(companyId, "order_create")));
+        boolean canReceive = recipient && canReceivePermission;
         boolean canInbound = canReceive && accessControlService.hasPermission(companyId, "inventory_receive");
         view.put("canReceive", canReceive && "ISSUED".equals(document.getStatus()));
         view.put("canReject", canReceive && "ISSUED".equals(document.getStatus()));
@@ -216,6 +222,37 @@ public class SalesOrderInventoryService {
         return result;
     }
 
+    public List<Map<String, Object>> searchProducts(String keyword, Integer limit) {
+        long companyId = AuthContext.requireCompanyId();
+        accessControlService.requireAnyPermission(companyId,
+                "contract_sign", "order_create", "inventory_view", "inventory_receive");
+        String safeKeyword = keyword == null ? "" : keyword.trim();
+        int safeLimit = Math.max(1, Math.min(limit == null ? 100 : limit, 200));
+        String pattern = "%" + safeKeyword.replace("\\", "\\\\")
+                .replace("%", "\\%").replace("_", "\\_") + "%";
+        return jdbc.query("""
+                        SELECT product.id, product.product_name, product.specification,
+                               product.base_unit, COALESCE(SUM(balance.quantity), 0) AS quantity
+                        FROM inventory_product product
+                        LEFT JOIN inventory_balance balance
+                          ON balance.product_id = product.id AND balance.company_id = product.company_id
+                        WHERE product.company_id = ?
+                          AND (? = '' OR product.product_name LIKE ? ESCAPE '\\\\'
+                               OR product.specification LIKE ? ESCAPE '\\\\')
+                        GROUP BY product.id, product.product_name, product.specification, product.base_unit
+                        ORDER BY product.product_name, product.specification, product.id
+                        LIMIT ?
+                        """, (rs, rowNum) -> {
+                    Map<String, Object> item = new LinkedHashMap<>();
+                    item.put("id", rs.getLong("id"));
+                    item.put("productName", rs.getString("product_name"));
+                    item.put("specification", rs.getString("specification"));
+                    item.put("baseUnit", rs.getString("base_unit"));
+                    item.put("quantity", rs.getBigDecimal("quantity"));
+                    return item;
+                }, companyId, safeKeyword, pattern, pattern, safeLimit);
+    }
+
     @Transactional
     public Map<String, Object> receive(Long documentId, String decision, Long warehouseId) {
         return receive(documentId, decision, warehouseId, null, null, null);
@@ -232,19 +269,26 @@ public class SalesOrderInventoryService {
                                        String rejectedReason, String signatureName,
                                        byte[] signatureData) {
         long companyId = AuthContext.requireCompanyId();
-        accessControlService.requirePermission(companyId, "sales_order_receive");
+        BusinessDocument document = documentMapper.selectById(documentId);
+        if (document != null && "RETURN_ORDER".equals(document.getDocumentType())) {
+            accessControlService.requireAnyPermission(companyId,
+                    "sales_order_receive", "contract_sign", "order_create");
+        } else {
+            accessControlService.requirePermission(companyId, "sales_order_receive");
+        }
         String normalized = decision == null ? "" : decision.trim().toUpperCase(Locale.ROOT);
         if (!RECEIVE_ONLY.equals(normalized) && !INBOUND.equals(normalized) && !REJECT.equals(normalized)) {
             throw new BusinessException("接收方式不正确");
         }
-        BusinessDocument document = documentMapper.selectById(documentId);
-        if (document == null || !"SALES_ORDER".equals(document.getDocumentType())
+        if (document == null || !isConfirmableDocument(document)
                 || !Long.valueOf(companyId).equals(document.getRecipientCompanyId())) {
-            throw new BusinessException("待接收销售单不存在");
+            throw new BusinessException(document != null && "RETURN_ORDER".equals(document.getDocumentType())
+                    ? "待确认退货单不存在" : "待接收销售单不存在");
         }
+        String documentLabel = documentLabel(document);
         if (REJECT.equals(normalized)) {
             if (!"ISSUED".equals(document.getStatus())) {
-                throw new BusinessException("销售单当前状态不能驳回");
+                throw new BusinessException(documentLabel + "当前状态不能驳回");
             }
             String reason = rejectedReason == null ? "" : rejectedReason.trim();
             if (reason.isBlank() || reason.length() > 500) {
@@ -253,15 +297,17 @@ public class SalesOrderInventoryService {
             document.setStatus("REJECTED");
             document.setRejectedReason(reason);
             documentMapper.updateById(document);
-            auditLogService.log(companyId, "SALES_ORDER_RECEIPT", documentId,
-                    "REJECT", "驳回销售单 " + document.getDocumentNo() + "：" + reason);
-            recordSalesOrderResult(document, companyId, "REJECTED",
-                    "销售单已被驳回", "对方已驳回销售单 " + document.getDocumentNo(), reason);
+            auditLogService.log(companyId, "BUSINESS_DOCUMENT_RECEIPT", documentId,
+                    "REJECT", "驳回" + documentLabel + " " + document.getDocumentNo() + "：" + reason);
+            recordDocumentResult(document, companyId, "REJECTED",
+                    documentLabel + "已被驳回", "对方已驳回" + documentLabel + " " + document.getDocumentNo(), reason);
             return documentDetail(documentId);
         }
         if ("INBOUNDED".equals(document.getStatus())) return documentDetail(documentId);
         if (!"ISSUED".equals(document.getStatus()) && !"ACKNOWLEDGED".equals(document.getStatus())) {
-            throw new BusinessException("销售单尚未发布，不能接收或入库");
+            throw new BusinessException("RETURN_ORDER".equals(document.getDocumentType())
+                    ? "退货单尚未发布，不能确认或入库"
+                    : "销售单尚未发布，不能接收或入库");
         }
         if (RECEIVE_ONLY.equals(normalized) && "ACKNOWLEDGED".equals(document.getStatus())) {
             return documentDetail(documentId);
@@ -275,7 +321,8 @@ public class SalesOrderInventoryService {
             }
             signerName = userIdentityService == null
                     ? "用户" + AuthContext.userId()
-                    : userIdentityService.requireCurrentVerifiedName(companyId);
+                    : userIdentityService.currentDisplayName();
+            if (signerName == null || signerName.isBlank()) signerName = "用户" + AuthContext.userId();
         }
         if (INBOUND.equals(normalized)) {
             accessControlService.requirePermission(companyId, "inventory_receive");
@@ -298,7 +345,7 @@ public class SalesOrderInventoryService {
         }
         if (requiresSignature) {
             if (signatureService == null) {
-                throw new BusinessException("销售单签名服务尚未启用");
+                throw new BusinessException("单据签名服务尚未启用");
             }
             signatureService.save(companyId, documentId, receiptId, signerName,
                     signatureName, signatureData);
@@ -310,10 +357,10 @@ public class SalesOrderInventoryService {
             document.setAcknowledgedAt(LocalDateTime.now());
             documentMapper.updateById(document);
             recordReconciliation(document);
-            auditLogService.log(companyId, "SALES_ORDER_RECEIPT", receiptId,
-                    "RECEIVE", "接收销售单 " + document.getDocumentNo() + "，暂不入库");
-            recordSalesOrderResult(document, companyId, "APPROVED",
-                    "销售单已确认", "对方已确认销售单 " + document.getDocumentNo(), null);
+            auditLogService.log(companyId, "BUSINESS_DOCUMENT_RECEIPT", receiptId,
+                    "RECEIVE", "确认" + documentLabel + " " + document.getDocumentNo() + "，暂不入库");
+            recordDocumentResult(document, companyId, "APPROVED",
+                    documentLabel + "已确认", "对方已确认" + documentLabel + " " + document.getDocumentNo(), null);
             return documentDetail(documentId);
         }
 
@@ -325,8 +372,8 @@ public class SalesOrderInventoryService {
             document.setStatus("INBOUNDED");
             documentMapper.updateById(document);
             recordReconciliation(document);
-            recordSalesOrderResult(document, companyId, "INBOUNDED",
-                    "销售单已确认并入库", "对方已确认并入库销售单 " + document.getDocumentNo(), null);
+            recordDocumentResult(document, companyId, "INBOUNDED",
+                    documentLabel + "已确认并入库", "对方已确认并入库" + documentLabel + " " + document.getDocumentNo(), null);
             return documentDetail(documentId);
         }
 
@@ -338,7 +385,7 @@ public class SalesOrderInventoryService {
                 """, companyId, warehouseId, documentId, inboundNo, AuthContext.userId());
         Long inboundId = jdbc.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
         List<Map<String, Object>> items = documentItems(documentId);
-        if (items.isEmpty()) throw new BusinessException("销售单没有可入库商品");
+        if (items.isEmpty()) throw new BusinessException(documentLabel + "没有可入库商品");
         for (Map<String, Object> item : items) {
             BigDecimal quantity = (BigDecimal) item.get("quantity");
             if (quantity == null || quantity.signum() <= 0) throw new BusinessException("销售单商品数量必须大于 0");
@@ -375,8 +422,11 @@ public class SalesOrderInventoryService {
                     INSERT INTO inventory_transaction
                     (company_id, warehouse_id, product_id, biz_type, biz_id,
                      quantity_delta, balance_after, created_by)
-                    VALUES (?, ?, ?, 'SALES_ORDER_INBOUND', ?, ?, ?, ?)
-                    """, companyId, warehouseId, productId, inboundId, quantity, balance, AuthContext.userId());
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """, companyId, warehouseId, productId,
+                    "RETURN_ORDER".equals(document.getDocumentType())
+                            ? "RETURN_ORDER_INBOUND" : "SALES_ORDER_INBOUND",
+                    inboundId, quantity, balance, AuthContext.userId());
         }
         jdbc.update("UPDATE sales_order_receipt SET decision = 'INBOUND', status = 'INBOUNDED' WHERE id = ?", receiptId);
         document.setStatus("INBOUNDED");
@@ -385,24 +435,24 @@ public class SalesOrderInventoryService {
         documentMapper.updateById(document);
         recordReconciliation(document);
         auditLogService.log(companyId, "INVENTORY_INBOUND", inboundId,
-                "CREATE", "销售单 " + document.getDocumentNo() + " 接收并入库至仓库 " + warehouseId);
-        recordSalesOrderResult(document, companyId, "INBOUNDED",
-                "销售单已确认并入库", "对方已确认并入库销售单 " + document.getDocumentNo(), null);
+                "CREATE", documentLabel + " " + document.getDocumentNo() + " 确认并入库至仓库 " + warehouseId);
+        recordDocumentResult(document, companyId, "INBOUNDED",
+                documentLabel + "已确认并入库", "对方已确认并入库" + documentLabel + " " + document.getDocumentNo(), null);
         return documentDetail(documentId);
     }
 
-    private void recordSalesOrderResult(BusinessDocument document, long sourceCompanyId,
-                                        String resultStatus, String title, String detail,
-                                        String rejectedReason) {
+    private void recordDocumentResult(BusinessDocument document, long sourceCompanyId,
+                                      String resultStatus, String title, String detail,
+                                      String rejectedReason) {
         if (approvalService == null || document.getCompanyId() == null || document.getId() == null) return;
         approvalService.recordResult(document.getCompanyId(), sourceCompanyId,
-                "SALES_ORDER", document.getId(), document.getContractId(), resultStatus,
+                document.getDocumentType(), document.getId(), document.getContractId(), resultStatus,
                 title, detail, rejectedReason);
     }
 
     private BusinessDocument requireDocumentParty(Long documentId, long companyId) {
         BusinessDocument document = documentMapper.selectById(documentId);
-        if (document == null || !"SALES_ORDER".equals(document.getDocumentType())) {
+        if (document == null || !isConfirmableDocument(document)) {
             throw new BusinessException("销售单不存在");
         }
         TradeContract contract = contractMapper.selectById(document.getContractId());
@@ -560,8 +610,23 @@ public class SalesOrderInventoryService {
         } catch (Exception ignored) {
             // 历史销售单日期缺失时以确认当天作为业务日期。
         }
-        reconciliationAccountService.recordSalesOrder(document, total, businessDate,
-                AuthContext.userId(), document.getAcknowledgedAt());
+        if ("RETURN_ORDER".equals(document.getDocumentType())) {
+            reconciliationAccountService.recordReturnOrder(document, total, businessDate,
+                    AuthContext.userId(), document.getAcknowledgedAt());
+        } else {
+            reconciliationAccountService.recordSalesOrder(document, total, businessDate,
+                    AuthContext.userId(), document.getAcknowledgedAt());
+        }
+    }
+
+    private boolean isConfirmableDocument(BusinessDocument document) {
+        return document != null && ("SALES_ORDER".equals(document.getDocumentType())
+                || "RETURN_ORDER".equals(document.getDocumentType()));
+    }
+
+    private String documentLabel(BusinessDocument document) {
+        return document != null && "RETURN_ORDER".equals(document.getDocumentType())
+                ? "退货单" : "销售单";
     }
 
     private record SalesItem(int lineNo, String productName, String specification,

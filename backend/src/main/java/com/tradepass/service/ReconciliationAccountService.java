@@ -29,6 +29,7 @@ import java.util.Map;
 @Service
 public class ReconciliationAccountService {
     public static final String SALES_ORDER = "SALES_ORDER";
+    public static final String RETURN_ORDER = "RETURN_ORDER";
     public static final String PAYMENT_VOUCHER = "PAYMENT_VOUCHER";
     public static final String INVOICE = "INVOICE";
     private static final String WORKBOOK_CONTENT_TYPE =
@@ -149,6 +150,20 @@ public class ReconciliationAccountService {
                 document.getRecipientCompanyId(), document.getCompanyId(), approvedBy, approvedAt);
     }
 
+    public void recordReturnOrder(BusinessDocument document, BigDecimal amount,
+                                  LocalDate businessDate, long approvedBy,
+                                  LocalDateTime approvedAt) {
+        if (document == null || document.getId() == null || document.getRecipientCompanyId() == null) {
+            throw new BusinessException("退货单对账信息不完整");
+        }
+        // 退货冲减原销售额，例如 1000 元退货在对账中记为 -1000。
+        BigDecimal negativeAmount = amount == null ? null : amount.abs().negate();
+        insertEntry(document.getRecipientCompanyId(), document.getCompanyId(),
+                document.getContractId(), RETURN_ORDER, document.getId(), businessDate,
+                document.getDocumentNo(), negativeAmount, document.getRecipientCompanyId(),
+                document.getCompanyId(), document.getCompanyId(), approvedBy, approvedAt);
+    }
+
     public void recordAttachment(TradeContract contract, String sourceType, long sourceId,
                                  LocalDate businessDate, String documentNo, BigDecimal amount,
                                  long issuerCompanyId, long approvedBy, LocalDateTime approvedAt) {
@@ -168,7 +183,8 @@ public class ReconciliationAccountService {
                              long buyerCompanyId, long issuerCompanyId, long approvedBy,
                              LocalDateTime approvedAt) {
         if (contractId == null || sourceId == null || businessDate == null
-                || amount == null || amount.signum() < 0) {
+                || amount == null || (amount.signum() < 0 && !RETURN_ORDER.equals(sourceType))
+                || (RETURN_ORDER.equals(sourceType) && amount.signum() > 0)) {
             throw new BusinessException("单据对账金额或日期不完整");
         }
         long companyAId = Math.min(leftCompanyId, rightCompanyId);
@@ -219,7 +235,7 @@ public class ReconciliationAccountService {
         List<Map<String, Object>> detail = new ArrayList<>();
         for (Entry entry : entries) {
             boolean mySale = entry.supplierCompanyId() == companyId;
-            if (SALES_ORDER.equals(entry.sourceType())) {
+            if (SALES_ORDER.equals(entry.sourceType()) || RETURN_ORDER.equals(entry.sourceType())) {
                 if (mySale) mySales = mySales.add(entry.amount());
                 else myPurchases = myPurchases.add(entry.amount());
             } else if (INVOICE.equals(entry.sourceType())) {
@@ -260,6 +276,7 @@ public class ReconciliationAccountService {
         view.put("sourceType", entry.sourceType());
         view.put("sourceTypeText", switch (entry.sourceType()) {
             case SALES_ORDER -> "销售单";
+            case RETURN_ORDER -> "退货单";
             case PAYMENT_VOUCHER -> "转款凭证";
             case INVOICE -> "发票";
             default -> entry.sourceType();
@@ -308,7 +325,10 @@ public class ReconciliationAccountService {
             int rowIndex = DATA_START_ROW;
             for (ContractAccount contract : contracts) {
                 List<WorkbookEntry> entries = entriesByContract.getOrDefault(contract.id(), List.of());
-                List<WorkbookEntry> sales = entriesOfType(entries, SALES_ORDER);
+                List<WorkbookEntry> sales = entries.stream()
+                        .filter(entry -> SALES_ORDER.equals(entry.sourceType())
+                                || RETURN_ORDER.equals(entry.sourceType()))
+                        .toList();
                 List<WorkbookEntry> payments = entriesOfType(entries, PAYMENT_VOUCHER);
                 List<WorkbookEntry> invoices = entriesOfType(entries, INVOICE);
                 int contractRows = Math.max(1, Math.max(sales.size(), Math.max(payments.size(), invoices.size())));
@@ -361,7 +381,7 @@ public class ReconciliationAccountService {
         int payments = 0;
         int invoices = 0;
         for (WorkbookEntry entry : entries) {
-            if (SALES_ORDER.equals(entry.sourceType())) sales++;
+            if (SALES_ORDER.equals(entry.sourceType()) || RETURN_ORDER.equals(entry.sourceType())) sales++;
             else if (PAYMENT_VOUCHER.equals(entry.sourceType())) payments++;
             else if (INVOICE.equals(entry.sourceType())) invoices++;
         }

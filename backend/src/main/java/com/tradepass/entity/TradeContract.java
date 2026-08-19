@@ -26,6 +26,7 @@ public class TradeContract {
     private String terms;
     private Integer versionNo;
     private String status;
+    private Boolean initiatorHidden;
     private Long initiatedBy;
     private Long approvedBy;
     private LocalDateTime approvedAt;
@@ -62,6 +63,8 @@ public class TradeContract {
     public void setVersionNo(Integer versionNo) { this.versionNo = versionNo; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+    public Boolean getInitiatorHidden() { return initiatorHidden; }
+    public void setInitiatorHidden(Boolean initiatorHidden) { this.initiatorHidden = initiatorHidden; }
     public Long getInitiatedBy() { return initiatedBy; }
     public void setInitiatedBy(Long initiatedBy) { this.initiatedBy = initiatedBy; }
     public Long getApprovedBy() { return approvedBy; }

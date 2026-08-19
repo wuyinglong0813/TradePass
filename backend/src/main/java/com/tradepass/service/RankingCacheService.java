@@ -11,7 +11,7 @@ import java.util.List;
 @Service
 public class RankingCacheService {
     private static final TypeReference<List<RankingItem>> RANKING_LIST_TYPE = new TypeReference<>() {};
-    private static final List<String> PERIODS = List.of("total", "year", "month");
+    private static final List<String> PERIODS = List.of("total", "year", "month", "last12");
 
     private final RedisCacheService redisCache;
     private final Duration ttl;

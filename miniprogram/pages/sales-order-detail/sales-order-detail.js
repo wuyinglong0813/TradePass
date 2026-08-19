@@ -5,6 +5,8 @@ Page({
   data: {
     id: '',
     documentNo: '',
+    documentLabel: '销售单',
+    isReturnOrder: false,
     detail: null,
     items: [],
     warehouses: [],
@@ -57,10 +59,12 @@ Page({
         request({ url: '/warehouses' }).catch(() => [])
       ]);
       const content = (detail && detail.content) || {};
+      const isReturnOrder = detail.documentType === 'RETURN_ORDER';
+      const documentLabel = isReturnOrder ? '退货单' : '销售单';
       this.setData({
         detail: {
           ...detail,
-          title: content.title || '销售单',
+          title: content.title || documentLabel,
           companyName: content.companyName || '—',
           counterpartyName: content.counterpartyName || '—',
           contractNo: content.contractNo || '—',
@@ -69,6 +73,8 @@ Page({
           preparedByName: content.preparedByName || '—'
         },
         documentNo: detail.documentNo || this.data.documentNo,
+        documentLabel,
+        isReturnOrder,
         items: detail.items || [],
         warehouses: warehouses || [],
         memo: (memo && memo.content) || '',
@@ -76,9 +82,9 @@ Page({
         memoPreview: this.memoPreviewText((memo && memo.content) || ''),
         memoUpdatedAt: memo && memo.updatedAt ? String(memo.updatedAt).replace('T', ' ').slice(0, 16) : ''
       });
-      wx.setNavigationBarTitle({ title: detail.documentNo || '销售单详情' });
+      wx.setNavigationBarTitle({ title: detail.documentNo || `${documentLabel}详情` });
     } catch (error) {
-      wx.showToast({ title: error.message || '销售单加载失败', icon: 'none' });
+      wx.showToast({ title: error.message || '单据加载失败', icon: 'none' });
     } finally {
       this.setData({ loading: false });
     }
@@ -137,7 +143,7 @@ Page({
       : [];
     this.setData({
       showDraftEditor: true,
-      draftTitle: content.title || '销售单',
+      draftTitle: content.title || this.data.documentLabel,
       draftCompanyName: content.companyName || '',
       draftCounterpartyName: content.counterpartyName || '',
       draftContractNo: content.contractNo || '',
@@ -219,7 +225,7 @@ Page({
   async saveDraft() {
     if (this.data.draftSaving) return;
     if (!this.data.draftTitle.trim()) {
-      wx.showToast({ title: '请输入销售单名称', icon: 'none' });
+      wx.showToast({ title: `请输入${this.data.documentLabel}名称`, icon: 'none' });
       return;
     }
     try {
@@ -240,7 +246,7 @@ Page({
         } }
       });
       this.setData({ showDraftEditor: false });
-      wx.showToast({ title: '销售单草稿已保存', icon: 'success' });
+      wx.showToast({ title: `${this.data.documentLabel}草稿已保存`, icon: 'success' });
       await this.loadAll();
     } catch (error) {
       wx.showToast({ title: error.message || '草稿保存失败', icon: 'none' });
@@ -252,8 +258,8 @@ Page({
   publishDraft() {
     if (!this.data.detail || !this.data.detail.canPublish || this.data.publishing) return;
     wx.showModal({
-      title: '提交销售单确认',
-      content: '提交后将等待需方确认；需方通过后双方正式可见，并自动更新客户对账。',
+      title: `提交${this.data.documentLabel}确认`,
+      content: `提交后将等待对方确认；通过后${this.data.isReturnOrder ? '按负数冲减' : '自动更新'}双方对账。`,
       confirmText: '提交确认',
       success: result => {
         if (result.confirm) this.submitPublishDraft();
@@ -280,7 +286,7 @@ Page({
 
   rejectSalesOrder() {
     wx.showModal({
-      title: '驳回销售单',
+      title: `驳回${this.data.documentLabel}`,
       content: '',
       editable: true,
       placeholderText: '请输入驳回原因',
@@ -449,7 +455,7 @@ Page({
       wx.showLoading({ title: '正在确认...' });
       const filePath = await this.signatureTempFile();
       const detail = await uploadMultipartApiFile(
-        `/sales-orders/${this.data.id}/receive`,
+        `/trade-documents/${this.data.id}/receive`,
         filePath,
         {
           decision: this.data.signatureDecision,
@@ -487,13 +493,13 @@ Page({
     try {
       this.setData({ receiving: true });
       const detail = await request({
-        url: `/sales-orders/${this.data.id}/receive`,
+        url: `/trade-documents/${this.data.id}/receive`,
         method: 'POST',
         data: { decision, warehouseId, reason }
       });
       this.setData({ detail: { ...this.data.detail, ...detail }, items: detail.items || this.data.items });
       wx.showToast({
-        title: decision === 'REJECT' ? '销售单已驳回'
+        title: decision === 'REJECT' ? `${this.data.documentLabel}已驳回`
           : decision === 'INBOUND' ? '已通过并入库' : '已通过并更新对账',
         icon: 'success'
       });
@@ -512,7 +518,7 @@ Page({
   async downloadPdf(showToast) {
     const safeId = String(this.data.detail && this.data.detail.documentNo || this.data.id)
       .replace(/[\\/:*?"<>|\r\n]/g, '_');
-    const filePath = `${wx.env.USER_DATA_PATH}/销售单-${safeId}.pdf`;
+    const filePath = `${wx.env.USER_DATA_PATH}/${this.data.documentLabel}-${safeId}.pdf`;
     wx.showLoading({ title: '下载PDF中...' });
     try {
       const result = await downloadApiFile(`/trade-documents/${this.data.id}/pdf-data`, filePath);

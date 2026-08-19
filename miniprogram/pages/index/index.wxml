@@ -219,7 +219,7 @@
             <view class="partner-avatar">{{item.initial}}</view>
             <view class="partner-main">
               <view class="partner-name-row"><view class="partner-name">{{item.counterpartyName}}</view><view class="status-pill">{{item.status === 'ACTIVE' ? '合作中' : item.status}}</view></view>
-              <view class="partner-meta">{{item.orderCount}} 笔交易<text wx:if="{{item.amount}}"> · 累计 ¥{{item.amount}}</text></view>
+              <view class="partner-meta">点击查看双方合同与对账</view>
             </view>
             <view class="row-arrow">›</view>
           </view>

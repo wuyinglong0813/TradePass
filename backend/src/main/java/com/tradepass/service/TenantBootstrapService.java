@@ -59,6 +59,8 @@ public class TenantBootstrapService {
         seedContractTemplate(companyId, operatorUserId);
         seedDocumentTemplate(companyId, operatorUserId, "SALES_ORDER", "标准销售单模板",
                 "{\"columns\":[\"序号\",\"品名\",\"规格\",\"单位\",\"数量\",\"单价\",\"金额\",\"备注\"],\"blankRows\":8}");
+        seedDocumentTemplate(companyId, operatorUserId, "RETURN_ORDER", "标准退货单模板",
+                "{\"columns\":[\"序号\",\"品名\",\"规格\",\"单位\",\"数量\",\"单价\",\"金额\",\"退货原因\"],\"blankRows\":8}");
     }
 
     public Map<String, SeedRole> standardRolesView() {

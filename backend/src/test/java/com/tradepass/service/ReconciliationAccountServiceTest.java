@@ -69,6 +69,26 @@ class ReconciliationAccountServiceTest {
     }
 
     @Test
+    void recordsReturnOrderAsNegativeSalesAmount() {
+        BusinessDocument returnOrder = new BusinessDocument();
+        returnOrder.setId(51L);
+        returnOrder.setCompanyId(3L);
+        returnOrder.setRecipientCompanyId(9L);
+        returnOrder.setContractId(12L);
+        returnOrder.setDocumentNo("TH-51");
+
+        service.recordReturnOrder(returnOrder, new BigDecimal("1000.00"),
+                LocalDate.of(2026, 8, 19), 7L, LocalDateTime.of(2026, 8, 19, 10, 0));
+
+        ArgumentCaptor<Object[]> args = ArgumentCaptor.forClass(Object[].class);
+        verify(jdbc).update(contains("ON DUPLICATE KEY UPDATE"), args.capture());
+        assertThat(args.getValue()[3]).isEqualTo(ReconciliationAccountService.RETURN_ORDER);
+        assertThat(args.getValue()[7]).isEqualTo(new BigDecimal("-1000.00"));
+        assertThat(args.getValue()[8]).isEqualTo(9L);
+        assertThat(args.getValue()[9]).isEqualTo(3L);
+    }
+
+    @Test
     void fillsTheProvidedWorkbookTemplateWithApprovedDocuments() throws Exception {
         List<ReconciliationAccountService.ContractAccount> contracts = List.of(
                 new ReconciliationAccountService.ContractAccount(12L, "HT-001",

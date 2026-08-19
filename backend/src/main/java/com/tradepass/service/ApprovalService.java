@@ -28,7 +28,7 @@ public class ApprovalService {
     public List<Map<String, Object>> pendingFulfillment() {
         long companyId = AuthContext.requireCompanyId();
         List<Map<String, Object>> items = new ArrayList<>();
-        if (accessControlService.hasPermission(companyId, "sales_order_receive")) {
+        if (canReviewTradeDocuments(companyId)) {
             items.addAll(pendingSalesOrders(companyId));
         }
         if (canReviewAttachments(companyId)) {
@@ -84,10 +84,10 @@ public class ApprovalService {
                     """, companyId);
         }
         long pendingFulfillment = 0;
-        if (accessControlService.hasPermission(companyId, "sales_order_receive")) {
+        if (canReviewTradeDocuments(companyId)) {
             pendingFulfillment += count("""
                     SELECT COUNT(1) FROM business_document
-                    WHERE recipient_company_id = ? AND document_type = 'SALES_ORDER'
+                    WHERE recipient_company_id = ? AND document_type IN ('SALES_ORDER', 'RETURN_ORDER')
                       AND status = 'ISSUED'
                     """, companyId);
         }
@@ -156,9 +156,16 @@ public class ApprovalService {
                 || accessControlService.hasPermission(companyId, "invoice_view");
     }
 
+    private boolean canReviewTradeDocuments(long companyId) {
+        return accessControlService.hasPermission(companyId, "sales_order_receive")
+                || accessControlService.hasPermission(companyId, "contract_sign")
+                || accessControlService.hasPermission(companyId, "order_create");
+    }
+
     private List<Map<String, Object>> pendingSalesOrders(long companyId) {
         return jdbc.query("""
                         SELECT document.id, document.contract_id, document.document_no,
+                               document.document_type,
                                document.created_at, document.company_id AS source_company_id,
                                company.name AS source_company_name,
                                contract.contract_no, contract.name AS contract_name
@@ -166,11 +173,12 @@ public class ApprovalService {
                         JOIN company ON company.id = document.company_id
                         JOIN trade_contract contract ON contract.id = document.contract_id
                         WHERE document.recipient_company_id = ?
-                          AND document.document_type = 'SALES_ORDER'
+                          AND document.document_type IN ('SALES_ORDER', 'RETURN_ORDER')
                           AND document.status = 'ISSUED'
                         ORDER BY document.created_at DESC, document.id DESC
                         """, (rs, rowNum) -> item(
-                        rs.getLong("id"), "SALES_ORDER", "销售单",
+                        rs.getLong("id"), rs.getString("document_type"),
+                        "RETURN_ORDER".equals(rs.getString("document_type")) ? "退货单" : "销售单",
                         rs.getLong("source_company_id"), rs.getString("source_company_name"),
                         rs.getLong("contract_id"), rs.getString("contract_no"),
                         rs.getString("contract_name"), rs.getString("document_no"),

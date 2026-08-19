@@ -275,9 +275,90 @@ class TradeServiceTest {
                 org.mockito.ArgumentMatchers.eq(7L));
         verify(approvalService).recordResult(9L, 3L, "CONTRACT", 20L, 20L,
                 "APPROVED", "合同已签署并生效", "对方已签署合同 HT-TEST", null);
+        verify(approvalService).recordResult(3L, 9L, "CONTRACT", 20L, 20L,
+                "APPROVED", "已同意签署对方企业的HT-TEST合同", "我方已签署合同 HT-TEST", null);
         assertThat(service.rejectContract(20L)).isEqualTo("合同已拒绝");
         verify(approvalService).recordResult(9L, 3L, "CONTRACT", 20L, 20L,
                 "REJECTED", "合同已被拒绝", "对方已拒绝合同 HT-TEST", null);
+        verify(approvalService).recordResult(3L, 9L, "CONTRACT", 20L, null,
+                "REJECTED", "已拒绝对方企业的HT-TEST合同", "我方已拒绝合同 HT-TEST", null);
+    }
+
+    @Test
+    void initiatorCanCancelResubmitAndDeleteInactiveContract() {
+        TradeContract outgoing = new TradeContract();
+        outgoing.setId(41L);
+        outgoing.setCompanyId(3L);
+        outgoing.setCounterpartyCompanyId(9L);
+        outgoing.setCounterpartyName("对方企业");
+        outgoing.setContractNo("HT-41");
+        outgoing.setDirection("SALE");
+        outgoing.setName("原合同");
+        outgoing.setStatus("PENDING");
+        outgoing.setInitiatorHidden(false);
+        outgoing.setVersionNo(1);
+        when(contractMapper.selectOne(any(Wrapper.class))).thenReturn(outgoing);
+        when(contractMapper.update(any(Wrapper.class))).thenReturn(1);
+
+        assertThat(service.cancelContract(41L)).isEqualTo("合同审批已撤回");
+        verify(approvalService).recordResult(9L, 3L, "CONTRACT", 41L, 41L,
+                "CANCELLED", "合同已被发起方撤回", "发起方已撤回合同 HT-41", null);
+
+        Company initiator = new Company();
+        initiator.setId(3L);
+        initiator.setName("当前企业");
+        Company counterparty = new Company();
+        counterparty.setId(9L);
+        counterparty.setName("对方企业");
+        when(companyMapper.selectById(3L)).thenReturn(initiator);
+        when(companyMapper.selectById(9L)).thenReturn(counterparty);
+        when(relationMapper.countActiveBetween(3L, 9L)).thenReturn(1L);
+        when(contractMapper.selectById(41L)).thenReturn(outgoing);
+        CreateContractRequest changed = new CreateContractRequest(null, "修改后合同", "新模板",
+                new BigDecimal("1200"), "2026-08-19", null, "{}",
+                9L, "SALE", null, "resubmit-41");
+
+        ContractPayload resubmitted = service.resubmitContract(41L, changed);
+        assertThat(resubmitted.id()).isEqualTo("41");
+
+        outgoing.setStatus("REJECTED");
+        assertThat(service.deleteContract(41L)).isEqualTo("合同已从我方列表删除");
+    }
+
+    @Test
+    void rejectedContractStaysOnlyInInitiatorListUntilLocallyDeleted() {
+        TradeContract outgoing = new TradeContract();
+        outgoing.setId(51L);
+        outgoing.setCompanyId(3L);
+        outgoing.setCounterpartyCompanyId(9L);
+        outgoing.setCounterpartyName("拒绝方");
+        outgoing.setName("供货合同");
+        outgoing.setStatus("REJECTED");
+        outgoing.setInitiatorHidden(false);
+
+        TradeContract incoming = new TradeContract();
+        incoming.setId(52L);
+        incoming.setCompanyId(9L);
+        incoming.setCounterpartyCompanyId(3L);
+        incoming.setName("对方合同");
+        incoming.setStatus("REJECTED");
+
+        TradeContract hidden = new TradeContract();
+        hidden.setId(53L);
+        hidden.setCompanyId(3L);
+        hidden.setCounterpartyCompanyId(9L);
+        hidden.setStatus("REJECTED");
+        hidden.setInitiatorHidden(true);
+
+        when(contractMapper.selectById(51L)).thenReturn(outgoing);
+        when(contractMapper.selectById(52L)).thenReturn(incoming);
+        when(contractMapper.selectById(53L)).thenReturn(hidden);
+
+        assertThat(service.getContract(51L).status()).isEqualTo("REJECTED");
+        assertThatThrownBy(() -> service.getContract(52L))
+                .isInstanceOf(BusinessException.class).hasMessage("合同不存在");
+        assertThatThrownBy(() -> service.getContract(53L))
+                .isInstanceOf(BusinessException.class).hasMessage("合同不存在");
     }
 
     @Test

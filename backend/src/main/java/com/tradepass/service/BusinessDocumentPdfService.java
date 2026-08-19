@@ -73,7 +73,7 @@ public class BusinessDocumentPdfService {
 
             if ("DRAFT".equals(businessDocument.getStatus())) {
                 Font draftFont = new Font(baseFont, 10, Font.NORMAL, new Color(180, 106, 0));
-                Paragraph draft = new Paragraph("销售单草稿 · 合同生效并发布后方为正式单据", draftFont);
+                Paragraph draft = new Paragraph(documentLabel(businessDocument) + "草稿 · 合同生效并发布后方为正式单据", draftFont);
                 draft.setAlignment(Element.ALIGN_CENTER);
                 draft.setSpacingAfter(10);
                 document.add(draft);
@@ -93,9 +93,14 @@ public class BusinessDocumentPdfService {
     }
 
     public String fileName(BusinessDocument document) {
-        String title = "DRAFT".equals(document.getStatus()) ? "销售单草稿" : "销售单";
+        String title = documentLabel(document) + ("DRAFT".equals(document.getStatus()) ? "草稿" : "");
         return (title + "-" + document.getDocumentNo())
                 .replaceAll("[\\\\/:*?\"<>|\\r\\n]+", "_") + ".pdf";
+    }
+
+    private String documentLabel(BusinessDocument document) {
+        return document != null && "RETURN_ORDER".equals(document.getDocumentType())
+                ? "退货单" : "销售单";
     }
 
     private void addDocumentHeader(Document document, BusinessDocument source,

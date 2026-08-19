@@ -53,13 +53,13 @@ class RankingServiceTest {
 
     @Test
     void normalizesUnknownPeriodAndHandlesMissingCompany() {
-        when(orderMapper.selectRanking(3L, "PURCHASE", "total")).thenReturn(List.of());
+        when(orderMapper.selectRanking(3L, "PURCHASE", "year")).thenReturn(List.of());
 
         HomePayload result = service.buyerHome("quarter", "3");
 
         assertThat(result.companyName()).isEqualTo("未知企业");
         assertThat(result.ranking()).isEmpty();
-        verify(orderMapper).selectRanking(3L, "PURCHASE", "total");
+        verify(orderMapper).selectRanking(3L, "PURCHASE", "year");
     }
 
     @Test

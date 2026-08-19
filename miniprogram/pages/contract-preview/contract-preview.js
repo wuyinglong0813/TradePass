@@ -1,4 +1,4 @@
-const { downloadApiFile, uploadApiFile, uploadMultipartApiFile } = require('../../utils/fileTransfer');
+const { downloadApiFile, uploadMultipartApiFile } = require('../../utils/fileTransfer');
 
 function today() {
   const now = new Date();
@@ -23,6 +23,7 @@ Page({
     logisticsLoading: false,
     logisticsUploading: false,
     salesDocuments: [],
+    returnDocuments: [],
     paymentAttachments: [],
     otherAttachments: [],
     attachmentLoading: false,
@@ -57,7 +58,12 @@ Page({
     contractClauses: [],
     contractTotalAmount: '',
     contractTotalAmountCn: '',
+    canCancelContract: false,
+    canEditContract: false,
+    canDeleteContract: false,
+    contractActionLoading: false,
     canCreateSalesOrder: false,
+    canCreateReturnOrder: false,
     createAsDraft: false,
     salesOrderCreateText: '创建销售单',
     salesOrderEmptyHint: '等待合同供方创建销售单',
@@ -96,7 +102,19 @@ Page({
     const counterpartyName = decodeURIComponent(options.counterpartyName || '');
     this.setData({ contractId, contractName, counterpartyName });
     wx.setNavigationBarTitle({ title: '合同详情' });
-    setTimeout(() => this.loadContractDetail(), 100);
+    this.loadContractDetail();
+  },
+
+  onShow() {
+    if (this.hasLoadedContract) this.loadContractDetail();
+  },
+
+  onPullDownRefresh() {
+    Promise.all([
+      this.loadContractDetail(),
+      this.loadBusinessDocuments('SALES_ORDER'),
+      this.loadBusinessDocuments('RETURN_ORDER')
+    ]).finally(() => wx.stopPullDownRefresh());
   },
 
   switchTab(e) {
@@ -105,6 +123,7 @@ Page({
     this.setData({ activeTab: tab });
     if (tab === 'fulfillment') {
       this.loadBusinessDocuments('SALES_ORDER');
+      this.loadBusinessDocuments('RETURN_ORDER');
       this.loadFulfillmentData();
     }
   },
@@ -120,6 +139,7 @@ Page({
         PENDING: '待签署',
         ACTIVE: '履行中',
         REJECTED: '已拒绝',
+        CANCELLED: '已撤回',
         COMPLETED: '已完成'
       };
       // 尝试解析结构化合同数据
@@ -159,6 +179,9 @@ Page({
       const isSupplier = viewerDirection === 'SALE';
       const canCreateSalesOrder = isSupplier
         && (contract.status === 'PENDING' || contract.status === 'ACTIVE');
+      const canCreateReturnOrder = !isSupplier
+        && (contract.status === 'PENDING' || contract.status === 'ACTIVE');
+      const outgoing = contract.perspective === 'OUTGOING';
       const createAsDraft = true;
 
       this.setData({
@@ -179,7 +202,11 @@ Page({
           ? String(contractTable.summary.totalAmount) : String(contract.amount || ''),
         contractTotalAmountCn: contractTable.summary && contractTable.summary.totalAmountCn
           ? String(contractTable.summary.totalAmountCn) : '',
+        canCancelContract: outgoing && contract.status === 'PENDING',
+        canEditContract: outgoing && ['PENDING', 'REJECTED', 'CANCELLED'].includes(contract.status),
+        canDeleteContract: outgoing && contract.status === 'REJECTED',
         canCreateSalesOrder,
+        canCreateReturnOrder,
         createAsDraft,
         salesOrderCreateText: '创建草稿',
         salesOrderEmptyHint: canCreateSalesOrder
@@ -194,11 +221,68 @@ Page({
       }, () => {
         this.loadContractMemo();
         this.loadBusinessDocuments('SALES_ORDER');
+        this.loadBusinessDocuments('RETURN_ORDER');
         this.loadFulfillmentData();
       });
+      this.hasLoadedContract = true;
       wx.setNavigationBarTitle({ title: '合同详情' });
     } catch (e) {
       wx.showToast({ title: '加载合同失败', icon: 'none' });
+    }
+  },
+
+  editContract() {
+    if (!this.data.canEditContract || this.data.contractActionLoading) return;
+    wx.navigateTo({
+      url: `/pages/sign-contract/sign-contract?mode=edit&contractId=${this.data.contractId}`
+    });
+  },
+
+  cancelContract() {
+    if (!this.data.canCancelContract || this.data.contractActionLoading) return;
+    wx.showModal({
+      title: '撤回合同审批',
+      content: '撤回后对方将不能继续签署，你可以修改合同后重新发起。',
+      confirmText: '确认撤回',
+      success: result => {
+        if (result.confirm) this.submitContractAction('cancel');
+      }
+    });
+  },
+
+  deleteContract() {
+    if (!this.data.canDeleteContract || this.data.contractActionLoading) return;
+    wx.showModal({
+      title: '从我方列表删除',
+      content: '仅删除我方合同列表中的这条被拒绝合同。对方合同列表不会保留该合同，只保留拒绝审批记录。',
+      confirmText: '确认删除',
+      confirmColor: '#d94848',
+      success: result => {
+        if (result.confirm) this.submitContractAction('delete');
+      }
+    });
+  },
+
+  async submitContractAction(action) {
+    const { request } = require('../../utils/request');
+    try {
+      this.setData({ contractActionLoading: true });
+      await request({
+        url: `/contracts/${this.data.contractId}/${action}`,
+        method: 'POST',
+        data: {}
+      });
+      if (action === 'delete') {
+        wx.showToast({ title: '已从我方列表删除', icon: 'success' });
+        setTimeout(() => wx.navigateBack({ delta: 1 }), 500);
+        return;
+      }
+      wx.showToast({ title: '合同审批已撤回', icon: 'success' });
+      await this.loadContractDetail();
+    } catch (error) {
+      wx.showToast({ title: error.message || '操作失败', icon: 'none' });
+    } finally {
+      this.setData({ contractActionLoading: false });
     }
   },
 
@@ -437,6 +521,7 @@ Page({
     this.setData({
       fulfillmentCount: this.data.logisticsList.length
         + this.data.salesDocuments.length
+        + this.data.returnDocuments.length
         + this.data.paymentAttachments.length
         + this.data.otherAttachments.length
         + this.data.invoiceList.length
@@ -728,19 +813,11 @@ Page({
     this.setData({ attachmentUploading: true });
     wx.showLoading({ title: '上传资料中...' });
     try {
-      if (category === 'PAYMENT_VOUCHER' || category === 'INVOICE') {
-        await uploadMultipartApiFile(
-          `/contracts/${this.data.contractId}/attachments`,
-          filePath,
-          { category, originalName, ...metadata }
-        );
-      } else {
-        await uploadApiFile(
-          `/contracts/${this.data.contractId}/attachments/base64`,
-          filePath,
-          { category, originalName, ...metadata }
-        );
-      }
+      await uploadMultipartApiFile(
+        `/contracts/${this.data.contractId}/attachments`,
+        filePath,
+        { category, originalName, ...metadata }
+      );
       const label = category === 'PAYMENT_VOUCHER'
         ? '转款凭证'
         : category === 'INVOICE' ? '发票' : '资料';
@@ -888,6 +965,9 @@ Page({
 
   async loadBusinessDocuments(documentType) {
     const { request } = require('../../utils/request');
+    this.documentRequestSeq = this.documentRequestSeq || {};
+    const requestSeq = (this.documentRequestSeq[documentType] || 0) + 1;
+    this.documentRequestSeq[documentType] = requestSeq;
     try {
       const list = await request({
         url: `/contracts/${this.data.contractId}/documents?type=${documentType}`
@@ -896,7 +976,9 @@ Page({
         ...item,
         dateText: String(item.createdAt || '').slice(0, 10)
       }));
-      this.setData({ salesDocuments: documents }, () => this.updateFulfillmentCount());
+      if (requestSeq !== this.documentRequestSeq[documentType]) return;
+      const key = documentType === 'RETURN_ORDER' ? 'returnDocuments' : 'salesDocuments';
+      this.setData({ [key]: documents }, () => this.updateFulfillmentCount());
     } catch (error) {
       wx.showToast({ title: error.message || '单据加载失败', icon: 'none' });
     }
@@ -904,7 +986,7 @@ Page({
 
   async createBusinessDocument(e) {
     const documentType = e.currentTarget.dataset.type;
-    const label = '销售单';
+    const label = documentType === 'RETURN_ORDER' ? '退货单' : '销售单';
     const { request } = require('../../utils/request');
     try {
       wx.showLoading({ title: '加载模板中...' });
@@ -914,7 +996,7 @@ Page({
       if (!templates || templates.length === 0) {
         wx.showModal({
           title: `暂无${label}模板`,
-          content: `请先到“企业 - 销售单模板”上传${label}模板。`,
+          content: `请先到“企业 - 交易单据模板”上传${label}模板。`,
           showCancel: false
         });
         return;
@@ -922,7 +1004,7 @@ Page({
       const contract = this.data.contract || {};
       const defaultTemplate = {
         ...templates[0],
-        name: `合同默认销售单（${contract.contractNo || contract.id || this.data.contractId}）`,
+        name: `合同默认${label}（${contract.contractNo || contract.id || this.data.contractId}）`,
         sourceType: 'CONTRACT_DEFAULT'
       };
       const selectableTemplates = [defaultTemplate].concat(templates.map(item => ({
@@ -1162,7 +1244,7 @@ Page({
     }
     const confirmed = await new Promise(resolve => {
       wx.showModal({
-        title: '确认保存销售单草稿',
+        title: `确认保存${documentEditorLabel}草稿`,
         content: `模板：${documentTemplates[documentTemplateIndex].name}\n保存后可继续编辑，提交并经需方确认后才会进入对账。`,
         success: result => resolve(!!result.confirm),
         fail: () => resolve(false)
@@ -1196,7 +1278,7 @@ Page({
       });
       await this.loadBusinessDocuments(documentEditorType);
       this.setData({ showDocumentEditor: false });
-      wx.showToast({ title: '销售单草稿已保存', icon: 'success' });
+      wx.showToast({ title: `${documentEditorLabel}草稿已保存`, icon: 'success' });
     } catch (error) {
       wx.showToast({ title: error.message || '单据生成失败', icon: 'none' });
     } finally {
@@ -1215,7 +1297,7 @@ Page({
 
   async downloadBusinessDocumentFile(document, showDownloadedToast) {
     if (!document || !document.id) return;
-    const label = '销售单';
+    const label = document.documentType === 'RETURN_ORDER' ? '退货单' : '销售单';
     const safeNo = String(document.documentNo || document.id).replace(/[\\/:*?"<>|\r\n]/g, '_');
     const filePath = `${wx.env.USER_DATA_PATH}/${label}-${safeNo}.pdf`;
     try {

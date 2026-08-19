@@ -31,6 +31,7 @@ import java.util.UUID;
 @Service
 public class BusinessDocumentService {
     public static final String SALES_ORDER = "SALES_ORDER";
+    public static final String RETURN_ORDER = "RETURN_ORDER";
 
     private final BusinessDocumentTemplateMapper templateMapper;
     private final BusinessDocumentMapper documentMapper;
@@ -152,16 +153,19 @@ public class BusinessDocumentService {
         }
         TradeContract contract = requireContractParty(contractId, companyId);
         if (!"PENDING".equals(contract.getStatus()) && !"ACTIVE".equals(contract.getStatus())) {
-            throw new BusinessException("当前合同状态不能创建销售单");
+            throw new BusinessException("当前合同状态不能创建" + typeLabel(type));
         }
         long supplierCompanyId = supplierCompanyId(contract);
-        if (supplierCompanyId != companyId) {
-            throw new BusinessException("仅合同供方可以创建销售单");
-        }
-        Long recipientCompanyId = buyerCompanyId(contract);
-        if (recipientCompanyId == null) {
+        Long buyerCompanyId = buyerCompanyId(contract);
+        if (buyerCompanyId == null) {
             throw new BusinessException("合同需方企业信息不完整");
         }
+        long issuerCompanyId = SALES_ORDER.equals(type) ? supplierCompanyId : buyerCompanyId;
+        if (issuerCompanyId != companyId) {
+            throw new BusinessException(SALES_ORDER.equals(type)
+                    ? "仅合同供方可以创建销售单" : "仅合同需方可以创建退货单");
+        }
+        Long recipientCompanyId = SALES_ORDER.equals(type) ? buyerCompanyId : supplierCompanyId;
         BusinessDocumentTemplate template = templateMapper.selectOne(
                 new LambdaQueryWrapper<BusinessDocumentTemplate>()
                         .eq(BusinessDocumentTemplate::getId, templateId)
@@ -173,20 +177,23 @@ public class BusinessDocumentService {
         }
 
         Company company = companyMapper.selectById(companyId);
+        Company recipientCompany = companyMapper.selectById(recipientCompanyId);
         BusinessDocument document = new BusinessDocument();
         document.setCompanyId(companyId);
         document.setRecipientCompanyId(recipientCompanyId);
         document.setContractId(contractId);
         document.setDocumentType(type);
         document.setSourceType(normalizeSourceType(string(body.get("sourceType"))));
-        // 销售单统一先保存为草稿；合同生效后由供方明确提交给需方确认。
+        // 单据统一先保存为草稿，合同生效后再明确发布给对方确认。
         document.setStatus("DRAFT");
         document.setDocumentNo(createDocumentNo(type));
         document.setTemplateId(template.getId());
         document.setTemplateName(template.getName());
         String preparedByName = userIdentityService == null
                 ? "用户" + AuthContext.userId() : userIdentityService.currentDisplayName();
-        String snapshot = createSnapshot(type, template, contract, company, preparedByName);
+        String snapshot = createSnapshot(type, template, contract, company,
+                recipientCompany == null ? contract.getCounterpartyName() : recipientCompany.getName(),
+                preparedByName);
         document.setContent(applySnapshotEdits(snapshot, body.get("content")));
         document.setCreatedBy(AuthContext.userId());
         documentMapper.insert(document);
@@ -194,7 +201,7 @@ public class BusinessDocumentService {
             inventoryService.saveDocumentItems(document);
         }
         auditLogService.log(companyId, "BUSINESS_DOCUMENT", document.getId(), "CREATE",
-                "按模板 " + template.getName() + " 创建销售单草稿");
+                "按模板 " + template.getName() + " 创建" + typeLabel(type) + "草稿");
         return documentView(documentMapper.selectById(document.getId()), contract, companyId);
     }
 
@@ -205,15 +212,17 @@ public class BusinessDocumentService {
         BusinessDocument document = requireOwnedEditableDocument(id, companyId);
         TradeContract contract = requireContractParty(document.getContractId(), companyId);
         if (!"PENDING".equals(contract.getStatus()) && !"ACTIVE".equals(contract.getStatus())) {
-            throw new BusinessException("当前合同状态不能编辑销售单草稿");
+            throw new BusinessException("当前合同状态不能编辑单据草稿");
         }
         document.setContent(applySnapshotEdits(document.getContent(), body.get("content")));
+        document.setStatus("DRAFT");
+        document.setRejectedReason(null);
         documentMapper.updateById(document);
         if (inventoryService != null) {
             inventoryService.saveDocumentItems(document);
         }
         auditLogService.log(companyId, "BUSINESS_DOCUMENT", document.getId(),
-                "UPDATE", "编辑销售单草稿 " + document.getDocumentNo());
+                "UPDATE", "编辑" + typeLabel(document.getDocumentType()) + "草稿 " + document.getDocumentNo());
         return documentView(documentMapper.selectById(document.getId()), contract, companyId);
     }
 
@@ -224,16 +233,20 @@ public class BusinessDocumentService {
         BusinessDocument document = requireOwnedEditableDocument(id, companyId);
         TradeContract contract = requireContractParty(document.getContractId(), companyId);
         if (!"ACTIVE".equals(contract.getStatus())) {
-            throw new BusinessException("合同生效后才能发布销售单");
+            throw new BusinessException("合同生效后才能发布" + typeLabel(document.getDocumentType()));
         }
-        if (supplierCompanyId(contract) != companyId) {
-            throw new BusinessException("仅合同供方可以发布销售单");
+        Long buyerCompanyId = buyerCompanyId(contract);
+        if (buyerCompanyId == null) throw new BusinessException("合同需方企业信息不完整");
+        long issuerCompanyId = SALES_ORDER.equals(document.getDocumentType())
+                ? supplierCompanyId(contract) : buyerCompanyId;
+        if (issuerCompanyId != companyId) {
+            throw new BusinessException("仅单据制单方可以发布" + typeLabel(document.getDocumentType()));
         }
         document.setStatus("ISSUED");
         document.setRejectedReason(null);
         documentMapper.updateById(document);
         auditLogService.log(companyId, "BUSINESS_DOCUMENT", document.getId(),
-                "SUBMIT", "提交销售单等待需方确认 " + document.getDocumentNo());
+                "SUBMIT", "提交" + typeLabel(document.getDocumentType()) + "等待对方确认 " + document.getDocumentNo());
         return documentView(documentMapper.selectById(document.getId()), contract, companyId);
     }
 
@@ -247,13 +260,13 @@ public class BusinessDocumentService {
         requireContractParty(document.getContractId(), companyId);
         if ("DRAFT".equals(document.getStatus())
                 && !Long.valueOf(companyId).equals(document.getCompanyId())) {
-            throw new BusinessException("销售单草稿不存在");
+            throw new BusinessException("单据草稿不存在");
         }
         return document;
     }
 
     public String typeLabel(String type) {
-        return "销售单";
+        return RETURN_ORDER.equals(type) ? "退货单" : "销售单";
     }
 
     public String defaultTemplateContent(String type) {
@@ -283,7 +296,8 @@ public class BusinessDocumentService {
     }
 
     private String createSnapshot(String type, BusinessDocumentTemplate template,
-                                  TradeContract contract, Company company, String preparedByName) {
+                                  TradeContract contract, Company company,
+                                  String counterpartyName, String preparedByName) {
         try {
             JsonNode templateContent = objectMapper.readTree(
                     normalizeTemplateContent(type, template.getContent()));
@@ -294,7 +308,7 @@ public class BusinessDocumentService {
             ObjectNode snapshot = objectMapper.createObjectNode();
             snapshot.put("title", typeLabel(type));
             snapshot.put("companyName", company == null ? "本方企业" : company.getName());
-            snapshot.put("counterpartyName", contract.getCounterpartyName());
+            snapshot.put("counterpartyName", safe(counterpartyName));
             snapshot.put("contractNo", safe(contract.getContractNo()));
             snapshot.put("documentNo", "");
             snapshot.put("date", LocalDate.now().toString());
@@ -492,10 +506,11 @@ public class BusinessDocumentService {
 
     private BusinessDocument requireOwnedEditableDocument(Long id, long companyId) {
         BusinessDocument document = documentMapper.selectById(id);
-        if (document == null || !SALES_ORDER.equals(document.getDocumentType())
+        if (document == null || (!SALES_ORDER.equals(document.getDocumentType())
+                && !RETURN_ORDER.equals(document.getDocumentType()))
                 || !Long.valueOf(companyId).equals(document.getCompanyId())
                 || (!"DRAFT".equals(document.getStatus()) && !"REJECTED".equals(document.getStatus()))) {
-            throw new BusinessException("可编辑的销售单草稿不存在");
+            throw new BusinessException("可编辑的单据草稿不存在");
         }
         return document;
     }
@@ -542,14 +557,14 @@ public class BusinessDocumentService {
 
     private String normalizeType(String type) {
         String normalized = type == null ? "" : type.trim().toUpperCase(Locale.ROOT);
-        if (!SALES_ORDER.equals(normalized)) {
+        if (!SALES_ORDER.equals(normalized) && !RETURN_ORDER.equals(normalized)) {
             throw new BusinessException("单据类型不正确");
         }
         return normalized;
     }
 
     private String createDocumentNo(String type) {
-        String prefix = "XS";
+        String prefix = RETURN_ORDER.equals(type) ? "TH" : "XS";
         String date = LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE);
         String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 8).toUpperCase(Locale.ROOT);
         return prefix + "-" + date + "-" + suffix;

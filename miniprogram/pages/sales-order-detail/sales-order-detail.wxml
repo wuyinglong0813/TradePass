@@ -1,5 +1,5 @@
 <view class="page">
-  <view class="loading" wx:if="{{loading && !detail}}">加载销售单中...</view>
+  <view class="loading" wx:if="{{loading && !detail}}">加载单据中...</view>
   <block wx:if="{{detail}}">
     <view class="hero">
       <view class="hero-label">{{detail.title}}</view>
@@ -18,14 +18,14 @@
     </view>
 
     <view class="draft-notice" wx:if="{{detail.status === 'DRAFT' || detail.status === 'REJECTED'}}">
-      <view class="draft-notice-title">{{detail.status === 'REJECTED' ? '销售单已被驳回' : '这是销售单草稿'}}</view>
+      <view class="draft-notice-title">{{detail.status === 'REJECTED' ? documentLabel + '已被驳回' : '这是' + documentLabel + '草稿'}}</view>
       <view class="reject-reason" wx:if="{{detail.status === 'REJECTED'}}">驳回原因：{{detail.rejectedReason}}</view>
       <view wx:elif="{{detail.contractStatus === 'PENDING'}}">合同尚待对方确认，当前只有供方可见；合同生效后才能提交。</view>
       <view wx:elif="{{detail.contractStatus === 'ACTIVE'}}">合同已生效，可以继续编辑或提交给需方确认。</view>
       <view wx:else>合同当前未生效，此草稿不能编辑或发布。</view>
       <view class="draft-actions">
         <button wx:if="{{detail.canEditDraft}}" class="secondary" bindtap="openDraftEditor">编辑草稿</button>
-        <button wx:if="{{detail.canPublish}}" class="primary" loading="{{publishing}}" disabled="{{publishing}}" bindtap="publishDraft">提交给需方确认</button>
+        <button wx:if="{{detail.canPublish}}" class="primary" loading="{{publishing}}" disabled="{{publishing}}" bindtap="publishDraft">提交给对方确认</button>
       </view>
     </view>
 
@@ -48,22 +48,22 @@
     </view>
 
     <view class="receive-card" wx:if="{{detail.canReceive || detail.canInbound || detail.canReject}}">
-      <view class="receive-title">销售单确认</view>
-      <view class="receive-tip">首次通过需要当前用户手写签名；通过后销售单正式进入双方对账，也可以直接形成入库记录。</view>
+      <view class="receive-title">{{documentLabel}}确认</view>
+      <view class="receive-tip">首次通过需要当前用户手写签名；通过后{{isReturnOrder ? '以负数冲减双方对账' : '正式进入双方对账'}}，也可以直接形成入库记录。</view>
       <view class="receive-actions">
         <button wx:if="{{detail.canReject}}" class="secondary" loading="{{receiving}}" disabled="{{receiving}}" bindtap="rejectSalesOrder">驳回</button>
         <button wx:if="{{detail.canReceive}}" class="secondary" loading="{{receiving}}" disabled="{{receiving}}" bindtap="receiveOnly">通过，暂不入库</button>
         <button wx:if="{{detail.canInbound}}" class="primary" loading="{{receiving}}" disabled="{{receiving}}" bindtap="chooseWarehouse">通过并入库</button>
       </view>
     </view>
-    <view class="done-tip" wx:if="{{detail.status === 'ACKNOWLEDGED'}}">该销售单已通过并计入对账，可稍后选择仓库入库</view>
-    <view class="done-tip" wx:if="{{detail.status === 'INBOUNDED'}}">该销售单已通过、计入对账并完成入库</view>
+    <view class="done-tip" wx:if="{{detail.status === 'ACKNOWLEDGED'}}">该{{documentLabel}}已通过并更新对账，可稍后选择仓库入库</view>
+    <view class="done-tip" wx:if="{{detail.status === 'INBOUNDED'}}">该{{documentLabel}}已通过、更新对账并完成入库</view>
   </block>
 
   <view class="memo-mask" wx:if="{{showMemoEditor}}" bindtap="closeMemoEditor">
     <view class="memo-sheet" catchtap="noop">
       <view class="memo-sheet-handle"></view>
-      <view class="memo-head"><view><view class="section-title">我的销售单进展</view><view class="memo-tip">仅当前账号可见，不与同事或对方共享</view></view><view class="memo-close" bindtap="closeMemoEditor">×</view></view>
+      <view class="memo-head"><view><view class="section-title">我的{{documentLabel}}进展</view><view class="memo-tip">仅当前账号可见，不与同事或对方共享</view></view><view class="memo-close" bindtap="closeMemoEditor">×</view></view>
       <textarea value="{{memoDraft}}" maxlength="4000" bindinput="onMemoInput" placeholder="记录接收、入库或后续处理进展…" focus="{{showMemoEditor}}"/>
       <view class="memo-sheet-meta"><text>{{memoDraft.length}} / 4000</text><text wx:if="{{memoUpdatedAt}}">上次保存 {{memoUpdatedAt}}</text></view>
       <button class="memo-save" loading="{{memoSaving}}" disabled="{{memoSaving}}" bindtap="saveMemo">保存我的进展</button>
@@ -90,7 +90,7 @@
         ></canvas>
         <view class="signature-placeholder">请在此区域签名</view>
       </view>
-      <view class="signature-notice">签名会自动填写到销售单 PDF 的“客户确认”位置</view>
+      <view class="signature-notice">签名会自动填写到{{documentLabel}} PDF 的“客户确认”位置</view>
       <view class="signature-actions">
         <button class="signature-clear" disabled="{{receiving}}" bindtap="clearSignature">清除重签</button>
         <button class="signature-confirm" loading="{{receiving}}" disabled="{{receiving}}" bindtap="confirmSignature">{{signatureActionText}}</button>
@@ -99,11 +99,11 @@
   </view>
 
   <view class="draft-editor-page" wx:if="{{showDraftEditor}}">
-    <view class="draft-editor-header"><view bindtap="closeDraftEditor">取消</view><text>编辑销售单草稿</text><view class="placeholder">取消</view></view>
+    <view class="draft-editor-header"><view bindtap="closeDraftEditor">取消</view><text>编辑{{documentLabel}}草稿</text><view class="placeholder">取消</view></view>
     <scroll-view class="draft-editor-body" scroll-y>
       <view class="card edit-card">
-        <view class="edit-label">销售单名称</view>
-        <input value="{{draftTitle}}" data-field="draftTitle" bindinput="onDraftFieldInput" placeholder="请输入销售单名称"/>
+        <view class="edit-label">{{documentLabel}}名称</view>
+        <input value="{{draftTitle}}" data-field="draftTitle" bindinput="onDraftFieldInput" placeholder="请输入单据名称"/>
       </view>
       <view class="card edit-card">
         <view class="section-title">单据信息</view>

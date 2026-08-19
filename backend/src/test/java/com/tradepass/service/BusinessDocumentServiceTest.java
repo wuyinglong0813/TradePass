@@ -195,7 +195,8 @@ class BusinessDocumentServiceTest {
         draft.setRecipientCompanyId(4L);
         draft.setContractId(23L);
         draft.setDocumentType(BusinessDocumentService.SALES_ORDER);
-        draft.setStatus("DRAFT");
+        draft.setStatus("REJECTED");
+        draft.setRejectedReason("数量有误");
         draft.setDocumentNo("XS-DRAFT-33");
         draft.setTemplateId(11L);
         draft.setTemplateName("标准销售单");
@@ -211,10 +212,62 @@ class BusinessDocumentServiceTest {
         )));
         assertThat(edited).containsEntry("canPublish", true);
         assertThat(objectMapper.readTree(draft.getContent()).path("title").asText()).isEqualTo("已修改草稿");
+        assertThat(draft.getStatus()).isEqualTo("DRAFT");
+        assertThat(draft.getRejectedReason()).isNull();
 
         Map<String, Object> published = service.publishDraft(33L);
         assertThat(draft.getStatus()).isEqualTo("ISSUED");
         assertThat(published).containsEntry("statusText", "待对方确认")
                 .containsEntry("canPublish", false);
+    }
+
+    @Test
+    void buyerCreatesReturnOrderForSupplier() throws Exception {
+        AuthContext.set(8L, 4L);
+        BusinessDocumentTemplate template = new BusinessDocumentTemplate();
+        template.setId(15L);
+        template.setCompanyId(4L);
+        template.setDocumentType(BusinessDocumentService.RETURN_ORDER);
+        template.setName("标准退货单");
+        template.setContent("{\"columns\":[\"序号\",\"品名\",\"数量\",\"金额\"],\"blankRows\":8}");
+        when(templateMapper.selectOne(any())).thenReturn(template);
+
+        TradeContract contract = new TradeContract();
+        contract.setId(25L);
+        contract.setCompanyId(3L);
+        contract.setCounterpartyCompanyId(4L);
+        contract.setCounterpartyName("采购企业");
+        contract.setDirection("SALE");
+        contract.setStatus("ACTIVE");
+        contract.setTerms("{\"sections\":[{\"type\":\"table\",\"columns\":[\"品名\",\"数量\",\"金额\"],\"rows\":[[\"电线\",\"2\",\"1000\"]]}]}");
+        when(contractMapper.selectById(25L)).thenReturn(contract);
+
+        Company buyer = new Company();
+        buyer.setId(4L);
+        buyer.setName("采购企业");
+        Company supplier = new Company();
+        supplier.setId(3L);
+        supplier.setName("供应企业");
+        when(companyMapper.selectById(4L)).thenReturn(buyer);
+        when(companyMapper.selectById(3L)).thenReturn(supplier);
+
+        AtomicReference<BusinessDocument> inserted = new AtomicReference<>();
+        doAnswer(invocation -> {
+            BusinessDocument document = invocation.getArgument(0);
+            document.setId(35L);
+            inserted.set(document);
+            return 1;
+        }).when(documentMapper).insert(any(BusinessDocument.class));
+        when(documentMapper.selectById(35L)).thenAnswer(invocation -> inserted.get());
+
+        service.createDocument(25L, Map.of(
+                "documentType", BusinessDocumentService.RETURN_ORDER,
+                "templateId", 15L));
+
+        assertThat(inserted.get().getCompanyId()).isEqualTo(4L);
+        assertThat(inserted.get().getRecipientCompanyId()).isEqualTo(3L);
+        assertThat(inserted.get().getDocumentNo()).startsWith("TH-");
+        assertThat(objectMapper.readTree(inserted.get().getContent()).path("counterpartyName").asText())
+                .isEqualTo("供应企业");
     }
 }

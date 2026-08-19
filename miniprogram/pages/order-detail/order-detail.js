@@ -89,18 +89,50 @@ Page({
     if (this.data.counterpartyName) {
       this.loadContracts(this.data.counterpartyName);
     }
+    this.startStatusPolling();
+  },
+
+  onHide() {
+    this.stopStatusPolling();
+  },
+
+  onUnload() {
+    this.stopStatusPolling();
+  },
+
+  onPullDownRefresh() {
+    Promise.all([
+      this.loadContracts(this.data.counterpartyName),
+      this.loadMonthlySales(this.data.counterpartyName)
+    ]).finally(() => wx.stopPullDownRefresh());
+  },
+
+  startStatusPolling() {
+    this.stopStatusPolling();
+    this.contractStatusTimer = setInterval(() => {
+      if (this.data.counterpartyName) this.loadContracts(this.data.counterpartyName, true);
+    }, 8000);
+  },
+
+  stopStatusPolling() {
+    if (!this.contractStatusTimer) return;
+    clearInterval(this.contractStatusTimer);
+    this.contractStatusTimer = null;
   },
 
   /* 加载合同列表 */
-  async loadContracts(counterpartyName) {
+  async loadContracts(counterpartyName, silent = false) {
     const { request } = require('../../utils/request');
-    this.setData({ contractLoading: true });
+    this.contractRequestSeq = (this.contractRequestSeq || 0) + 1;
+    const requestSeq = this.contractRequestSeq;
+    if (!silent) this.setData({ contractLoading: true });
     try {
       const payload = await request({
         url: `/contracts?counterpartyName=${encodeURIComponent(counterpartyName)}&page=1&size=100`
       });
       const list = Array.isArray(payload) ? payload : (payload.items || []);
-      const statusMap = { ACTIVE: '履行中', PENDING: '待签署', REJECTED: '已拒绝', COMPLETED: '已完成' };
+      if (requestSeq !== this.contractRequestSeq) return;
+      const statusMap = { ACTIVE: '履行中', PENDING: '待签署', REJECTED: '已拒绝', CANCELLED: '已撤回', COMPLETED: '已完成' };
       const total = list.length;
       const contracts = (list || []).map((c, index) => ({
         id: parseInt(c.id),
@@ -111,7 +143,7 @@ Page({
         amountText: formatAmount(c.amount),
         templateName: c.templateName || '',
         templateText: c.templateName ? `模板：${c.templateName}` : '双方自定义合同',
-        contractNo: `TP-${String(c.id).padStart(6, '0')}`,
+        contractNo: c.contractNo || `TP-${String(c.id).padStart(6, '0')}`,
         sequenceText: `合同 ${String(index + 1).padStart(2, '0')} / ${String(total).padStart(2, '0')}`,
         periodText: contractPeriod(c.startDate, c.endDate),
         status: c.status,
@@ -119,7 +151,7 @@ Page({
       }));
       const pending = contracts.filter(item => item.status === 'PENDING').length;
       const active = contracts.filter(item => item.status === 'ACTIVE').length;
-      const closed = contracts.filter(item => item.status === 'COMPLETED' || item.status === 'REJECTED').length;
+      const closed = contracts.filter(item => ['COMPLETED', 'REJECTED', 'CANCELLED'].includes(item.status)).length;
       const totalAmount = contracts.reduce((sum, item) => sum + Number(item.amount || 0), 0);
       this.setData({
         contracts,
@@ -140,6 +172,7 @@ Page({
       });
       this.applyContractFilter(this.data.activeContractFilter);
     } catch (e) {
+      if (requestSeq !== this.contractRequestSeq || silent) return;
       this.setData({ contractLoading: false, contracts: [], filteredContracts: [] });
     }
   },
@@ -152,7 +185,7 @@ Page({
     const filteredContracts = key === 'ALL'
       ? this.data.contracts
       : this.data.contracts.filter(item => key === 'CLOSED'
-        ? item.status === 'COMPLETED' || item.status === 'REJECTED'
+        ? ['COMPLETED', 'REJECTED', 'CANCELLED'].includes(item.status)
         : item.status === key);
     this.setData({ activeContractFilter: key, filteredContracts });
   },

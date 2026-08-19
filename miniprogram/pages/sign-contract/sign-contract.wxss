@@ -92,6 +92,17 @@ page { background: #f4f8fd; }
   font-size: 26rpx; color: #3498ff; background: #eaf4ff; border-radius: 10rpx;
   border: 1rpx dashed #3498ff;
 }
+.inventory-suggestions {
+  margin-top: 12rpx; border: 1rpx solid #d9ebff; border-radius: 10rpx;
+  background: #f7fbff; overflow: hidden;
+}
+.suggestion-title { padding: 12rpx 18rpx; color: #7c8da3; font-size: 22rpx; background: #eef7ff; }
+.suggestion-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 18rpx; border-top: 1rpx solid #e8f1fa;
+}
+.suggestion-name { color: #27364a; font-size: 26rpx; font-weight: 600; }
+.suggestion-spec { color: #8795a7; font-size: 22rpx; margin-left: 16rpx; }
 .table-summary {
   margin-top: 16rpx; padding: 20rpx; background: #fafafa; border-radius: 10rpx;
 }
@@ -101,11 +112,19 @@ page { background: #f4f8fd; }
 .sum-amount { font-size: 30rpx; color: #e53e3e; font-weight: 700; }
 .sum-chinese { font-size: 26rpx; color: #3498ff; font-weight: 600; }
 
-/* 条款（只读） */
-.clause-ro { margin-bottom: 16rpx; padding-bottom: 16rpx; border-bottom: 1rpx solid #f5f5f5; }
-.clause-ro:last-child { border-bottom: none; padding-bottom: 0; }
-.clause-ro-title { font-size: 26rpx; font-weight: 600; color: #333; margin-bottom: 8rpx; }
-.clause-ro-content { font-size: 26rpx; color: #666; line-height: 1.8; }
+/* 可编辑合同条款 */
+.clause-section-title { display: flex; justify-content: space-between; align-items: center; }
+.clause-add { color: #3498ff; font-size: 24rpx; font-weight: 400; }
+.clause-edit { margin-bottom: 20rpx; padding: 18rpx; border-radius: 10rpx; background: #f8fafc; }
+.clause-edit-head { display: flex; align-items: center; margin-bottom: 12rpx; }
+.clause-index { color: #3498ff; font-size: 25rpx; margin-right: 8rpx; }
+.clause-title-input { flex: 1; color: #26364a; font-size: 26rpx; font-weight: 600; }
+.clause-delete { color: #e25a5a; font-size: 22rpx; margin-left: 14rpx; }
+.clause-content-input {
+  width: 100%; min-height: 112rpx; box-sizing: border-box; padding: 14rpx;
+  color: #526175; font-size: 25rpx; line-height: 1.7; border-radius: 8rpx; background: #fff;
+}
+.clause-empty { text-align: center; color: #a5afbd; font-size: 24rpx; padding: 28rpx 0; }
 
 /* 空态 */
 .empty-card { text-align: center; padding: 80rpx 28rpx; }

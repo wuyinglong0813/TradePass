@@ -365,7 +365,8 @@ public class TradeService {
         long companyId = AuthContext.requireCompanyId();
         accessControlService.requireAnyPermission(companyId, "contract_view", "contract_sign");
         TradeContract contract = tradeContractMapper.selectById(id);
-        if (contract == null || !isContractParty(contract, companyId)) {
+        if (contract == null || !isContractParty(contract, companyId)
+                || !isContractVisibleTo(contract, companyId)) {
             throw new BusinessException("合同不存在");
         }
         return toContractPayload(contract, companyId);
@@ -446,6 +447,7 @@ public class TradeService {
                 initiator.getName(), counterparty.getName(), direction));
         contract.setVersionNo(1);
         contract.setStatus("PENDING");
+        contract.setInitiatorHidden(false);
         contract.setInitiatedBy(AuthContext.userId());
         try {
             tradeContractMapper.insert(contract);
@@ -508,12 +510,128 @@ public class TradeService {
         return "合同已拒绝";
     }
 
+    @Transactional
+    public String cancelContract(Long id) {
+        long companyId = AuthContext.requireCompanyId();
+        accessControlService.requirePermission(companyId, "contract_sign");
+        TradeContract contract = ensureOutgoingContract(id, companyId, List.of("PENDING"));
+        int updated = tradeContractMapper.update(new LambdaUpdateWrapper<TradeContract>()
+                .eq(TradeContract::getId, id)
+                .eq(TradeContract::getCompanyId, companyId)
+                .eq(TradeContract::getStatus, "PENDING")
+                .set(TradeContract::getStatus, "CANCELLED")
+                .set(TradeContract::getApprovedBy, null)
+                .set(TradeContract::getApprovedAt, null));
+        if (updated != 1) throw new BusinessException("合同状态已变化，请刷新后重试");
+        auditLogService.log(companyId, "CONTRACT", id, "CANCEL",
+                "撤回待签合同 " + contract.getContractNo());
+        if (approvalService != null && contract.getCounterpartyCompanyId() != null) {
+            approvalService.recordResult(contract.getCounterpartyCompanyId(), companyId,
+                    "CONTRACT", id, id, "CANCELLED", "合同已被发起方撤回",
+                    "发起方已撤回合同 " + contract.getContractNo(), null);
+        }
+        return "合同审批已撤回";
+    }
+
+    @Transactional
+    public ContractPayload resubmitContract(Long id, CreateContractRequest request) {
+        long companyId = AuthContext.requireCompanyId();
+        accessControlService.requirePermission(companyId, "contract_sign");
+        TradeContract existing = ensureOutgoingContract(
+                id, companyId, List.of("PENDING", "REJECTED", "CANCELLED"));
+        validateDirection(request.direction(), true);
+        LocalDate startDate = parseDate(request.startDate());
+        LocalDate endDate = parseDate(request.endDate());
+        if (startDate != null && endDate != null && endDate.isBefore(startDate)) {
+            throw new BusinessException("合同结束日期不能早于开始日期");
+        }
+        Company counterparty = requireActiveCounterparty(companyId, request.counterpartyCompanyId());
+        if (!counterparty.getId().equals(existing.getCounterpartyCompanyId())) {
+            throw new BusinessException("修改合同不能更换签署企业，请另行发起合同");
+        }
+        Company initiator = companyMapper.selectById(companyId);
+        if (initiator == null) throw new BusinessException("当前企业不存在");
+        String direction = normalizeDirection(request.direction());
+        String contractName = request.name().trim();
+        BigDecimal amount = requireNonNegativeAmount(request.amount(), "合同金额");
+        int nextVersion = Math.max(1, existing.getVersionNo() == null ? 1 : existing.getVersionNo()) + 1;
+        int updated = tradeContractMapper.update(new LambdaUpdateWrapper<TradeContract>()
+                .eq(TradeContract::getId, id)
+                .eq(TradeContract::getCompanyId, companyId)
+                .in(TradeContract::getStatus, List.of("PENDING", "REJECTED", "CANCELLED"))
+                .set(TradeContract::getDirection, direction)
+                .set(TradeContract::getName, contractName)
+                .set(TradeContract::getTemplateName, request.templateName())
+                .set(TradeContract::getAmount, amount)
+                .set(TradeContract::getStartDate, startDate)
+                .set(TradeContract::getEndDate, endDate)
+                .set(TradeContract::getTerms, normalizeContractTerms(request.terms(), contractName,
+                        initiator.getName(), counterparty.getName(), direction))
+                .set(TradeContract::getVersionNo, nextVersion)
+                .set(TradeContract::getStatus, "PENDING")
+                .set(TradeContract::getInitiatorHidden, false)
+                .set(TradeContract::getApprovedBy, null)
+                .set(TradeContract::getApprovedAt, null));
+        if (updated != 1) throw new BusinessException("合同状态已变化，请刷新后重试");
+        auditLogService.log(companyId, "CONTRACT", id, "RESUBMIT",
+                "修改并重新发起合同 " + existing.getContractNo() + "，版本 V" + nextVersion);
+        return toContractPayload(tradeContractMapper.selectById(id), companyId);
+    }
+
+    @Transactional
+    public String deleteContract(Long id) {
+        long companyId = AuthContext.requireCompanyId();
+        accessControlService.requirePermission(companyId, "contract_sign");
+        TradeContract contract = ensureOutgoingContract(id, companyId, List.of("REJECTED"));
+        int updated = tradeContractMapper.update(new LambdaUpdateWrapper<TradeContract>()
+                .eq(TradeContract::getId, id)
+                .eq(TradeContract::getCompanyId, companyId)
+                .eq(TradeContract::getStatus, "REJECTED")
+                .eq(TradeContract::getInitiatorHidden, false)
+                .set(TradeContract::getInitiatorHidden, true));
+        if (updated != 1) throw new BusinessException("合同状态已变化，请刷新后重试");
+        auditLogService.log(companyId, "CONTRACT", id, "DELETE",
+                "从发起方合同列表删除被拒绝合同 " + contract.getContractNo());
+        return "合同已从我方列表删除";
+    }
+
     private void recordContractResult(TradeContract contract, long sourceCompanyId,
                                       String resultStatus, String title, String detail) {
         if (approvalService == null || contract.getCompanyId() == null || contract.getId() == null) return;
         approvalService.recordResult(contract.getCompanyId(), sourceCompanyId,
                 "CONTRACT", contract.getId(), contract.getId(), resultStatus,
                 title, detail, null);
+        if (contract.getCounterpartyCompanyId() != null) {
+            Company initiator = companyMapper.selectById(contract.getCompanyId());
+            String initiatorName = initiator == null || initiator.getName() == null
+                    ? "发起公司" : initiator.getName();
+            String contractName = trim(contract.getName());
+            if (contractName == null || contractName.isBlank()) contractName = contract.getContractNo();
+            if (contractName != null && !contractName.endsWith("合同")) contractName += "合同";
+            String selfTitle = "APPROVED".equals(resultStatus)
+                    ? "已同意签署" + initiatorName + "的" + contractName
+                    : "已拒绝" + initiatorName + "的" + contractName;
+            String selfDetail = "APPROVED".equals(resultStatus)
+                    ? "我方已签署合同 " + contract.getContractNo()
+                    : "我方已拒绝合同 " + contract.getContractNo();
+            approvalService.recordResult(contract.getCounterpartyCompanyId(), contract.getCompanyId(),
+                    "CONTRACT", contract.getId(), "APPROVED".equals(resultStatus) ? contract.getId() : null,
+                    resultStatus,
+                    selfTitle, selfDetail, null);
+        }
+    }
+
+    private TradeContract ensureOutgoingContract(Long id, long companyId, List<String> allowedStatuses) {
+        TradeContract contract = tradeContractMapper.selectOne(new LambdaQueryWrapper<TradeContract>()
+                .eq(TradeContract::getId, id)
+                .eq(TradeContract::getCompanyId, companyId)
+                .eq(TradeContract::getInitiatorHidden, false)
+                .in(TradeContract::getStatus, allowedStatuses)
+                .last("LIMIT 1"));
+        if (contract == null) {
+            throw new BusinessException("合同不存在或当前状态不能执行该操作");
+        }
+        return contract;
     }
 
     public List<ContractPayload> myInitiatedContracts() {
@@ -521,7 +639,8 @@ public class TradeService {
         accessControlService.requireAnyPermission(companyId, "contract_view", "contract_sign");
         return tradeContractMapper.selectList(new LambdaQueryWrapper<TradeContract>()
                         .eq(TradeContract::getCompanyId, companyId)
-                .eq(TradeContract::getInitiatedBy, AuthContext.userId())
+                        .eq(TradeContract::getInitiatedBy, AuthContext.userId())
+                        .eq(TradeContract::getInitiatorHidden, false)
                         .orderByDesc(TradeContract::getCreatedAt))
                 .stream().map(contract -> toContractPayload(contract, companyId)).toList();
     }
@@ -692,6 +811,14 @@ public class TradeService {
     private boolean isContractParty(TradeContract contract, long companyId) {
         return contract.getCompanyId() == companyId
                 || (contract.getCounterpartyCompanyId() != null && contract.getCounterpartyCompanyId() == companyId);
+    }
+
+    private boolean isContractVisibleTo(TradeContract contract, long companyId) {
+        if (contract.getCompanyId() == companyId) {
+            return !Boolean.TRUE.equals(contract.getInitiatorHidden())
+                    && !"DELETED".equals(contract.getStatus());
+        }
+        return !List.of("REJECTED", "CANCELLED", "DELETED").contains(contract.getStatus());
     }
 
     private void validateDirection(String direction, boolean required) {

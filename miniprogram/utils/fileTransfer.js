@@ -16,17 +16,6 @@ function writeBase64File(filePath, contentBase64) {
   });
 }
 
-function readBase64File(filePath) {
-  return new Promise((resolve, reject) => {
-    wx.getFileSystemManager().readFile({
-      filePath,
-      encoding: 'base64',
-      success: result => resolve(result.data),
-      fail: error => reject(new Error((error && error.errMsg) || '文件读取失败'))
-    });
-  });
-}
-
 async function downloadApiFile(url, filePath) {
   const payload = await request({ url, timeout: 60000 });
   await writeBase64File(filePath, payload && payload.contentBase64);
@@ -35,16 +24,6 @@ async function downloadApiFile(url, filePath) {
     fileName: (payload && payload.fileName) || '',
     contentType: (payload && payload.contentType) || ''
   };
-}
-
-async function uploadApiFile(url, filePath, data = {}) {
-  const contentBase64 = await readBase64File(filePath);
-  return request({
-    url,
-    method: 'POST',
-    data: { ...data, contentBase64 },
-    timeout: 60000
-  });
 }
 
 function uploadMultipartApiFile(url, filePath, data = {}, fileFieldName = 'file') {
@@ -92,8 +71,6 @@ function uploadMultipartApiFile(url, filePath, data = {}, fileFieldName = 'file'
 
 module.exports = {
   downloadApiFile,
-  uploadApiFile,
   uploadMultipartApiFile,
-  readBase64File,
   writeBase64File
 };

@@ -18,7 +18,8 @@ public interface TradeOrderMapper extends BaseMapper<TradeOrder> {
           AND direction = #{direction}
           AND (#{period} = 'total'
             OR (#{period} = 'year' AND YEAR(order_date) = YEAR(CURDATE()))
-            OR (#{period} = 'month' AND YEAR(order_date) = YEAR(CURDATE()) AND MONTH(order_date) = MONTH(CURDATE())))
+            OR (#{period} = 'month' AND YEAR(order_date) = YEAR(CURDATE()) AND MONTH(order_date) = MONTH(CURDATE()))
+            OR (#{period} = 'last12' AND order_date >= DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 11 MONTH), '%Y-%m-01')))
         GROUP BY counterparty_name
         ORDER BY totalAmount DESC
         """)

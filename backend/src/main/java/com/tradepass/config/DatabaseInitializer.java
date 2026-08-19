@@ -139,12 +139,14 @@ public class DatabaseInitializer {
                 end_date DATE,
                 terms TEXT,
                 status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
+                initiator_hidden TINYINT(1) NOT NULL DEFAULT 0,
                 initiated_by BIGINT NOT NULL,
                 created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 INDEX idx_company (company_id),
                 INDEX idx_counterparty (counterparty_name)
             )
         """);
+        try { db.execute("ALTER TABLE trade_contract ADD COLUMN initiator_hidden TINYINT(1) NOT NULL DEFAULT 0 AFTER status"); } catch (Exception ignored) {}
         db.execute("""
             CREATE TABLE IF NOT EXISTS counterparty_relation (
                 id BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -276,6 +278,8 @@ public class DatabaseInitializer {
     private void seedBusinessDocumentTemplates() {
         seedBusinessDocumentTemplate(1, "SALES_ORDER", "标准销售单模板",
                 "{\"columns\":[\"序号\",\"品名\",\"规格\",\"单位\",\"数量\",\"单价\",\"金额\",\"备注\"],\"blankRows\":8}");
+        seedBusinessDocumentTemplate(1, "RETURN_ORDER", "标准退货单模板",
+                "{\"columns\":[\"序号\",\"品名\",\"规格\",\"单位\",\"数量\",\"单价\",\"金额\",\"退货原因\"],\"blankRows\":8}");
     }
 
     private void seedRoles() {

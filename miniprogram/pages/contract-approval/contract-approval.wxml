@@ -63,7 +63,7 @@
               <view class="result-reason" wx:if="{{result.rejectedReason}}">原因：{{result.rejectedReason}}</view>
               <view class="result-time">{{result.timeText}}</view>
             </view>
-            <view class="result-arrow">›</view>
+            <view class="result-arrow" wx:if="{{result.canOpen}}">›</view>
           </view>
         </view>
       </block>
@@ -98,11 +98,11 @@
               <view class="card-title">{{document.typeText}} · {{document.documentNo}}</view>
               <view class="card-meta">关联合同：{{document.contractName || document.contractNo}}</view>
               <view class="card-meta"><text wx:if="{{document.dateText}}">{{document.dateText}}</text><text wx:if="{{document.amountText}}"> · ¥{{document.amountText}}</text></view>
-              <view class="signature-hint" wx:if="{{document.approvalType === 'SALES_ORDER'}}">确认时需要手写签名</view>
+              <view class="signature-hint" wx:if="{{document.approvalType === 'SALES_ORDER' || document.approvalType === 'RETURN_ORDER'}}">确认时需要手写签名</view>
             </view>
             <view class="pending-badge">待确认</view>
           </view>
-          <view class="card-actions single" wx:if="{{document.approvalType === 'SALES_ORDER'}}">
+          <view class="card-actions single" wx:if="{{document.approvalType === 'SALES_ORDER' || document.approvalType === 'RETURN_ORDER'}}">
             <button class="action primary" data-item="{{document}}" catchtap="openFulfillment">查看并确认</button>
           </view>
           <view class="card-actions" wx:else>

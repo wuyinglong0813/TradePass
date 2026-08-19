@@ -193,21 +193,23 @@ public class AuthService {
             LambdaQueryWrapper<BusinessDocument> pendingSalesOrderQuery =
                     new LambdaQueryWrapper<BusinessDocument>()
                             .eq(BusinessDocument::getRecipientCompanyId, companyId)
-                            .eq(BusinessDocument::getDocumentType, BusinessDocumentService.SALES_ORDER)
+                            .in(BusinessDocument::getDocumentType,
+                                    BusinessDocumentService.SALES_ORDER, BusinessDocumentService.RETURN_ORDER)
                             .eq(BusinessDocument::getStatus, "ISSUED");
             Long pendingSalesOrders = businessDocumentMapper.selectCount(pendingSalesOrderQuery);
             if (pendingSalesOrders > 0) {
                 BusinessDocument latest = businessDocumentMapper.selectOne(
                         new LambdaQueryWrapper<BusinessDocument>()
                                 .eq(BusinessDocument::getRecipientCompanyId, companyId)
-                                .eq(BusinessDocument::getDocumentType, BusinessDocumentService.SALES_ORDER)
+                                .in(BusinessDocument::getDocumentType,
+                                        BusinessDocumentService.SALES_ORDER, BusinessDocumentService.RETURN_ORDER)
                                 .eq(BusinessDocument::getStatus, "ISSUED")
                                 .orderByDesc(BusinessDocument::getCreatedAt)
                                 .orderByDesc(BusinessDocument::getId)
                                 .last("LIMIT 1"));
                 String target = latest == null ? "" : "sales-order-detail:" + latest.getId();
-                todos.add(new TodoItem("SALES_ORDER", "销售单待确认",
-                        pendingSalesOrders + " 份销售单等待你方确认",
+                todos.add(new TodoItem("SALES_ORDER", "交易单据待确认",
+                        pendingSalesOrders + " 份销售/退货单等待你方确认",
                         pendingSalesOrders.intValue(), target));
             }
         }

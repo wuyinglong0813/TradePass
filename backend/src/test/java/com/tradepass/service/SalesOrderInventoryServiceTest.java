@@ -242,7 +242,7 @@ class SalesOrderInventoryServiceTest {
         assertThat(result).containsEntry("status", "ACKNOWLEDGED")
                 .containsEntry("canInbound", true);
         assertThat(document.getAcknowledgedBy()).isEqualTo(8L);
-        verify(signatureService).save(4L, 31L, 60L, "张采购", "签名.png", SIGNATURE);
+        verify(signatureService).save(4L, 31L, 60L, "用户8", "签名.png", SIGNATURE);
         verify(approvalService).recordResult(3L, 4L, "SALES_ORDER", 31L, 12L,
                 "APPROVED", "销售单已确认", "对方已确认销售单 XS-31", null);
 

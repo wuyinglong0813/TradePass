@@ -19,6 +19,7 @@ import java.util.Map;
 public class PersonalMemoService {
     public static final String CONTRACT = "CONTRACT";
     public static final String SALES_ORDER = "SALES_ORDER";
+    public static final String RETURN_ORDER = "RETURN_ORDER";
 
     private final JdbcTemplate jdbc;
     private final TradeContractMapper contractMapper;
@@ -81,9 +82,10 @@ public class PersonalMemoService {
             requireContractParty(contract, companyId);
             return new AccessTarget(companyId, CONTRACT);
         }
-        if (SALES_ORDER.equals(normalized)) {
+        if (SALES_ORDER.equals(normalized) || RETURN_ORDER.equals(normalized)) {
             BusinessDocument document = documentMapper.selectById(bizId);
-            if (document == null || !"SALES_ORDER".equals(document.getDocumentType())) {
+            if (document == null || (!SALES_ORDER.equals(document.getDocumentType())
+                    && !RETURN_ORDER.equals(document.getDocumentType()))) {
                 throw new BusinessException("销售单不存在");
             }
             TradeContract contract = contractMapper.selectById(document.getContractId());
@@ -92,7 +94,7 @@ public class PersonalMemoService {
                     && !Long.valueOf(companyId).equals(document.getCompanyId())) {
                 throw new BusinessException("销售单不存在");
             }
-            return new AccessTarget(companyId, SALES_ORDER);
+            return new AccessTarget(companyId, document.getDocumentType());
         }
         throw new BusinessException("备忘录类型不正确");
     }

@@ -199,6 +199,22 @@ public class TradeController {
         return ApiResponse.ok(tradeService.rejectContract(id));
     }
 
+    @PostMapping("/contracts/{id}/cancel")
+    public ApiResponse<String> cancelContract(@PathVariable Long id) {
+        return ApiResponse.ok(tradeService.cancelContract(id));
+    }
+
+    @PostMapping("/contracts/{id}/resubmit")
+    public ApiResponse<ContractPayload> resubmitContract(@PathVariable Long id,
+                                                         @Valid @RequestBody CreateContractRequest request) {
+        return ApiResponse.ok(tradeService.resubmitContract(id, request));
+    }
+
+    @PostMapping("/contracts/{id}/delete")
+    public ApiResponse<String> deleteContract(@PathVariable Long id) {
+        return ApiResponse.ok(tradeService.deleteContract(id));
+    }
+
     @GetMapping("/contracts/initiated")
     public ApiResponse<List<ContractPayload>> myInitiatedContracts() {
         return ApiResponse.ok(tradeService.myInitiatedContracts());

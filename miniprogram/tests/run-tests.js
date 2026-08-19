@@ -163,11 +163,12 @@ test('experience build uses one native tab bar and size-safe file transfer', () 
   assert.ok(!scripts.includes('wx.downloadFile'));
   assert.ok(!scripts.includes('wx.uploadFile'));
   assert.ok(scripts.includes('downloadApiFile'));
-  assert.ok(scripts.includes('uploadApiFile'));
   assert.ok(scripts.includes('uploadMultipartApiFile'));
+  assert.ok(!scripts.includes('/attachments/base64'));
   const transfer = fs.readFileSync(path.join(__dirname, '..', 'utils', 'fileTransfer.js'), 'utf8');
   assert.ok(transfer.includes('wx.uploadFile'));
   assert.ok(transfer.includes("header['X-Company-Id']"));
+  assert.ok(!transfer.includes('contentBase64 }'));
 });
 
 test('home exposes the ordered approval center with a message indicator', () => {
@@ -228,16 +229,22 @@ test('contract numeric cells clear zero on focus and normalize leading zeros', (
   }, { currentTarget: { dataset: { row: 0, col: 3 } } });
   assert.deepStrictEqual(focusedPatch, { 'tableRows[0][3]': '' });
 
-  let recalculatedRows;
-  const normalized = signContract.onTableCellChange.call({
-    data: { tableRows: [['商品', '', '件', '0', '0', '0']] },
-    recalcTable: rows => { recalculatedRows = rows; }
-  }, {
+  let cellPatch;
+  const tableContext = {
+    data: {
+      tableSection: { columns: ['产品名称', '规格型号', '单位', '数量', '单价(元)', '金额(元)'] },
+      tableRows: [['商品', '', '件', '0', '0', '0']],
+      inventoryProducts: []
+    },
+    tableColumnIndex: signContract.tableColumnIndex,
+    setData: patch => { cellPatch = patch; }
+  };
+  const normalized = signContract.onTableCellChange.call(tableContext, {
     currentTarget: { dataset: { row: 0, col: 3 } },
     detail: { value: '0100' }
   });
   assert.strictEqual(normalized, '100');
-  assert.strictEqual(recalculatedRows[0][3], '100');
+  assert.strictEqual(cellPatch['tableRows[0][3]'], '100');
 
   const signTemplate = fs.readFileSync(
     path.join(__dirname, '..', 'pages', 'sign-contract', 'sign-contract.wxml'), 'utf8'
@@ -659,13 +666,13 @@ test('live reconciliation and sales-order confirmation pages are wired', () => {
   assert.ok(!reconciliation.includes('/reconciliation-statements'));
   assert.ok(salesDetail.includes("this.openSignatureEditor('RECEIVE_ONLY')"));
   assert.ok(salesDetail.includes("this.openSignatureEditor('INBOUND', warehouse.id)"));
-  assert.ok(salesDetail.includes('`/sales-orders/${this.data.id}/receive`'));
+  assert.ok(salesDetail.includes('`/trade-documents/${this.data.id}/receive`'));
   assert.ok(salesDetail.includes("this.submitReceive('REJECT'"));
   const template = fs.readFileSync(
     path.join(__dirname, '..', 'pages', 'sales-order-detail', 'sales-order-detail.wxml'), 'utf8'
   );
   assert.ok(template.includes('id="salesOrderSignatureCanvas"'));
-  assert.ok(template.includes('签名会自动填写到销售单 PDF 的“客户确认”'));
+  assert.ok(template.includes('签名会自动填写到{{documentLabel}} PDF'));
   const reconciliationTemplate = fs.readFileSync(
     path.join(__dirname, '..', 'pages', 'reconciliation', 'reconciliation.wxml'), 'utf8'
   );

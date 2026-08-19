@@ -40,13 +40,13 @@ public class RankingService {
     public HomePayload supplierHome(String period, String companyId) {
         long cid = accessControlService.resolveCompanyId(companyId);
         return new HomePayload(String.valueOf(cid), loadCompanyName(cid), "SUPPLIER", "我是供应商",
-                List.of("total", "year", "month"), rank("SALE", period, cid));
+                List.of("year", "month", "last12"), rank("SALE", period, cid));
     }
 
     public HomePayload buyerHome(String period, String companyId) {
         long cid = accessControlService.resolveCompanyId(companyId);
         return new HomePayload(String.valueOf(cid), loadCompanyName(cid), "BUYER", "我是采购商",
-                List.of("total", "year", "month"), rank("PURCHASE", period, cid));
+                List.of("year", "month", "last12"), rank("PURCHASE", period, cid));
     }
 
     public List<RankingItem> salesRanking(String period, String companyId) {
@@ -90,10 +90,10 @@ public class RankingService {
 
     private String normalizePeriod(String period) {
         if (period == null || period.isBlank()) {
-            return "total";
+            return "year";
         }
         String normalized = period.toLowerCase();
-        return List.of("total", "year", "month").contains(normalized) ? normalized : "total";
+        return List.of("year", "month", "last12").contains(normalized) ? normalized : "year";
     }
 
     private String string(Object value) {

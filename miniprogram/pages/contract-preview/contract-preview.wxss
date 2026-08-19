@@ -1,5 +1,12 @@
 page { background: #f4f8fd; }
 
+.contract-manage-actions { display: flex; gap: 14rpx; margin: 0 24rpx 20rpx; }
+.contract-manage-button { border-radius: 16rpx; flex: 1; font-size: 24rpx; height: 72rpx; line-height: 72rpx; margin: 0; padding: 0 12rpx; }
+.contract-manage-button::after { border: 0; }
+.contract-manage-button.ghost { background: #eef4fa; color: #52677d; }
+.contract-manage-button.primary { background: #2f86e6; color: #fff; }
+.contract-manage-button.danger { background: #fff0f0; color: #c64747; }
+
 .page {
   padding-bottom: calc(24rpx + env(safe-area-inset-bottom));
 }
@@ -110,6 +117,7 @@ page { background: #f4f8fd; }
   flex-shrink: 0; font-size: 23rpx; font-weight: 700; height: 58rpx; justify-content: center; width: 58rpx;
 }
 .document-badge.logistics { background: #e9f8f0; color: #20a66a; }
+.document-badge.return { background: #fff1e8; color: #e77728; }
 .document-badge.payment { background: #fff3df; color: #d88912; }
 .document-badge.invoice { background: #e8f2ff; color: #377fd1; }
 .document-badge.other { background: #f0ecff; color: #7554d8; }
@@ -449,6 +457,7 @@ page { background: #f4f8fd; }
 }
 .section-mark.logistics { background: #e9f8f0; color: #20a66a; }
 .section-mark.sales { background: #e7f3ff; color: #3498ff; }
+.section-mark.return { background: #fff1e8; color: #e77728; }
 .section-mark.payment { background: #fff3df; color: #d88912; }
 .section-mark.invoice { background: #e8f2ff; color: #377fd1; }
 .section-mark.other { background: #f0ecff; color: #7554d8; }

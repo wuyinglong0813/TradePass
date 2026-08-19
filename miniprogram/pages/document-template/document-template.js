@@ -6,6 +6,12 @@ const TYPE_META = {
     empty: '暂无销售单模板',
     columns: ['序号', '品名', '规格', '单位', '数量', '单价', '金额', '备注'],
     blankRows: 8
+  },
+  RETURN_ORDER: {
+    label: '退货单',
+    empty: '暂无退货单模板',
+    columns: ['序号', '品名', '规格', '单位', '数量', '单价', '金额', '退货原因'],
+    blankRows: 8
   }
 };
 
@@ -13,7 +19,10 @@ Page({
   data: {
     activeType: 'SALES_ORDER',
     templates: [],
+    salesTemplates: [],
+    returnTemplates: [],
     salesCount: 0,
+    returnCount: 0,
     loading: false,
     emptyText: TYPE_META.SALES_ORDER.empty
   },
@@ -30,15 +39,24 @@ Page({
     if (this.data.loading) return;
     this.setData({ loading: true });
     try {
-      const sales = await request({ url: '/document-templates?type=SALES_ORDER' });
-      const templates = (sales || []).map(item => ({
+      const [sales, returns] = await Promise.all([
+        request({ url: '/document-templates?type=SALES_ORDER' }),
+        request({ url: '/document-templates?type=RETURN_ORDER' })
+      ]);
+      const decorate = list => (list || []).map(item => ({
         ...item,
         dateText: String(item.updatedAt || item.createdAt || '').slice(0, 10),
         sourceText: item.sourceFileName || '标准版式'
       }));
+      const salesTemplates = decorate(sales);
+      const returnTemplates = decorate(returns);
       this.setData({
-        templates,
-        salesCount: (sales || []).length
+        salesTemplates,
+        returnTemplates,
+        templates: this.data.activeType === 'RETURN_ORDER' ? returnTemplates : salesTemplates,
+        salesCount: salesTemplates.length,
+        returnCount: returnTemplates.length,
+        emptyText: TYPE_META[this.data.activeType].empty
       });
     } catch (error) {
       wx.showToast({ title: error.message || '模板加载失败', icon: 'none' });
@@ -49,6 +67,24 @@ Page({
 
   uploadSalesTemplate() {
     this.chooseTemplateFile('SALES_ORDER');
+  },
+
+  uploadReturnTemplate() {
+    this.chooseTemplateFile('RETURN_ORDER');
+  },
+
+  switchType(e) {
+    const type = e.currentTarget.dataset.type;
+    if (!TYPE_META[type] || type === this.data.activeType) return;
+    this.setData({
+      activeType: type,
+      templates: type === 'RETURN_ORDER' ? this.data.returnTemplates : this.data.salesTemplates,
+      emptyText: TYPE_META[type].empty
+    });
+  },
+
+  openContractTemplates() {
+    wx.navigateTo({ url: '/pages/contract-template/contract-template' });
   },
 
   chooseTemplateFile(documentType) {

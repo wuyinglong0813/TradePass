@@ -20,6 +20,12 @@
     <view class="memo-summary-arrow">›</view>
   </view>
 
+  <view class="contract-manage-actions" wx:if="{{canCancelContract || canEditContract || canDeleteContract}}">
+    <button class="contract-manage-button ghost" wx:if="{{canCancelContract}}" loading="{{contractActionLoading}}" disabled="{{contractActionLoading}}" bindtap="cancelContract">撤回审批</button>
+    <button class="contract-manage-button primary" wx:if="{{canEditContract}}" disabled="{{contractActionLoading}}" bindtap="editContract">修改并重新发起</button>
+    <button class="contract-manage-button danger" wx:if="{{canDeleteContract}}" loading="{{contractActionLoading}}" disabled="{{contractActionLoading}}" bindtap="deleteContract">删除合同</button>
+  </view>
+
   <!-- 合同正文与履约资料两个一级入口。 -->
   <view class="tabs">
     <view class="tab-item {{activeTab === item.key ? 'active' : ''}}"
@@ -105,6 +111,19 @@
         <view class="document-actions"><view data-document="{{item}}" catchtap="viewBusinessDocument">{{item.status === 'DRAFT' ? '预览' : '查看'}}</view><view data-document="{{item}}" catchtap="downloadBusinessDocument">下载</view><view>{{item.status === 'DRAFT' ? '编辑' : '详情'}}</view></view>
       </view>
       <view class="section-empty" wx:if="{{salesDocuments.length === 0}}">{{salesOrderEmptyHint}}</view>
+    </view>
+
+    <view class="fulfillment-section">
+      <view class="fulfillment-head">
+        <view><view class="fulfillment-title"><text class="section-mark return">退</text>退货单<text class="section-count">{{returnDocuments.length}}</text></view><view class="document-sub">需方发起，对方确认后以负数冲减对账</view></view>
+        <button class="section-upload" wx:if="{{canCreateReturnOrder}}" data-type="RETURN_ORDER" bindtap="createBusinessDocument">＋ 创建草稿</button>
+      </view>
+      <view class="document-card inner" wx:for="{{returnDocuments}}" wx:key="id" data-document="{{item}}" bindtap="openSalesOrderDetail">
+        <view class="document-badge return {{item.status === 'DRAFT' ? 'draft' : ''}}">{{item.status === 'DRAFT' ? '稿' : '退'}}</view>
+        <view class="document-info"><view class="document-no">{{item.documentNo}}</view><view class="document-meta status-{{item.status}}">状态：{{item.statusText}}</view><view class="document-meta">{{item.templateName}} · {{item.dateText}}</view><view class="document-meta reject" wx:if="{{item.rejectedReason}}">原因：{{item.rejectedReason}}</view></view>
+        <view class="document-actions"><view data-document="{{item}}" catchtap="viewBusinessDocument">{{item.status === 'DRAFT' ? '预览' : '查看'}}</view><view data-document="{{item}}" catchtap="downloadBusinessDocument">下载</view><view>{{item.status === 'DRAFT' ? '编辑' : '详情'}}</view></view>
+      </view>
+      <view class="section-empty" wx:if="{{returnDocuments.length === 0}}">{{canCreateReturnOrder ? '暂无退货单，可按合同产品创建草稿' : '等待合同需方创建退货单'}}</view>
     </view>
 
     <view class="fulfillment-section">
@@ -255,7 +274,7 @@
   <view class="document-editor-page" wx:if="{{showDocumentEditor}}">
     <view class="document-editor-header">
       <view class="document-editor-close" bindtap="closeDocumentEditor">取消</view>
-      <view class="document-editor-title">{{createAsDraft ? '创建销售单草稿' : '创建销售单'}}</view>
+      <view class="document-editor-title">{{createAsDraft ? '创建' + documentEditorLabel + '草稿' : '创建' + documentEditorLabel}}</view>
       <view class="document-editor-close placeholder">取消</view>
     </view>
 
@@ -335,7 +354,7 @@
             </view>
           </scroll-view>
           <view class="document-row-add" bindtap="addDocumentRow">＋ 添加商品行</view>
-          <view class="document-total-field" wx:if="{{documentEditorType === 'SALES_ORDER'}}">
+          <view class="document-total-field" wx:if="{{documentEditorType === 'SALES_ORDER' || documentEditorType === 'RETURN_ORDER'}}">
             <view class="document-total-label">合计：</view>
             <view class="document-total-value">¥{{documentTotalAmount}}</view>
           </view>

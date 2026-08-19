@@ -18,6 +18,7 @@ function currentCompanyName() {
 function resultIcon(type) {
   if (type === 'CONTRACT') return '合';
   if (type === 'SALES_ORDER') return '销';
+  if (type === 'RETURN_ORDER') return '退';
   if (type === 'INVOICE') return '票';
   return '款';
 }
@@ -85,7 +86,8 @@ Page({
         amountText: item.amount == null ? '' : money(item.amount),
         dateText: item.businessDate || String(item.createdAt || '').substring(0, 10),
         iconText: item.approvalType === 'SALES_ORDER' ? '销'
-          : (item.approvalType === 'INVOICE' ? '票' : '款'),
+          : (item.approvalType === 'RETURN_ORDER' ? '退'
+            : (item.approvalType === 'INVOICE' ? '票' : '款')),
         typeClass: String(item.approvalType || '').toLowerCase()
       }));
       const results = (resultList || []).map(item => ({
@@ -98,6 +100,7 @@ Page({
         iconText: resultIcon(item.resultType),
         typeClass: String(item.resultType || '').toLowerCase(),
         statusClass: item.resultStatus === 'REJECTED' ? 'rejected' : 'approved',
+        canOpen: item.resultType === 'SALES_ORDER' || item.resultType === 'RETURN_ORDER' || !!item.contractId,
         isRead: !!item.isRead,
         timeText: formatResultTime(item.createdAt)
       }));
@@ -218,7 +221,7 @@ Page({
         wx.showToast({ title: error.message || '通知状态更新失败', icon: 'none' });
       }
     }
-    if (item.resultType === 'SALES_ORDER') {
+    if (item.resultType === 'SALES_ORDER' || item.resultType === 'RETURN_ORDER') {
       wx.navigateTo({ url: `/pages/sales-order-detail/sales-order-detail?id=${item.sourceId}` });
       return;
     }
@@ -280,7 +283,7 @@ Page({
   openFulfillment(e) {
     const item = e.currentTarget.dataset.item;
     if (!item) return;
-    if (item.approvalType === 'SALES_ORDER') {
+    if (item.approvalType === 'SALES_ORDER' || item.approvalType === 'RETURN_ORDER') {
       wx.navigateTo({ url: `/pages/sales-order-detail/sales-order-detail?id=${item.id}` });
     }
   },

@@ -10,12 +10,12 @@ Page({
       { value: 'supplier', text: '供应商' },
       { value: 'buyer', text: '采购商' }
     ],
-    period: 'total',
-    periodText: '累计',
+    period: 'year',
+    periodText: '今年',
     periods: [
-      { key: 'total', text: '累计' },
       { key: 'year', text: '今年' },
-      { key: 'month', text: '本月' }
+      { key: 'month', text: '本月' },
+      { key: 'last12', text: '近12个月' }
     ],
     companyName: '',
     companyDisplayName: '企业信息加载中',
@@ -200,7 +200,7 @@ Page({
   switchRole(e) {
     const role = e.currentTarget.dataset.role;
     if (role === this.data.role) return;
-    this.setData({ role, period: 'total' });
+    this.setData({ role, period: 'year', periodText: '今年' });
     const companyId = app.getCurrentCompanyId() || 'unbound';
     wx.setStorageSync(`tradepass_role_${companyId}`, role);
     this.loadHome();
@@ -211,7 +211,7 @@ Page({
   switchPeriod(e) {
     const period = e.currentTarget.dataset.period;
     if (period === this.data.period) return;
-    const periodTextMap = { total: '累计', year: '今年', month: '本月' };
+    const periodTextMap = { year: '今年', month: '本月', last12: '近12个月' };
     this.setData({ period, periodText: periodTextMap[period] || '' });
     this.loadHome();
   },
@@ -273,13 +273,19 @@ Page({
   },
 
   async loadHome() {
+    const role = this.data.role;
+    const period = this.data.period;
+    const currentCompanyId = app.getCurrentCompanyId();
+    if (!currentCompanyId) return;
+    this.homeRequestSeq = (this.homeRequestSeq || 0) + 1;
+    const requestSeq = this.homeRequestSeq;
     this.setData({ loading: true });
     try {
-      const currentCompanyId = app.getCurrentCompanyId();
-      if (!currentCompanyId) return;
       const payload = await request({
-        url: `/home/${this.data.role}?period=${this.data.period}&companyId=${currentCompanyId}`
+        url: `/home/${role}?period=${period}&companyId=${currentCompanyId}`
       });
+      if (requestSeq !== this.homeRequestSeq || role !== this.data.role
+        || period !== this.data.period || String(currentCompanyId) !== String(app.getCurrentCompanyId())) return;
       const ranking = payload.ranking || [];
       // 计算统计数据
       const totalAmount = ranking.reduce((sum, item) => sum + (item.amount || 0), 0);
@@ -288,7 +294,7 @@ Page({
         companyName: payload.companyName,
         companyDisplayName: payload.companyName || '企业信息加载中',
         ranking,
-        rankingTitle: this.data.role === 'supplier' ? '客户销售业绩排名' : '采购业绩排名',
+        rankingTitle: role === 'supplier' ? '客户销售业绩排名' : '采购业绩排名',
         stats: {
           totalAmount: totalAmount.toFixed(0),
           totalOrders,
@@ -297,20 +303,28 @@ Page({
       });
       this.refreshPartnerCompanies();
     } catch (error) {
+      if (requestSeq !== this.homeRequestSeq || role !== this.data.role
+        || period !== this.data.period) return;
       wx.showToast({ title: error.message, icon: 'none' });
     } finally {
-      this.setData({ loading: false });
+      if (requestSeq === this.homeRequestSeq) this.setData({ loading: false });
     }
   },
 
   async loadCounterparties() {
+    const role = this.data.role;
+    const companyId = app.getCurrentCompanyId();
+    if (!companyId) return;
+    this.counterpartyRequestSeq = (this.counterpartyRequestSeq || 0) + 1;
+    const requestSeq = this.counterpartyRequestSeq;
     try {
-      const companyId = app.getCurrentCompanyId();
-      if (!companyId) return;
-      const list = await request({ url: `/counterparties?companyId=${companyId}&role=${this.data.role}` });
+      const list = await request({ url: `/counterparties?companyId=${companyId}&role=${role}` });
+      if (requestSeq !== this.counterpartyRequestSeq || role !== this.data.role
+        || String(companyId) !== String(app.getCurrentCompanyId())) return;
       this.setData({ counterparties: list || [], relationCounterparties: list || [] });
       this.refreshPartnerCompanies();
     } catch (error) {
+      if (requestSeq !== this.counterpartyRequestSeq || role !== this.data.role) return;
       this.setData({ counterparties: [], relationCounterparties: [] });
       this.refreshPartnerCompanies();
     }

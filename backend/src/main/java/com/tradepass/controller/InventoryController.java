@@ -39,8 +39,33 @@ public class InventoryController {
                 String.valueOf(body.getOrDefault("reason", ""))));
     }
 
+    @PostMapping(value = "/trade-documents/{id}/receive", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ApiResponse<Map<String, Object>> confirmDocument(@PathVariable Long id,
+                                                            @RequestBody Map<String, Object> body) {
+        return ApiResponse.ok(inventoryService.receive(id,
+                String.valueOf(body.getOrDefault("decision", "")),
+                longValue(body.get("warehouseId")),
+                String.valueOf(body.getOrDefault("reason", ""))));
+    }
+
     @PostMapping(value = "/sales-orders/{id}/receive", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<Map<String, Object>> receiveWithSignature(
+            @PathVariable Long id,
+            @RequestParam String decision,
+            @RequestParam(required = false) Long warehouseId,
+            @RequestParam("signature") MultipartFile signature) {
+        try {
+            return ApiResponse.ok(inventoryService.receive(id, decision, warehouseId, "",
+                    signature.getOriginalFilename(), signature.getBytes()));
+        } catch (BusinessException exception) {
+            throw exception;
+        } catch (Exception exception) {
+            throw new BusinessException("签名图片读取失败，请重新签名");
+        }
+    }
+
+    @PostMapping(value = "/trade-documents/{id}/receive", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<Map<String, Object>> confirmDocumentWithSignature(
             @PathVariable Long id,
             @RequestParam String decision,
             @RequestParam(required = false) Long warehouseId,
@@ -70,6 +95,13 @@ public class InventoryController {
     @GetMapping("/inventory/overview")
     public ApiResponse<Map<String, Object>> inventoryOverview() {
         return ApiResponse.ok(inventoryService.inventoryOverview());
+    }
+
+    @GetMapping("/inventory/products")
+    public ApiResponse<List<Map<String, Object>>> inventoryProducts(
+            @RequestParam(required = false, defaultValue = "") String keyword,
+            @RequestParam(required = false, defaultValue = "100") Integer limit) {
+        return ApiResponse.ok(inventoryService.searchProducts(keyword, limit));
     }
 
     private Long longValue(Object value) {

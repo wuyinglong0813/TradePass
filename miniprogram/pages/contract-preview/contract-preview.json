@@ -2,5 +2,6 @@
   "navigationBarTitleText": "合同详情",
   "navigationBarBackgroundColor": "#f1f1f1",
   "navigationBarTextStyle": "black",
-  "backgroundColor": "#e8e8e8"
+  "backgroundColor": "#e8e8e8",
+  "enablePullDownRefresh": true
 }

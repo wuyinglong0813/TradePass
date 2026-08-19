@@ -41,7 +41,7 @@
       </view>
       <view class="list-row" bindtap="goPhoneLogin">
         <view class="row-icon"><image src="/images/icons/template.svg" mode="aspectFit"/></view>
-        <view class="row-copy"><view class="row-title">业务模板</view><view class="row-desc">合同与销售单模板</view></view>
+        <view class="row-copy"><view class="row-title">业务模板</view><view class="row-desc">合同、销售单与退货单模板</view></view>
         <view class="state-pill muted">未登录</view><view class="row-arrow">›</view>
       </view>
     </view>
@@ -143,15 +143,10 @@
               <view class="row-copy"><view class="row-title">角色权限</view><view class="row-desc">角色配置与数据访问范围</view></view>
               <view class="state-pill muted">{{roleCount}}</view><view class="row-arrow">›</view>
             </view>
-            <view class="list-row" wx:if="{{canContractTemplate}}" bindtap="goContractTemplate">
-              <view class="row-icon"><image src="/images/icons/template.svg" mode="aspectFit"/></view>
-              <view class="row-copy"><view class="row-title">合同模板</view><view class="row-desc">标准合同与条款模板库</view></view>
-              <view class="state-pill muted">{{templateCount}}</view><view class="row-arrow">›</view>
-            </view>
             <view class="list-row" wx:if="{{canContractTemplate}}" bindtap="goDocumentTemplate">
-              <view class="row-icon"><image src="/images/icons/contracts.svg" mode="aspectFit"/></view>
-              <view class="row-copy"><view class="row-title">销售单模板</view><view class="row-desc">管理销售单 PDF 表格模板</view></view>
-              <view class="state-pill">单据</view><view class="row-arrow">›</view>
+              <view class="row-icon"><image src="/images/icons/template.svg" mode="aspectFit"/></view>
+              <view class="row-copy"><view class="row-title">模板中心</view><view class="row-desc">合同、销售单与退货单统一管理</view></view>
+              <view class="state-pill muted">{{templateCount}}</view><view class="row-arrow">›</view>
             </view>
           </block>
           <view class="list-row" wx:if="{{canInventory}}" bindtap="goInventory">
