@@ -55,10 +55,10 @@
         <!-- 数据行 -->
         <view class="table-row" wx:for="{{tableRows}}" wx:for-item="row" wx:for-index="ri" wx:key="ri">
           <view class="td" wx:for="{{tableSection.columns}}" wx:for-item="col" wx:for-index="ci" wx:key="ci">
-            <block wx:if="{{ci === 5}}">
+            <block wx:if="{{ci === amountColumnIndex}}">
               <input class="td-input num auto" type="digit" value="{{row[ci]}}" disabled/>
             </block>
-            <block wx:elif="{{ci === 3 || ci === 4}}">
+            <block wx:elif="{{ci === quantityColumnIndex || ci === priceColumnIndex}}">
                 <input class="td-input num" type="digit" value="{{row[ci]}}" data-row="{{ri}}" data-col="{{ci}}" bindfocus="onNumberCellFocus" bindblur="onNumberCellBlur" bindinput="onTableCellChange"/>
             </block>
             <block wx:else>

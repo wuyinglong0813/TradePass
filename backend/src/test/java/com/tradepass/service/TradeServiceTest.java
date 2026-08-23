@@ -301,7 +301,7 @@ class TradeServiceTest {
         when(contractMapper.update(any(Wrapper.class))).thenReturn(1);
 
         assertThat(service.cancelContract(41L)).isEqualTo("合同审批已撤回");
-        verify(approvalService).recordResult(9L, 3L, "CONTRACT", 41L, 41L,
+        verify(approvalService).recordResult(9L, 3L, "CONTRACT", 41L, null,
                 "CANCELLED", "合同已被发起方撤回", "发起方已撤回合同 HT-41", null);
 
         Company initiator = new Company();
@@ -323,6 +323,23 @@ class TradeServiceTest {
 
         outgoing.setStatus("REJECTED");
         assertThat(service.deleteContract(41L)).isEqualTo("合同已从我方列表删除");
+    }
+
+    @Test
+    void initiatorCanDeleteCancelledContract() {
+        TradeContract outgoing = new TradeContract();
+        outgoing.setId(42L);
+        outgoing.setCompanyId(3L);
+        outgoing.setCounterpartyCompanyId(9L);
+        outgoing.setContractNo("HT-42");
+        outgoing.setStatus("CANCELLED");
+        outgoing.setInitiatorHidden(false);
+        when(contractMapper.selectOne(any(Wrapper.class))).thenReturn(outgoing);
+        when(contractMapper.update(any(Wrapper.class))).thenReturn(1);
+
+        assertThat(service.deleteContract(42L)).isEqualTo("合同已从我方列表删除");
+        verify(auditLogService).log(3L, "CONTRACT", 42L, "DELETE",
+                "从发起方合同列表删除合同 HT-42");
     }
 
     @Test

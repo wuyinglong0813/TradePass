@@ -20,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -135,6 +136,7 @@ public class BusinessDocumentService {
         return documentMapper.selectList(new LambdaQueryWrapper<BusinessDocument>()
                         .eq(BusinessDocument::getContractId, contractId)
                         .eq(BusinessDocument::getDocumentType, normalizedType)
+                        .isNull(BusinessDocument::getDeletedAt)
                         .and(wrapper -> wrapper.ne(BusinessDocument::getStatus, "DRAFT")
                                 .or().eq(BusinessDocument::getCompanyId, companyId))
                         .orderByDesc(BusinessDocument::getCreatedAt)
@@ -160,12 +162,10 @@ public class BusinessDocumentService {
         if (buyerCompanyId == null) {
             throw new BusinessException("合同需方企业信息不完整");
         }
-        long issuerCompanyId = SALES_ORDER.equals(type) ? supplierCompanyId : buyerCompanyId;
-        if (issuerCompanyId != companyId) {
-            throw new BusinessException(SALES_ORDER.equals(type)
-                    ? "仅合同供方可以创建销售单" : "仅合同需方可以创建退货单");
+        if (SALES_ORDER.equals(type) && supplierCompanyId != companyId) {
+            throw new BusinessException("仅合同供方可以创建销售单");
         }
-        Long recipientCompanyId = SALES_ORDER.equals(type) ? buyerCompanyId : supplierCompanyId;
+        Long recipientCompanyId = companyId == supplierCompanyId ? buyerCompanyId : supplierCompanyId;
         BusinessDocumentTemplate template = templateMapper.selectOne(
                 new LambdaQueryWrapper<BusinessDocumentTemplate>()
                         .eq(BusinessDocumentTemplate::getId, templateId)
@@ -181,6 +181,8 @@ public class BusinessDocumentService {
         BusinessDocument document = new BusinessDocument();
         document.setCompanyId(companyId);
         document.setRecipientCompanyId(recipientCompanyId);
+        document.setSupplierCompanyId(supplierCompanyId);
+        document.setBuyerCompanyId(buyerCompanyId);
         document.setContractId(contractId);
         document.setDocumentType(type);
         document.setSourceType(normalizeSourceType(string(body.get("sourceType"))));
@@ -235,13 +237,15 @@ public class BusinessDocumentService {
         if (!"ACTIVE".equals(contract.getStatus())) {
             throw new BusinessException("合同生效后才能发布" + typeLabel(document.getDocumentType()));
         }
+        long supplierCompanyId = supplierCompanyId(contract);
         Long buyerCompanyId = buyerCompanyId(contract);
         if (buyerCompanyId == null) throw new BusinessException("合同需方企业信息不完整");
-        long issuerCompanyId = SALES_ORDER.equals(document.getDocumentType())
-                ? supplierCompanyId(contract) : buyerCompanyId;
-        if (issuerCompanyId != companyId) {
+        if (SALES_ORDER.equals(document.getDocumentType()) && supplierCompanyId != companyId) {
             throw new BusinessException("仅单据制单方可以发布" + typeLabel(document.getDocumentType()));
         }
+        document.setRecipientCompanyId(companyId == supplierCompanyId ? buyerCompanyId : supplierCompanyId);
+        document.setSupplierCompanyId(supplierCompanyId);
+        document.setBuyerCompanyId(buyerCompanyId);
         document.setStatus("ISSUED");
         document.setRejectedReason(null);
         documentMapper.updateById(document);
@@ -254,7 +258,7 @@ public class BusinessDocumentService {
         long companyId = AuthContext.requireCompanyId();
         accessControlService.requireAnyPermission(companyId, "contract_view", "contract_sign");
         BusinessDocument document = documentMapper.selectById(id);
-        if (document == null) {
+        if (document == null || document.getDeletedAt() != null) {
             throw new BusinessException("单据不存在");
         }
         requireContractParty(document.getContractId(), companyId);
@@ -263,6 +267,25 @@ public class BusinessDocumentService {
             throw new BusinessException("单据草稿不存在");
         }
         return document;
+    }
+
+    @Transactional
+    public String deleteDraft(Long id) {
+        long companyId = AuthContext.requireCompanyId();
+        accessControlService.requireAnyPermission(companyId, "contract_sign", "order_create");
+        BusinessDocument document = documentMapper.selectOne(new LambdaQueryWrapper<BusinessDocument>()
+                .eq(BusinessDocument::getId, id)
+                .eq(BusinessDocument::getCompanyId, companyId)
+                .eq(BusinessDocument::getStatus, "DRAFT")
+                .isNull(BusinessDocument::getDeletedAt)
+                .last("LIMIT 1"));
+        if (document == null) throw new BusinessException("可删除的单据草稿不存在");
+        document.setDeletedBy(AuthContext.userId());
+        document.setDeletedAt(LocalDateTime.now());
+        documentMapper.updateById(document);
+        auditLogService.log(companyId, "BUSINESS_DOCUMENT", id, "DELETE",
+                "删除" + typeLabel(document.getDocumentType()) + "草稿 " + document.getDocumentNo());
+        return typeLabel(document.getDocumentType()) + "草稿已删除";
     }
 
     public String typeLabel(String type) {
@@ -304,6 +327,7 @@ public class BusinessDocumentService {
             List<String> targetColumns = new ArrayList<>();
             templateContent.path("columns").forEach(node -> targetColumns.add(node.asText("")));
             ProductSource source = extractProducts(contract.getTerms());
+            List<FeeItem> fees = extractFees(contract.getTerms());
 
             ObjectNode snapshot = objectMapper.createObjectNode();
             snapshot.put("title", typeLabel(type));
@@ -320,12 +344,23 @@ public class BusinessDocumentService {
             ArrayNode columns = snapshot.putArray("columns");
             targetColumns.forEach(columns::add);
             ArrayNode rows = snapshot.putArray("rows");
+            ArrayNode rowTypes = snapshot.putArray("rowTypes");
             for (int rowIndex = 0; rowIndex < source.rows().size(); rowIndex++) {
                 List<String> row = source.rows().get(rowIndex);
                 ArrayNode targetRow = rows.addArray();
                 for (String targetColumn : targetColumns) {
                     targetRow.add(valueForTarget(targetColumn, rowIndex, source.columns(), row));
                 }
+                rowTypes.add("PRODUCT");
+            }
+            for (int feeIndex = 0; feeIndex < fees.size(); feeIndex++) {
+                FeeItem fee = fees.get(feeIndex);
+                ArrayNode targetRow = rows.addArray();
+                for (String targetColumn : targetColumns) {
+                    targetRow.add(valueForFeeTarget(targetColumn,
+                            source.rows().size() + feeIndex, fee));
+                }
+                rowTypes.add("FEE");
             }
             snapshot.put("totalAmount", contract.getAmount() == null
                     ? "0" : contract.getAmount().stripTrailingZeros().toPlainString());
@@ -359,11 +394,14 @@ public class BusinessDocumentService {
                     ? edits.path("columns") : result.path("columns"));
             ArrayNode rows = readRows(edits.has("rows")
                     ? edits.path("rows") : result.path("rows"), columns.size());
+            ArrayNode rowTypes = readRowTypes(edits.has("rowTypes")
+                    ? edits.path("rowTypes") : result.path("rowTypes"), rows.size());
             int blankRows = edits.has("blankRows")
                     ? edits.path("blankRows").asInt(result.path("blankRows").asInt(10))
                     : result.path("blankRows").asInt(10);
             result.set("columns", columns);
             result.set("rows", rows);
+            result.set("rowTypes", rowTypes);
             result.put("blankRows", Math.max(rows.size(), Math.min(50, Math.max(1, blankRows))));
             return result.toString();
         } catch (BusinessException exception) {
@@ -429,6 +467,16 @@ public class BusinessDocumentService {
         return rows;
     }
 
+    private ArrayNode readRowTypes(JsonNode source, int rowCount) {
+        ArrayNode rowTypes = objectMapper.createArrayNode();
+        for (int index = 0; index < rowCount; index++) {
+            String value = source.isArray() && index < source.size()
+                    ? source.path(index).asText("PRODUCT") : "PRODUCT";
+            rowTypes.add("FEE".equalsIgnoreCase(value) ? "FEE" : "PRODUCT");
+        }
+        return rowTypes;
+    }
+
     private ProductSource extractProducts(String terms) {
         if (terms == null || terms.isBlank()) {
             return new ProductSource(List.of(), List.of());
@@ -458,6 +506,42 @@ public class BusinessDocumentService {
             // 历史纯文本合同没有商品表格，仍可生成空白标准单据。
         }
         return new ProductSource(List.of(), List.of());
+    }
+
+    private List<FeeItem> extractFees(String terms) {
+        if (terms == null || terms.isBlank()) return List.of();
+        try {
+            JsonNode root = objectMapper.readTree(terms);
+            for (JsonNode section : root.path("sections")) {
+                if (!"fees".equalsIgnoreCase(section.path("type").asText())) continue;
+                List<FeeItem> fees = new ArrayList<>();
+                for (JsonNode item : section.path("items")) {
+                    String feeType = item.path("feeType").asText(item.path("name").asText("其他费用"));
+                    String amount = item.path("amount").asText("0");
+                    String remark = item.path("remark").asText("");
+                    if (!feeType.isBlank() || !amount.isBlank()) {
+                        fees.add(new FeeItem(feeType, amount, remark));
+                    }
+                }
+                return fees;
+            }
+        } catch (Exception ignored) {
+            // 历史合同没有结构化费用项。
+        }
+        return List.of();
+    }
+
+    private String valueForFeeTarget(String target, int rowIndex, FeeItem fee) {
+        String normalized = target == null ? "" : target.trim();
+        if (normalized.contains("序号")) return String.valueOf(rowIndex + 1);
+        if (normalized.contains("品名") || normalized.equals("名称") || normalized.contains("产品")) {
+            return fee.feeType();
+        }
+        if (normalized.contains("单位")) return "项";
+        if (normalized.contains("数量")) return "1";
+        if (normalized.contains("单价") || normalized.contains("金额")) return fee.amount();
+        if (normalized.contains("备注")) return fee.remark();
+        return "";
     }
 
     private String valueForTarget(String target, int rowIndex,
@@ -506,7 +590,7 @@ public class BusinessDocumentService {
 
     private BusinessDocument requireOwnedEditableDocument(Long id, long companyId) {
         BusinessDocument document = documentMapper.selectById(id);
-        if (document == null || (!SALES_ORDER.equals(document.getDocumentType())
+        if (document == null || document.getDeletedAt() != null || (!SALES_ORDER.equals(document.getDocumentType())
                 && !RETURN_ORDER.equals(document.getDocumentType()))
                 || !Long.valueOf(companyId).equals(document.getCompanyId())
                 || (!"DRAFT".equals(document.getStatus()) && !"REJECTED".equals(document.getStatus()))) {
@@ -538,6 +622,8 @@ public class BusinessDocumentService {
         view.put("typeLabel", typeLabel(document.getDocumentType()));
         view.put("issuerCompanyId", document.getCompanyId());
         view.put("recipientCompanyId", document.getRecipientCompanyId());
+        view.put("supplierCompanyId", resolvedSupplierCompanyId(document, contract));
+        view.put("buyerCompanyId", resolvedBuyerCompanyId(document, contract));
         view.put("sourceType", document.getSourceType());
         view.put("status", document.getStatus());
         view.put("statusText", "ISSUED".equals(document.getStatus()) && !owner
@@ -552,6 +638,7 @@ public class BusinessDocumentService {
         view.put("canEditDraft", owner && draft
                 && ("PENDING".equals(contract.getStatus()) || "ACTIVE".equals(contract.getStatus())));
         view.put("canPublish", owner && draft && "ACTIVE".equals(contract.getStatus()));
+        view.put("canDeleteDraft", owner && "DRAFT".equals(document.getStatus()));
         return view;
     }
 
@@ -590,6 +677,16 @@ public class BusinessDocumentService {
                 ? contract.getCompanyId() : contract.getCounterpartyCompanyId();
     }
 
+    private Long resolvedSupplierCompanyId(BusinessDocument document, TradeContract contract) {
+        return document.getSupplierCompanyId() == null
+                ? supplierCompanyId(contract) : document.getSupplierCompanyId();
+    }
+
+    private Long resolvedBuyerCompanyId(BusinessDocument document, TradeContract contract) {
+        return document.getBuyerCompanyId() == null
+                ? buyerCompanyId(contract) : document.getBuyerCompanyId();
+    }
+
     private String statusText(String status) {
         if ("DRAFT".equals(status)) return "草稿";
         if ("ISSUED".equals(status)) return "待对方确认";
@@ -617,5 +714,8 @@ public class BusinessDocumentService {
     }
 
     private record ProductSource(List<String> columns, List<List<String>> rows) {
+    }
+
+    private record FeeItem(String feeType, String amount, String remark) {
     }
 }

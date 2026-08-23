@@ -22,14 +22,15 @@ class ApprovalServiceTest {
     }
 
     @Test
-    void recordsCompanyResultAsUnreadAndPreservesRejectionReason() {
+    void recordsImmutableCompanyResultAndPreservesRejectionReason() {
         service.recordResult(3L, 4L, "INVOICE", 18L, 12L,
                 "REJECTED", "发票已被驳回", "对方已驳回发票 invoice.pdf", "金额不一致");
 
         ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<Object[]> values = ArgumentCaptor.forClass(Object[].class);
         verify(jdbc).update(sql.capture(), values.capture());
-        assertThat(sql.getValue()).contains("approval_result_notification", "read_at = NULL");
+        assertThat(sql.getValue()).contains("approval_result_notification", "VALUES");
+        assertThat(sql.getValue()).doesNotContain("ON DUPLICATE KEY UPDATE");
         assertThat(values.getValue()).containsExactly(
                 3L, 4L, "INVOICE", 18L, 12L, "REJECTED",
                 "发票已被驳回", "对方已驳回发票 invoice.pdf", "金额不一致");

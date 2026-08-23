@@ -71,7 +71,15 @@
           <view class="pdf-mini-empty" wx:if="{{contractTableRows.length === 0}}">暂无商品明细</view>
         </view>
         <view class="pdf-contract-total" wx:if="{{contractTotalAmount}}">
-          合计：¥{{contractTotalAmount}} <text wx:if="{{contractTotalAmountCn}}">（{{contractTotalAmountCn}}）</text>
+          {{contractFees.length > 0 ? '商品小计' : '合计'}}：¥{{contractTotalAmount}} <text wx:if="{{contractTotalAmountCn}}">（{{contractTotalAmountCn}}）</text>
+        </view>
+        <view class="pdf-fee-section" wx:if="{{contractFees.length > 0}}">
+          <view class="pdf-fee-title">其他费用（不计入库存）</view>
+          <view class="pdf-fee-row" wx:for="{{contractFees}}" wx:key="index">
+            <text>{{item.feeType}}</text><text>¥{{item.amount}}</text><text>{{item.remark || '—'}}</text>
+          </view>
+          <view class="pdf-fee-total">费用小计：¥{{contractFeeTotal}}</view>
+          <view class="pdf-fee-grand">合同总额：¥{{contract.amount}}</view>
         </view>
         <view class="pdf-clause-content" wx:for="{{contractClauses}}" wx:key="label">
           <view class="pdf-clause-title">{{item.label}}</view>
@@ -115,7 +123,7 @@
 
     <view class="fulfillment-section">
       <view class="fulfillment-head">
-        <view><view class="fulfillment-title"><text class="section-mark return">退</text>退货单<text class="section-count">{{returnDocuments.length}}</text></view><view class="document-sub">需方发起，对方确认后以负数冲减对账</view></view>
+        <view><view class="fulfillment-title"><text class="section-mark return">退</text>退货单<text class="section-count">{{returnDocuments.length}}</text></view><view class="document-sub">双方均可创建，对方确认后以负数冲减对账</view></view>
         <button class="section-upload" wx:if="{{canCreateReturnOrder}}" data-type="RETURN_ORDER" bindtap="createBusinessDocument">＋ 创建草稿</button>
       </view>
       <view class="document-card inner" wx:for="{{returnDocuments}}" wx:key="id" data-document="{{item}}" bindtap="openSalesOrderDetail">
@@ -123,7 +131,7 @@
         <view class="document-info"><view class="document-no">{{item.documentNo}}</view><view class="document-meta status-{{item.status}}">状态：{{item.statusText}}</view><view class="document-meta">{{item.templateName}} · {{item.dateText}}</view><view class="document-meta reject" wx:if="{{item.rejectedReason}}">原因：{{item.rejectedReason}}</view></view>
         <view class="document-actions"><view data-document="{{item}}" catchtap="viewBusinessDocument">{{item.status === 'DRAFT' ? '预览' : '查看'}}</view><view data-document="{{item}}" catchtap="downloadBusinessDocument">下载</view><view>{{item.status === 'DRAFT' ? '编辑' : '详情'}}</view></view>
       </view>
-      <view class="section-empty" wx:if="{{returnDocuments.length === 0}}">{{canCreateReturnOrder ? '暂无退货单，可按合同产品创建草稿' : '等待合同需方创建退货单'}}</view>
+      <view class="section-empty" wx:if="{{returnDocuments.length === 0}}">{{canCreateReturnOrder ? '暂无退货单，合同双方均可创建草稿' : '暂无退货单'}}</view>
     </view>
 
     <view class="fulfillment-section">
@@ -345,7 +353,7 @@
                 <view class="document-edit-cell" wx:for="{{documentColumns}}" wx:key="*this">{{item}}</view>
                 <view class="document-edit-cell action"></view>
               </view>
-              <view class="document-edit-table-row" wx:for="{{documentRows}}" wx:for-item="row" wx:for-index="rowIndex" wx:key="rowIndex">
+              <view class="document-edit-table-row {{documentRowTypes[rowIndex] === 'FEE' ? 'fee-row' : ''}}" wx:for="{{documentRows}}" wx:for-item="row" wx:for-index="rowIndex" wx:key="rowIndex">
                 <view class="document-edit-cell" wx:for="{{documentColumns}}" wx:for-item="column" wx:for-index="columnIndex" wx:key="*this">
                   <input class="document-cell-input" value="{{row[columnIndex]}}" data-row="{{rowIndex}}" data-col="{{columnIndex}}" bindinput="onDocumentCellInput"/>
                 </view>
@@ -353,6 +361,7 @@
               </view>
             </view>
           </scroll-view>
+          <view class="document-fee-hint" wx:if="{{documentHasFees}}">浅橙色行为合同费用项，计入金额但不进入库存。</view>
           <view class="document-row-add" bindtap="addDocumentRow">＋ 添加商品行</view>
           <view class="document-total-field" wx:if="{{documentEditorType === 'SALES_ORDER' || documentEditorType === 'RETURN_ORDER'}}">
             <view class="document-total-label">合计：</view>

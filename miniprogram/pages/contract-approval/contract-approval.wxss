@@ -56,6 +56,7 @@ page { background: #f4f8fd; }
 .result-icon.sales_order { background: #edf8f2; color: #289465; }
 .result-icon.payment_voucher { background: #fff4dc; color: #b87415; }
 .result-icon.rejected { background: #fff0f0; color: #d45454; }
+.result-icon.cancelled { background: #eef1f4; color: #788592; }
 .result-copy { flex: 1; margin-left: 14rpx; min-width: 0; }
 .result-title-row { align-items: center; display: flex; }
 .unread-dot { background: #f04b4b; border-radius: 50%; flex-shrink: 0; height: 13rpx; margin-right: 9rpx; width: 13rpx; }

@@ -1,4 +1,13 @@
-const { calcTableTotal, reorderClauses } = require('../../utils/chineseCurrency');
+const {
+  calcTableTotal,
+  calcFeeTotal,
+  findContractColumn,
+  normalizeContractTable,
+  numberToChineseCurrency,
+  reorderClauses
+} = require('../../utils/chineseCurrency');
+
+const FEE_TYPE_OPTIONS = ['运费', '装卸费', '包装费', '服务费', '其他费用'];
 
 function newClientRequestId() {
   return `contract-${Date.now()}-${Math.random().toString(16).slice(2, 14)}`;
@@ -7,6 +16,18 @@ function newClientRequestId() {
 function normalizeNumericText(value) {
   const text = String(value == null ? '' : value).trim();
   return /^0+\d/.test(text) ? text.replace(/^0+(?=\d)/, '') : text;
+}
+
+function contractTotalChanges(productTotal, feeItems) {
+  const normalizedProductTotal = Math.round((parseFloat(productTotal) || 0) * 100) / 100;
+  const feeTotal = calcFeeTotal(feeItems);
+  const grandTotal = Math.round((normalizedProductTotal + feeTotal) * 100) / 100;
+  return {
+    productTotalAmount: String(normalizedProductTotal),
+    feeTotalAmount: String(feeTotal),
+    totalAmount: String(grandTotal),
+    totalAmountCn: numberToChineseCurrency(grandTotal)
+  };
 }
 
 Page({
@@ -28,8 +49,21 @@ Page({
     // 产品表格
     tableSection: null,
     tableRows: [],
+    productColumnIndex: 0,
+    quantityColumnIndex: 3,
+    priceColumnIndex: 4,
+    amountColumnIndex: 5,
+    feeTypeOptions: FEE_TYPE_OPTIONS,
+    feeItems: [],
+    activeFeeTypeIndex: -1,
+    productTotalAmount: '0',
+    feeTotalAmount: '0',
     totalAmount: '0',
     totalAmountCn: '零元整',
+    tableScrollLeft: 0,
+    tableScrollbarVisible: false,
+    tableScrollbarThumbWidth: 100,
+    tableScrollbarThumbLeft: 0,
     // 条款
     clauses: [],
     // 是否已选择模板
@@ -101,10 +135,22 @@ Page({
         throw new Error('合同正文格式异常，无法修改');
       }
       const tableSection = (content.sections || []).find(section => section.type === 'table');
+      const feeSection = (content.sections || []).find(section => section.type === 'fees');
       const clauses = reorderClauses((content.sections || []).filter(section => section.type === 'clause'));
-      const rows = tableSection && Array.isArray(tableSection.rows)
-        ? tableSection.rows.map(row => row.slice()) : [['', '', '', '', '', '0']];
-      const total = calcTableTotal(rows);
+      const normalizedTable = normalizeContractTable(
+        tableSection && tableSection.columns,
+        tableSection && tableSection.rows
+      );
+      const total = calcTableTotal(normalizedTable.rows, normalizedTable.columns);
+      const feeItems = feeSection && Array.isArray(feeSection.items)
+        ? feeSection.items.map(item => ({
+          feeType: String(item.feeType || item.name || '运费'),
+          amount: String(item.amount || '0'),
+          remark: String(item.remark || '')
+        }))
+        : [];
+      const feeTotal = calcFeeTotal(feeItems);
+      const grandTotal = Math.round((total.totalAmount + feeTotal) * 100) / 100;
       let templateIndex = this.data.templates.findIndex(item => item.name === contract.templateName);
       if (templateIndex < 0) {
         const templates = this.data.templates.concat([{
@@ -126,14 +172,18 @@ Page({
         fields: (content.fields || []).map(field => ({ ...field })),
         tableSection: tableSection ? {
           title: tableSection.title,
-          columns: (tableSection.columns || []).slice()
+          columns: normalizedTable.columns
         } : null,
         tableRows: total.rows,
-        totalAmount: String(total.totalAmount),
-        totalAmountCn: total.totalAmountCn,
+        ...this.tableColumnMetadata(normalizedTable.columns),
+        feeItems,
+        productTotalAmount: String(total.totalAmount),
+        feeTotalAmount: String(feeTotal),
+        totalAmount: String(grandTotal),
+        totalAmountCn: numberToChineseCurrency(grandTotal),
         clauses: clauses.map(clause => ({ title: clause.title || '', content: clause.content || '' })),
         hasTemplate: true
-      });
+      }, () => this.measureTableScrollbar());
       wx.setNavigationBarTitle({ title: '修改合同' });
     } catch (error) {
       wx.showToast({ title: error.message || '合同加载失败', icon: 'none' });
@@ -171,21 +221,36 @@ Page({
     const tableSection = (content.sections || []).find(s => s.type === 'table');
     const rawClauses = (content.sections || []).filter(s => s.type === 'clause');
     const clauses = reorderClauses(rawClauses);
-    const rows = (tableSection && tableSection.rows)
-      ? tableSection.rows.map(r => [...r]) : [['', '', '', '', '', '0']];
-    const result = calcTableTotal(rows);
+    const normalizedTable = normalizeContractTable(
+      tableSection && tableSection.columns,
+      tableSection && tableSection.rows
+    );
+    const result = calcTableTotal(normalizedTable.rows, normalizedTable.columns);
 
     this.setData({
       templateIndex: idx,
       contractName: this.data.contractName || (content.title || '购销合同'),
       fields,
-      tableSection: tableSection ? { title: tableSection.title, columns: [...tableSection.columns] } : null,
+      tableSection: tableSection ? { title: tableSection.title, columns: normalizedTable.columns } : null,
       tableRows: result.rows,
+      ...this.tableColumnMetadata(normalizedTable.columns),
+      feeItems: [],
+      productTotalAmount: String(result.totalAmount),
+      feeTotalAmount: '0',
       totalAmount: String(result.totalAmount),
       totalAmountCn: result.totalAmountCn,
       clauses: clauses.map(c => ({ title: c.title || '', content: c.content || '' })),
       hasTemplate: true
-    });
+    }, () => this.measureTableScrollbar());
+  },
+
+  tableColumnMetadata(columns) {
+    return {
+      productColumnIndex: findContractColumn(columns, ['品名', '名称', '产品'], 0),
+      quantityColumnIndex: findContractColumn(columns, ['数量'], 3),
+      priceColumnIndex: findContractColumn(columns, ['单价'], 4),
+      amountColumnIndex: findContractColumn(columns, ['金额'], 5)
+    };
   },
 
   onContractNameInput(e) { this.setData({ contractName: e.detail.value }); },
@@ -254,11 +319,9 @@ Page({
         * (parseFloat(targetRow[priceIndex]) || 0)) * 100) / 100;
       targetRow[amountIndex] = String(amount);
       changes[`tableRows[${rowIndex}][${amountIndex}]`] = String(amount);
-      const total = this.data.tableRows.reduce((sum, item) =>
+      const productTotal = this.data.tableRows.reduce((sum, item) =>
         sum + (parseFloat((item || [])[amountIndex]) || 0), 0);
-      const totals = calcTableTotal(this.data.tableRows);
-      changes.totalAmount = String(Math.round(total * 100) / 100);
-      changes.totalAmountCn = totals.totalAmountCn;
+      Object.assign(changes, contractTotalChanges(productTotal, this.data.feeItems));
     }
     if (columnIndex === productIndex) {
       const keyword = String(value || '').trim().toLowerCase();
@@ -359,7 +422,7 @@ Page({
   },
 
   addTableRow() {
-    const cols = this.data.tableSection ? this.data.tableSection.columns.length : 6;
+    const cols = this.data.tableSection ? this.data.tableSection.columns.length : 7;
     const newRow = new Array(cols).fill('');
     const amountIndex = this.tableColumnIndex('amount');
     if (amountIndex >= 0) newRow[amountIndex] = '0';
@@ -375,12 +438,166 @@ Page({
   },
 
   recalcTable(rows) {
-    const result = calcTableTotal(rows);
+    const columns = (this.data.tableSection && this.data.tableSection.columns) || [];
+    const result = calcTableTotal(rows, columns);
     this.setData({
       tableRows: result.rows,
-      totalAmount: String(result.totalAmount),
-      totalAmountCn: result.totalAmountCn
+      ...contractTotalChanges(result.totalAmount, this.data.feeItems)
     });
+  },
+
+  addFeeItem() {
+    const feeItems = this.data.feeItems.concat([{ feeType: '运费', amount: '0', remark: '' }]);
+    this.setData({
+      feeItems,
+      activeFeeTypeIndex: feeItems.length - 1,
+      ...contractTotalChanges(this.data.productTotalAmount, feeItems)
+    });
+  },
+
+  toggleFeeTypeMenu(e) {
+    const index = Number(e.currentTarget.dataset.index);
+    this.setData({
+      activeFeeTypeIndex: this.data.activeFeeTypeIndex === index ? -1 : index
+    });
+  },
+
+  selectFeeType(e) {
+    const index = Number(e.currentTarget.dataset.index);
+    const feeType = String(e.currentTarget.dataset.type || '运费');
+    if (!this.data.feeItems[index]) return;
+    this.setData({
+      [`feeItems[${index}].feeType`]: feeType,
+      activeFeeTypeIndex: -1
+    });
+  },
+
+  onFeeFieldInput(e) {
+    const index = Number(e.currentTarget.dataset.index);
+    const field = e.currentTarget.dataset.field;
+    if (!this.data.feeItems[index] || !['amount', 'remark'].includes(field)) return;
+    const value = field === 'amount' ? normalizeNumericText(e.detail.value) : e.detail.value;
+    const feeItems = this.data.feeItems.map((item, itemIndex) => (
+      itemIndex === index ? { ...item, [field]: value } : item
+    ));
+    this.setData({ feeItems, ...contractTotalChanges(this.data.productTotalAmount, feeItems) });
+    return value;
+  },
+
+  deleteFeeItem(e) {
+    const index = Number(e.currentTarget.dataset.index);
+    const feeItems = this.data.feeItems.filter((_, itemIndex) => itemIndex !== index);
+    this.setData({
+      feeItems,
+      activeFeeTypeIndex: -1,
+      ...contractTotalChanges(this.data.productTotalAmount, feeItems)
+    });
+  },
+
+  onProductCellBlur(e) {
+    const rowIndex = Number(e.currentTarget.dataset.row);
+    const value = String(e.detail.value || '').trim();
+    if (!['运费', '装卸费', '包装费', '服务费'].includes(value)) return;
+    wx.showModal({
+      title: '检测到费用项目',
+      content: `${value}不是库存商品，是否移动到“其他费用”？`,
+      confirmText: '转为费用',
+      success: result => {
+        if (!result.confirm || !this.data.tableRows[rowIndex]) return;
+        const amountIndex = this.tableColumnIndex('amount');
+        const remarkIndex = ((this.data.tableSection && this.data.tableSection.columns) || [])
+          .findIndex(column => String(column).includes('备注'));
+        const row = this.data.tableRows[rowIndex];
+        const feeItems = this.data.feeItems.concat([{
+          feeType: value,
+          amount: amountIndex >= 0 ? String(row[amountIndex] || '0') : '0',
+          remark: remarkIndex >= 0 ? String(row[remarkIndex] || '') : ''
+        }]);
+        const rows = this.data.tableRows.length > 1
+          ? this.data.tableRows.filter((_, index) => index !== rowIndex)
+          : [new Array(((this.data.tableSection && this.data.tableSection.columns) || []).length).fill('')];
+        const resultRows = calcTableTotal(rows,
+          (this.data.tableSection && this.data.tableSection.columns) || []);
+        this.setData({
+          tableRows: resultRows.rows,
+          feeItems,
+          productSuggestions: [],
+          ...contractTotalChanges(resultRows.totalAmount, feeItems)
+        });
+      }
+    });
+  },
+
+  measureTableScrollbar() {
+    setTimeout(() => {
+      const query = wx.createSelectorQuery().in(this);
+      query.select('.table-scroll').boundingClientRect();
+      query.select('.table-wrap').boundingClientRect();
+      query.select('.table-scrollbar').boundingClientRect();
+      query.exec(result => {
+        const viewport = result && result[0];
+        const content = result && result[1];
+        const track = result && result[2];
+        if (!viewport || !content || !content.width) return;
+        this.tableScrollMetrics = {
+          viewportWidth: viewport.width,
+          contentWidth: content.width,
+          trackWidth: track ? track.width : viewport.width
+        };
+        this.tableScrollOffset = 0;
+        const width = Math.min(100, Math.max(28, viewport.width / content.width * 100));
+        this.setData({
+          tableScrollbarVisible: content.width > viewport.width + 1,
+          tableScrollbarThumbWidth: width,
+          tableScrollbarThumbLeft: 0
+        });
+      });
+    }, 30);
+  },
+
+  onTableScroll(e) {
+    const metrics = this.tableScrollMetrics;
+    if (!metrics || metrics.contentWidth <= metrics.viewportWidth) return;
+    const scrollLeft = Number(e.detail.scrollLeft || 0);
+    this.tableScrollOffset = scrollLeft;
+    const maxScroll = metrics.contentWidth - metrics.viewportWidth;
+    const maxLeft = 100 - this.data.tableScrollbarThumbWidth;
+    const left = Math.max(0, Math.min(maxLeft,
+      (scrollLeft / maxScroll) * maxLeft));
+    this.setData({ tableScrollbarThumbLeft: left });
+  },
+
+  onTableScrollbarTouchStart(e) {
+    const touch = e.touches && e.touches[0];
+    const metrics = this.tableScrollMetrics;
+    if (!touch || !metrics || metrics.contentWidth <= metrics.viewportWidth) return;
+    this.tableScrollbarDrag = {
+      startX: Number(touch.clientX == null ? touch.pageX : touch.clientX),
+      startScrollLeft: Number(this.tableScrollOffset || 0)
+    };
+  },
+
+  onTableScrollbarTouchMove(e) {
+    const touch = e.touches && e.touches[0];
+    const drag = this.tableScrollbarDrag;
+    const metrics = this.tableScrollMetrics;
+    if (!touch || !drag || !metrics) return;
+    const currentX = Number(touch.clientX == null ? touch.pageX : touch.clientX);
+    const maxScroll = metrics.contentWidth - metrics.viewportWidth;
+    const thumbRatio = this.data.tableScrollbarThumbWidth / 100;
+    const trackTravel = Math.max(1, metrics.trackWidth * (1 - thumbRatio));
+    const scrollLeft = Math.max(0, Math.min(maxScroll,
+      drag.startScrollLeft + (currentX - drag.startX) / trackTravel * maxScroll));
+    const maxLeft = 100 - this.data.tableScrollbarThumbWidth;
+    this.tableScrollOffset = scrollLeft;
+    this.setData({
+      tableScrollLeft: scrollLeft,
+      tableScrollbarThumbLeft: maxScroll > 0 ? scrollLeft / maxScroll * maxLeft : 0
+    });
+  },
+
+  onTableScrollbarTouchEnd() {
+    this.tableScrollbarDrag = null;
   },
 
   onClauseTitleInput(e) {
@@ -404,7 +621,8 @@ Page({
 
   // ======= 提交 =======
   async onSubmit() {
-    const { templates, templateIndex, contractName, fields, tableSection, tableRows, totalAmount, clauses,
+    const { templates, templateIndex, contractName, fields, tableSection, tableRows, feeItems,
+      productTotalAmount, feeTotalAmount, totalAmount, clauses,
       counterpartyName, counterpartyCompanyId, role, clientRequestId, editMode, contractId,
       submitting } = this.data;
     if (submitting) return;
@@ -425,7 +643,20 @@ Page({
             const value = row[index];
             return value == null ? '' : String(value);
           })),
-          summary: { totalAmount: totalAmount, totalAmountCn: this.data.totalAmountCn }
+          summary: {
+            totalAmount: productTotalAmount,
+            totalAmountCn: numberToChineseCurrency(parseFloat(productTotalAmount) || 0)
+          }
+        }] : []),
+        ...(feeItems.length > 0 ? [{
+          title: '其他费用',
+          type: 'fees',
+          items: feeItems.map(item => ({
+            feeType: String(item.feeType || '其他费用'),
+            amount: String(item.amount || '0'),
+            remark: String(item.remark || '')
+          })),
+          summary: { totalAmount: feeTotalAmount }
         }] : []),
         ...clauses.map(c => ({ title: c.title, type: 'clause', content: c.content }))
       ]

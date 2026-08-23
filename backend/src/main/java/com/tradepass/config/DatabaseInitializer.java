@@ -203,6 +203,10 @@ public class DatabaseInitializer {
                 INDEX idx_contract_type (company_id, contract_id, document_type)
             )
         """);
+        try { db.execute("ALTER TABLE business_document ADD COLUMN supplier_company_id BIGINT NULL AFTER recipient_company_id"); } catch (Exception ignored) {}
+        try { db.execute("ALTER TABLE business_document ADD COLUMN buyer_company_id BIGINT NULL AFTER supplier_company_id"); } catch (Exception ignored) {}
+        try { db.execute("ALTER TABLE business_document ADD COLUMN deleted_by BIGINT NULL AFTER rejected_reason"); } catch (Exception ignored) {}
+        try { db.execute("ALTER TABLE business_document ADD COLUMN deleted_at DATETIME NULL AFTER deleted_by"); } catch (Exception ignored) {}
         db.execute("""
             CREATE TABLE IF NOT EXISTS logistics_document (
                 id BIGINT PRIMARY KEY AUTO_INCREMENT,

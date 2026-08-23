@@ -12,6 +12,8 @@ public class BusinessDocument {
     private Long id;
     private Long companyId;
     private Long recipientCompanyId;
+    private Long supplierCompanyId;
+    private Long buyerCompanyId;
     private Long contractId;
     private String documentType;
     private String sourceType;
@@ -24,6 +26,8 @@ public class BusinessDocument {
     private Long acknowledgedBy;
     private LocalDateTime acknowledgedAt;
     private String rejectedReason;
+    private Long deletedBy;
+    private LocalDateTime deletedAt;
     private LocalDateTime createdAt;
 
     public Long getId() { return id; }
@@ -32,6 +36,10 @@ public class BusinessDocument {
     public void setCompanyId(Long companyId) { this.companyId = companyId; }
     public Long getRecipientCompanyId() { return recipientCompanyId; }
     public void setRecipientCompanyId(Long recipientCompanyId) { this.recipientCompanyId = recipientCompanyId; }
+    public Long getSupplierCompanyId() { return supplierCompanyId; }
+    public void setSupplierCompanyId(Long supplierCompanyId) { this.supplierCompanyId = supplierCompanyId; }
+    public Long getBuyerCompanyId() { return buyerCompanyId; }
+    public void setBuyerCompanyId(Long buyerCompanyId) { this.buyerCompanyId = buyerCompanyId; }
     public Long getContractId() { return contractId; }
     public void setContractId(Long contractId) { this.contractId = contractId; }
     public String getDocumentType() { return documentType; }
@@ -56,6 +64,10 @@ public class BusinessDocument {
     public void setAcknowledgedAt(LocalDateTime acknowledgedAt) { this.acknowledgedAt = acknowledgedAt; }
     public String getRejectedReason() { return rejectedReason; }
     public void setRejectedReason(String rejectedReason) { this.rejectedReason = rejectedReason; }
+    public Long getDeletedBy() { return deletedBy; }
+    public void setDeletedBy(Long deletedBy) { this.deletedBy = deletedBy; }
+    public LocalDateTime getDeletedAt() { return deletedAt; }
+    public void setDeletedAt(LocalDateTime deletedAt) { this.deletedAt = deletedAt; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 }

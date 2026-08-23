@@ -144,10 +144,14 @@ public class ReconciliationAccountService {
         if (document == null || document.getId() == null || document.getRecipientCompanyId() == null) {
             throw new BusinessException("销售单对账信息不完整");
         }
-        insertEntry(document.getCompanyId(), document.getRecipientCompanyId(),
+        long supplierCompanyId = document.getSupplierCompanyId() == null
+                ? document.getCompanyId() : document.getSupplierCompanyId();
+        long buyerCompanyId = document.getBuyerCompanyId() == null
+                ? document.getRecipientCompanyId() : document.getBuyerCompanyId();
+        insertEntry(supplierCompanyId, buyerCompanyId,
                 document.getContractId(), SALES_ORDER, document.getId(), businessDate,
-                document.getDocumentNo(), amount, document.getCompanyId(),
-                document.getRecipientCompanyId(), document.getCompanyId(), approvedBy, approvedAt);
+                document.getDocumentNo(), amount, supplierCompanyId,
+                buyerCompanyId, document.getCompanyId(), approvedBy, approvedAt);
     }
 
     public void recordReturnOrder(BusinessDocument document, BigDecimal amount,
@@ -156,12 +160,16 @@ public class ReconciliationAccountService {
         if (document == null || document.getId() == null || document.getRecipientCompanyId() == null) {
             throw new BusinessException("退货单对账信息不完整");
         }
+        long supplierCompanyId = document.getSupplierCompanyId() == null
+                ? document.getRecipientCompanyId() : document.getSupplierCompanyId();
+        long buyerCompanyId = document.getBuyerCompanyId() == null
+                ? document.getCompanyId() : document.getBuyerCompanyId();
         // 退货冲减原销售额，例如 1000 元退货在对账中记为 -1000。
         BigDecimal negativeAmount = amount == null ? null : amount.abs().negate();
-        insertEntry(document.getRecipientCompanyId(), document.getCompanyId(),
+        insertEntry(supplierCompanyId, buyerCompanyId,
                 document.getContractId(), RETURN_ORDER, document.getId(), businessDate,
-                document.getDocumentNo(), negativeAmount, document.getRecipientCompanyId(),
-                document.getCompanyId(), document.getCompanyId(), approvedBy, approvedAt);
+                document.getDocumentNo(), negativeAmount, supplierCompanyId,
+                buyerCompanyId, document.getCompanyId(), approvedBy, approvedAt);
     }
 
     public void recordAttachment(TradeContract contract, String sourceType, long sourceId,

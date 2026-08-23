@@ -71,6 +71,11 @@ public class BusinessDocumentController {
         return ApiResponse.ok(businessDocumentService.publishDraft(id));
     }
 
+    @PostMapping("/trade-documents/{id}/delete")
+    public ApiResponse<String> deleteDraft(@PathVariable Long id) {
+        return ApiResponse.ok(businessDocumentService.deleteDraft(id));
+    }
+
     @GetMapping(value = "/trade-documents/{id}/pdf", produces = MediaType.APPLICATION_PDF_VALUE)
     public ResponseEntity<byte[]> downloadPdf(@PathVariable Long id) {
         BusinessDocument document = businessDocumentService.getDocument(id);

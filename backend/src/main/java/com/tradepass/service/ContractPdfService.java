@@ -74,6 +74,7 @@ public class ContractPdfService {
             addTitle(document, safe(content.title(), "购销合同"), titleFont);
             addHeader(document, contract, content, parties, bodyFont);
             addProducts(document, contract, content.table(), headingFont, tableFont, bodyFont);
+            addFees(document, contract, content.fees(), headingFont, tableFont, bodyFont);
             addClauses(document, content.clauses(), contract.terms(), headingFont, bodyFont);
             addSignatureTable(document, parties, signatureTitleFont, tableFont);
 
@@ -227,6 +228,36 @@ public class ContractPdfService {
         document.add(spacer);
     }
 
+    private void addFees(Document document, ContractPayload contract, List<FeeItem> fees,
+                         Font headingFont, Font tableFont, Font bodyFont) throws DocumentException {
+        if (fees == null || fees.isEmpty()) return;
+        Paragraph heading = new Paragraph("其他费用（不计入库存商品）", headingFont);
+        heading.setSpacingBefore(5);
+        heading.setSpacingAfter(3);
+        document.add(heading);
+        PdfPTable table = new PdfPTable(3);
+        table.setWidthPercentage(100);
+        table.setWidths(new float[]{28, 20, 52});
+        for (String column : List.of("费用类型", "金额（元）", "备注")) {
+            table.addCell(tableCell(column, tableFont, Element.ALIGN_CENTER, HEADER_BACKGROUND, 22));
+        }
+        BigDecimal feeTotal = BigDecimal.ZERO;
+        for (FeeItem fee : fees) {
+            BigDecimal amount = parseDecimal(fee.amount(), BigDecimal.ZERO);
+            feeTotal = feeTotal.add(amount);
+            table.addCell(tableCell(fee.feeType(), tableFont, Element.ALIGN_CENTER, Color.WHITE, 21));
+            table.addCell(tableCell(formatDecimal(amount), tableFont, Element.ALIGN_RIGHT, Color.WHITE, 21));
+            table.addCell(tableCell(fee.remark(), tableFont, Element.ALIGN_LEFT, Color.WHITE, 21));
+        }
+        PdfPCell label = tableCell("费用小计", tableFont, Element.ALIGN_RIGHT, Color.WHITE, 22);
+        table.addCell(label);
+        table.addCell(tableCell(formatDecimal(feeTotal), tableFont, Element.ALIGN_RIGHT, Color.WHITE, 22));
+        table.addCell(tableCell("合同总额：" + formatDecimal(
+                contract.amount() == null ? BigDecimal.ZERO : contract.amount()),
+                bodyFont, Element.ALIGN_LEFT, Color.WHITE, 22));
+        document.add(table);
+    }
+
     private void addSignatureTable(Document document, PartyPair parties,
                                    Font headingFont, Font tableFont) throws DocumentException {
         PdfPTable table = new PdfPTable(2);
@@ -285,15 +316,16 @@ public class ContractPdfService {
         String title = safe(contract.name(), "购销合同");
         Map<String, String> fields = new LinkedHashMap<>();
         ProductTable table = ProductTable.empty();
+        List<FeeItem> fees = new ArrayList<>();
         List<Clause> clauses = new ArrayList<>();
         String terms = contract.terms();
         if (terms == null || terms.isBlank()) {
-            return new ContractContent(title, fields, table, clauses);
+            return new ContractContent(title, fields, table, fees, clauses);
         }
         try {
             JsonNode root = objectMapper.readTree(terms);
             if (root == null || !root.isObject()) {
-                return new ContractContent(title, fields, table, clauses);
+                return new ContractContent(title, fields, table, fees, clauses);
             }
             if (contract.name() == null || contract.name().isBlank()) {
                 title = text(root.path("title"), title);
@@ -313,6 +345,13 @@ public class ContractPdfService {
                     String type = text(section.path("type"), "");
                     if ("table".equals(type) && table.columns().isEmpty()) {
                         table = parseTable(section);
+                    } else if ("fees".equals(type)) {
+                        for (JsonNode item : section.path("items")) {
+                            fees.add(new FeeItem(
+                                    text(item.path("feeType"), text(item.path("name"), "其他费用")),
+                                    text(item.path("amount"), "0"),
+                                    text(item.path("remark"), "")));
+                        }
                     } else if ("clause".equals(type)) {
                         clauses.add(new Clause(
                                 text(section.path("title"), "合同条款"),
@@ -323,7 +362,7 @@ public class ContractPdfService {
         } catch (Exception ignored) {
             // 兼容历史纯文本合同条款。
         }
-        return new ContractContent(title, fields, table, clauses);
+        return new ContractContent(title, fields, table, fees, clauses);
     }
 
     private ProductTable parseTable(JsonNode section) {
@@ -590,6 +629,7 @@ public class ContractPdfService {
             String title,
             Map<String, String> fields,
             ProductTable table,
+            List<FeeItem> fees,
             List<Clause> clauses
     ) {
     }
@@ -606,6 +646,9 @@ public class ContractPdfService {
     }
 
     private record Clause(String title, String content) {
+    }
+
+    private record FeeItem(String feeType, String amount, String remark) {
     }
 
     private record PartyPair(PartyDetails supplier, PartyDetails buyer) {

@@ -1,4 +1,5 @@
 const { downloadApiFile, uploadMultipartApiFile } = require('../../utils/fileTransfer');
+const { normalizeContractTable } = require('../../utils/chineseCurrency');
 
 function today() {
   const now = new Date();
@@ -55,6 +56,8 @@ Page({
     contractTableTitle: '商品明细',
     contractTableColumns: [],
     contractTableRows: [],
+    contractFees: [],
+    contractFeeTotal: '0',
     contractClauses: [],
     contractTotalAmount: '',
     contractTotalAmountCn: '',
@@ -90,6 +93,8 @@ Page({
     documentDate: '',
     documentColumns: [],
     documentRows: [],
+    documentRowTypes: [],
+    documentHasFees: false,
     documentBlankRows: 1,
     documentTotalAmount: '0',
     documentEditorReady: false,
@@ -152,7 +157,10 @@ Page({
       const structuredFields = (sData && sData.fields) || [];
       const structuredSections = (sData && Array.isArray(sData.sections)) ? sData.sections : [];
       const contractTable = structuredSections.find(item => item && item.type === 'table') || {};
-      const contractTableRows = (Array.isArray(contractTable.rows) ? contractTable.rows : [])
+      const normalizedContractTable = Array.isArray(contractTable.columns) && contractTable.columns.length > 0
+        ? normalizeContractTable(contractTable.columns, contractTable.rows)
+        : { columns: [], rows: [] };
+      const contractTableRows = normalizedContractTable.rows
         .filter(row => Array.isArray(row) && row.some(value => String(value == null ? '' : value).trim()));
       const contractClauses = structuredSections
         .filter(item => item && item.type === 'clause')
@@ -160,6 +168,14 @@ Page({
           ...item,
           label: `${index + 2}、${item.title || `合同条款${index + 1}`}`
         }));
+      const feeSection = structuredSections.find(item => item && item.type === 'fees') || {};
+      const contractFees = (Array.isArray(feeSection.items) ? feeSection.items : []).map(item => ({
+        feeType: String(item.feeType || item.name || '其他费用'),
+        amount: String(item.amount || '0'),
+        remark: String(item.remark || '')
+      }));
+      const contractFeeTotal = Math.round(contractFees.reduce(
+        (sum, item) => sum + (parseFloat(item.amount) || 0), 0) * 100) / 100;
       const fieldValue = key => {
         const field = structuredFields.find(item => item.key === key);
         return (field && field.value) || '';
@@ -179,8 +195,7 @@ Page({
       const isSupplier = viewerDirection === 'SALE';
       const canCreateSalesOrder = isSupplier
         && (contract.status === 'PENDING' || contract.status === 'ACTIVE');
-      const canCreateReturnOrder = !isSupplier
-        && (contract.status === 'PENDING' || contract.status === 'ACTIVE');
+      const canCreateReturnOrder = contract.status === 'PENDING' || contract.status === 'ACTIVE';
       const outgoing = contract.perspective === 'OUTGOING';
       const createAsDraft = true;
 
@@ -195,8 +210,10 @@ Page({
         hasStructured: !!sData,
         sData,
         contractTableTitle: contractTable.title || '商品明细',
-        contractTableColumns: Array.isArray(contractTable.columns) ? contractTable.columns : [],
+        contractTableColumns: normalizedContractTable.columns,
         contractTableRows,
+        contractFees,
+        contractFeeTotal: String(contractFeeTotal),
         contractClauses,
         contractTotalAmount: contractTable.summary && contractTable.summary.totalAmount
           ? String(contractTable.summary.totalAmount) : String(contract.amount || ''),
@@ -204,7 +221,7 @@ Page({
           ? String(contractTable.summary.totalAmountCn) : '',
         canCancelContract: outgoing && contract.status === 'PENDING',
         canEditContract: outgoing && ['PENDING', 'REJECTED', 'CANCELLED'].includes(contract.status),
-        canDeleteContract: outgoing && contract.status === 'REJECTED',
+        canDeleteContract: outgoing && ['REJECTED', 'CANCELLED'].includes(contract.status),
         canCreateSalesOrder,
         canCreateReturnOrder,
         createAsDraft,
@@ -254,7 +271,7 @@ Page({
     if (!this.data.canDeleteContract || this.data.contractActionLoading) return;
     wx.showModal({
       title: '从我方列表删除',
-      content: '仅删除我方合同列表中的这条被拒绝合同。对方合同列表不会保留该合同，只保留拒绝审批记录。',
+      content: '仅从我方合同列表移除。对方仍会保留拒绝或撤回的处理记录，删除后无法在列表中恢复。',
       confirmText: '确认删除',
       confirmColor: '#d94848',
       success: result => {
@@ -1024,6 +1041,8 @@ Page({
         documentDate: this.todayText(),
         documentColumns: [],
         documentRows: [],
+        documentRowTypes: [],
+        documentHasFees: false,
         documentBlankRows: 8,
         documentTotalAmount: '0',
         documentEditorReady: false,
@@ -1056,6 +1075,7 @@ Page({
       }
       const contract = this.data.contract || {};
       const rows = this.buildDocumentRows(columns);
+      const rowTypes = this.builtDocumentRowTypes || rows.map(() => 'PRODUCT');
       const totalAmount = this.calculateDocumentTotal(
         columns,
         rows,
@@ -1073,6 +1093,8 @@ Page({
         documentDate: this.todayText(),
         documentColumns: columns,
         documentRows: rows,
+        documentRowTypes: rowTypes,
+        documentHasFees: rowTypes.some(type => type === 'FEE'),
         documentBlankRows: Math.max(
           rows.length,
           Number(templateContent.blankRows) || 8
@@ -1104,9 +1126,32 @@ Page({
     const rows = sourceRows.map((row, rowIndex) => columns.map(column =>
       this.valueForDocumentColumn(column, rowIndex, sourceColumns, row)
     ));
-    return rows.length > 0 ? rows : [columns.map(column =>
-      String(column).includes('序号') ? '1' : ''
-    )];
+    const rowTypes = rows.map(() => 'PRODUCT');
+    const feeSection = sections.find(item => item && item.type === 'fees') || {};
+    (Array.isArray(feeSection.items) ? feeSection.items : []).forEach(item => {
+      const rowIndex = rows.length;
+      rows.push(columns.map(column => this.valueForDocumentFeeColumn(column, rowIndex, item)));
+      rowTypes.push('FEE');
+    });
+    if (rows.length === 0) {
+      rows.push(columns.map(column => String(column).includes('序号') ? '1' : ''));
+      rowTypes.push('PRODUCT');
+    }
+    this.builtDocumentRowTypes = rowTypes;
+    return rows;
+  },
+
+  valueForDocumentFeeColumn(targetColumn, rowIndex, item) {
+    const target = String(targetColumn || '').trim();
+    if (target.includes('序号')) return String(rowIndex + 1);
+    if (target.includes('品名') || target === '名称' || target.includes('产品')) {
+      return String(item.feeType || item.name || '其他费用');
+    }
+    if (target.includes('单位')) return '项';
+    if (target.includes('数量')) return '1';
+    if (target.includes('单价') || target.includes('金额')) return String(item.amount || '0');
+    if (target.includes('备注')) return String(item.remark || '');
+    return '';
   },
 
   valueForDocumentColumn(targetColumn, rowIndex, sourceColumns, sourceRow) {
@@ -1181,9 +1226,13 @@ Page({
     const columns = this.data.documentColumns;
     if (columns.length === 0) return;
     const rows = this.data.documentRows.map(row => row.slice());
+    const rowTypes = this.data.documentRowTypes.slice();
     rows.push(columns.map(column => String(column).includes('序号') ? String(rows.length + 1) : ''));
+    rowTypes.push('PRODUCT');
     this.setData({
       documentRows: rows,
+      documentRowTypes: rowTypes,
+      documentHasFees: rowTypes.some(type => type === 'FEE'),
       documentBlankRows: Math.max(this.data.documentBlankRows, rows.length)
     });
   },
@@ -1199,8 +1248,11 @@ Page({
         if (sequenceIndex >= 0) next[sequenceIndex] = String(rowIndex + 1);
         return next;
       });
+    const rowTypes = this.data.documentRowTypes.filter((_, rowIndex) => rowIndex !== index);
     this.setData({
       documentRows: rows,
+      documentRowTypes: rowTypes,
+      documentHasFees: rowTypes.some(type => type === 'FEE'),
       documentTotalAmount: this.calculateDocumentTotal(
         this.data.documentColumns,
         rows,
@@ -1231,7 +1283,7 @@ Page({
     const {
       documentEditorType, documentEditorLabel, documentTemplates, documentTemplateIndex,
       documentTitle, documentCompanyName, documentCounterpartyName, documentContractNo,
-      documentDate, documentColumns, documentRows, documentBlankRows,
+      documentDate, documentColumns, documentRows, documentRowTypes, documentBlankRows,
       documentTotalAmount, createAsDraft
     } = this.data;
     if (documentTemplateIndex < 0 || !documentTemplates[documentTemplateIndex]) {
@@ -1271,6 +1323,7 @@ Page({
             date: documentDate,
             columns: documentColumns,
             rows: documentRows,
+            rowTypes: documentRowTypes,
             blankRows: documentBlankRows,
             totalAmount: documentTotalAmount
           }

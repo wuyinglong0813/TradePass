@@ -88,11 +88,11 @@ public class SalesOrderInventoryService {
         for (SalesItem item : items) {
             jdbc.update("""
                     INSERT INTO business_document_item
-                    (document_id, issuer_company_id, recipient_company_id, line_no, product_name,
+                    (document_id, issuer_company_id, recipient_company_id, line_no, line_type, product_name,
                      specification, base_unit, quantity, unit_price, amount, remark)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, document.getId(), document.getCompanyId(), document.getRecipientCompanyId(),
-                    item.lineNo(), item.productName(), item.specification(), item.baseUnit(),
+                    item.lineNo(), item.lineType(), item.productName(), item.specification(), item.baseUnit(),
                     item.quantity(), item.unitPrice(), item.amount(), item.remark());
         }
     }
@@ -131,18 +131,25 @@ public class SalesOrderInventoryService {
                 || ("RETURN_ORDER".equals(document.getDocumentType())
                 && (accessControlService.hasPermission(companyId, "contract_sign")
                 || accessControlService.hasPermission(companyId, "order_create")));
+        Long supplierCompanyId = supplierCompanyId(document, contract);
+        Long buyerCompanyId = buyerCompanyId(document, contract);
+        view.put("supplierCompanyId", supplierCompanyId);
+        view.put("buyerCompanyId", buyerCompanyId);
         boolean canReceive = recipient && canReceivePermission;
-        boolean canInbound = canReceive && accessControlService.hasPermission(companyId, "inventory_receive");
+        boolean inboundOwner = "RETURN_ORDER".equals(document.getDocumentType())
+                ? Long.valueOf(companyId).equals(supplierCompanyId) : recipient;
+        boolean canInbound = inboundOwner && accessControlService.hasPermission(companyId, "inventory_receive");
         view.put("canReceive", canReceive && "ISSUED".equals(document.getStatus()));
         view.put("canReject", canReceive && "ISSUED".equals(document.getStatus()));
-        view.put("canInbound", canInbound && ("ISSUED".equals(document.getStatus())
-                || "ACKNOWLEDGED".equals(document.getStatus())));
+        view.put("canInbound", canInbound && ("ACKNOWLEDGED".equals(document.getStatus())
+                || (recipient && "ISSUED".equals(document.getStatus()))));
         view.put("contractStatus", contract == null ? "" : contract.getStatus());
         boolean editable = "DRAFT".equals(document.getStatus()) || "REJECTED".equals(document.getStatus());
         view.put("canEditDraft", owner && editable && contract != null
                 && ("PENDING".equals(contract.getStatus()) || "ACTIVE".equals(contract.getStatus())));
         view.put("canPublish", owner && editable && contract != null
                 && "ACTIVE".equals(contract.getStatus()));
+        view.put("canDeleteDraft", owner && "DRAFT".equals(document.getStatus()));
         return view;
     }
 
@@ -280,8 +287,16 @@ public class SalesOrderInventoryService {
         if (!RECEIVE_ONLY.equals(normalized) && !INBOUND.equals(normalized) && !REJECT.equals(normalized)) {
             throw new BusinessException("接收方式不正确");
         }
-        if (document == null || !isConfirmableDocument(document)
-                || !Long.valueOf(companyId).equals(document.getRecipientCompanyId())) {
+        TradeContract contract = document == null ? null : contractMapper.selectById(document.getContractId());
+        boolean recipient = document != null
+                && Long.valueOf(companyId).equals(document.getRecipientCompanyId());
+        boolean supplierCompletingReturnInbound = document != null
+                && "RETURN_ORDER".equals(document.getDocumentType())
+                && INBOUND.equals(normalized)
+                && "ACKNOWLEDGED".equals(document.getStatus())
+                && Long.valueOf(companyId).equals(supplierCompanyId(document, contract));
+        if (document == null || document.getDeletedAt() != null || !isConfirmableDocument(document)
+                || (!recipient && !supplierCompletingReturnInbound)) {
             throw new BusinessException(document != null && "RETURN_ORDER".equals(document.getDocumentType())
                     ? "待确认退货单不存在" : "待接收销售单不存在");
         }
@@ -384,7 +399,9 @@ public class SalesOrderInventoryService {
                 VALUES (?, ?, ?, ?, ?)
                 """, companyId, warehouseId, documentId, inboundNo, AuthContext.userId());
         Long inboundId = jdbc.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
-        List<Map<String, Object>> items = documentItems(documentId);
+        List<Map<String, Object>> items = documentItems(documentId).stream()
+                .filter(item -> !"FEE".equals(item.get("lineType")))
+                .toList();
         if (items.isEmpty()) throw new BusinessException(documentLabel + "没有可入库商品");
         for (Map<String, Object> item : items) {
             BigDecimal quantity = (BigDecimal) item.get("quantity");
@@ -430,8 +447,10 @@ public class SalesOrderInventoryService {
         }
         jdbc.update("UPDATE sales_order_receipt SET decision = 'INBOUND', status = 'INBOUNDED' WHERE id = ?", receiptId);
         document.setStatus("INBOUNDED");
-        document.setAcknowledgedBy(AuthContext.userId());
-        document.setAcknowledgedAt(LocalDateTime.now());
+        if (document.getAcknowledgedAt() == null) {
+            document.setAcknowledgedBy(AuthContext.userId());
+            document.setAcknowledgedAt(LocalDateTime.now());
+        }
         documentMapper.updateById(document);
         recordReconciliation(document);
         auditLogService.log(companyId, "INVENTORY_INBOUND", inboundId,
@@ -444,7 +463,8 @@ public class SalesOrderInventoryService {
     private void recordDocumentResult(BusinessDocument document, long sourceCompanyId,
                                       String resultStatus, String title, String detail,
                                       String rejectedReason) {
-        if (approvalService == null || document.getCompanyId() == null || document.getId() == null) return;
+        if (approvalService == null || document.getCompanyId() == null || document.getId() == null
+                || document.getCompanyId() == sourceCompanyId) return;
         approvalService.recordResult(document.getCompanyId(), sourceCompanyId,
                 document.getDocumentType(), document.getId(), document.getContractId(), resultStatus,
                 title, detail, rejectedReason);
@@ -452,7 +472,7 @@ public class SalesOrderInventoryService {
 
     private BusinessDocument requireDocumentParty(Long documentId, long companyId) {
         BusinessDocument document = documentMapper.selectById(documentId);
-        if (document == null || !isConfirmableDocument(document)) {
+        if (document == null || document.getDeletedAt() != null || !isConfirmableDocument(document)) {
             throw new BusinessException("销售单不存在");
         }
         TradeContract contract = contractMapper.selectById(document.getContractId());
@@ -469,13 +489,14 @@ public class SalesOrderInventoryService {
 
     private List<Map<String, Object>> documentItems(Long documentId) {
         return jdbc.query("""
-                        SELECT id, line_no, product_name, specification, base_unit,
+                        SELECT id, line_no, line_type, product_name, specification, base_unit,
                                quantity, unit_price, amount, remark
                         FROM business_document_item WHERE document_id = ? ORDER BY line_no
                         """, (rs, rowNum) -> {
                     Map<String, Object> view = new LinkedHashMap<>();
                     view.put("id", rs.getLong("id"));
                     view.put("lineNo", rs.getInt("line_no"));
+                    view.put("lineType", rs.getString("line_type"));
                     view.put("productName", rs.getString("product_name"));
                     view.put("specification", rs.getString("specification"));
                     view.put("baseUnit", rs.getString("base_unit"));
@@ -499,21 +520,33 @@ public class SalesOrderInventoryService {
             int priceIndex = findColumn(columns, List.of("单价"));
             int amountIndex = findColumn(columns, List.of("金额"));
             int remarkIndex = findColumn(columns, List.of("备注"));
+            JsonNode rowTypes = root.path("rowTypes");
             List<SalesItem> items = new ArrayList<>();
             int lineNo = 1;
+            int rowIndex = 0;
             for (JsonNode row : root.path("rows")) {
+                String lineType = rowTypes.isArray() && rowIndex < rowTypes.size()
+                        && "FEE".equalsIgnoreCase(rowTypes.path(rowIndex).asText())
+                        ? "FEE" : "PRODUCT";
+                rowIndex++;
                 String product = cell(row, productIndex).trim();
                 BigDecimal quantity = decimal(cell(row, quantityIndex), 4);
                 BigDecimal price = decimal(cell(row, priceIndex), 6);
                 BigDecimal amount = decimal(cell(row, amountIndex), 2);
                 if (product.isBlank() && quantity.signum() == 0 && amount.signum() == 0) continue;
                 if (product.isBlank()) throw new BusinessException("销售单商品名称不能为空");
-                if (quantity.signum() <= 0) throw new BusinessException("销售单商品数量必须大于 0");
+                if ("FEE".equals(lineType)) {
+                    quantity = BigDecimal.ONE.setScale(4);
+                    if (amount.signum() < 0) throw new BusinessException("费用金额不能小于 0");
+                    if (price.signum() == 0) price = amount.setScale(6, RoundingMode.HALF_UP);
+                } else if (quantity.signum() <= 0) {
+                    throw new BusinessException("销售单商品数量必须大于 0");
+                }
                 if (amount.signum() == 0 && price.signum() != 0) {
                     amount = quantity.multiply(price).setScale(2, RoundingMode.HALF_UP);
                 }
-                items.add(new SalesItem(lineNo++, product, cell(row, specIndex).trim(),
-                        defaultText(cell(row, unitIndex), "件"), quantity, price, amount,
+                items.add(new SalesItem(lineNo++, lineType, product, cell(row, specIndex).trim(),
+                        defaultText(cell(row, unitIndex), "FEE".equals(lineType) ? "项" : "件"), quantity, price, amount,
                         cell(row, remarkIndex).trim()));
             }
             return items;
@@ -624,12 +657,30 @@ public class SalesOrderInventoryService {
                 || "RETURN_ORDER".equals(document.getDocumentType()));
     }
 
+    private Long supplierCompanyId(BusinessDocument document, TradeContract contract) {
+        if (document != null && document.getSupplierCompanyId() != null) {
+            return document.getSupplierCompanyId();
+        }
+        if (contract == null) return null;
+        return "PURCHASE".equalsIgnoreCase(contract.getDirection())
+                ? contract.getCounterpartyCompanyId() : contract.getCompanyId();
+    }
+
+    private Long buyerCompanyId(BusinessDocument document, TradeContract contract) {
+        if (document != null && document.getBuyerCompanyId() != null) {
+            return document.getBuyerCompanyId();
+        }
+        if (contract == null) return null;
+        return "PURCHASE".equalsIgnoreCase(contract.getDirection())
+                ? contract.getCompanyId() : contract.getCounterpartyCompanyId();
+    }
+
     private String documentLabel(BusinessDocument document) {
         return document != null && "RETURN_ORDER".equals(document.getDocumentType())
                 ? "退货单" : "销售单";
     }
 
-    private record SalesItem(int lineNo, String productName, String specification,
+    private record SalesItem(int lineNo, String lineType, String productName, String specification,
                              String baseUnit, BigDecimal quantity, BigDecimal unitPrice,
                              BigDecimal amount, String remark) {
     }

@@ -18,6 +18,7 @@ Page({
     showMemoEditor: false,
     receiving: false,
     publishing: false,
+    deleting: false,
     showDraftEditor: false,
     draftSaving: false,
     draftTitle: '',
@@ -27,6 +28,7 @@ Page({
     draftDate: '',
     draftColumns: [],
     draftRows: [],
+    draftRowTypes: [],
     draftBlankRows: 8,
     draftTotalAmount: '0',
     showSignatureEditor: false,
@@ -141,6 +143,9 @@ Page({
     const rows = Array.isArray(content.rows)
       ? content.rows.map(row => Array.isArray(row) ? row.map(item => String(item == null ? '' : item)) : [])
       : [];
+    const rowTypes = rows.map((_, index) => (
+      Array.isArray(content.rowTypes) && content.rowTypes[index] === 'FEE' ? 'FEE' : 'PRODUCT'
+    ));
     this.setData({
       showDraftEditor: true,
       draftTitle: content.title || this.data.documentLabel,
@@ -150,6 +155,7 @@ Page({
       draftDate: content.date || '',
       draftColumns: columns,
       draftRows: rows.length > 0 ? rows : [columns.map(column => String(column).includes('序号') ? '1' : '')],
+      draftRowTypes: rows.length > 0 ? rowTypes : ['PRODUCT'],
       draftBlankRows: Math.max(Number(content.blankRows) || 8, rows.length),
       draftTotalAmount: String(content.totalAmount || '0')
     });
@@ -196,8 +202,11 @@ Page({
     const columns = this.data.draftColumns;
     if (columns.length === 0) return;
     const rows = this.data.draftRows.map(row => row.slice());
+    const rowTypes = this.data.draftRowTypes.slice();
     rows.push(columns.map(column => String(column).includes('序号') ? String(rows.length + 1) : ''));
-    this.setData({ draftRows: rows, draftBlankRows: Math.max(this.data.draftBlankRows, rows.length) });
+    rowTypes.push('PRODUCT');
+    this.setData({ draftRows: rows, draftRowTypes: rowTypes,
+      draftBlankRows: Math.max(this.data.draftBlankRows, rows.length) });
   },
 
   deleteDraftRow(e) {
@@ -209,7 +218,9 @@ Page({
       if (sequenceIndex >= 0) next[sequenceIndex] = String(rowIndex + 1);
       return next;
     });
-    this.setData({ draftRows: rows, draftTotalAmount: this.calculateDraftTotal(this.data.draftColumns, rows) });
+    const rowTypes = this.data.draftRowTypes.filter((_, rowIndex) => rowIndex !== index);
+    this.setData({ draftRows: rows, draftRowTypes: rowTypes,
+      draftTotalAmount: this.calculateDraftTotal(this.data.draftColumns, rows) });
   },
 
   calculateDraftTotal(columns, rows) {
@@ -241,6 +252,7 @@ Page({
           date: this.data.draftDate,
           columns: this.data.draftColumns,
           rows: this.data.draftRows,
+          rowTypes: this.data.draftRowTypes,
           blankRows: this.data.draftBlankRows,
           totalAmount: this.data.draftTotalAmount
         } }
@@ -265,6 +277,32 @@ Page({
         if (result.confirm) this.submitPublishDraft();
       }
     });
+  },
+
+  deleteDraft() {
+    if (!this.data.detail || !this.data.detail.canDeleteDraft || this.data.deleting) return;
+    wx.showModal({
+      title: `删除${this.data.documentLabel}草稿`,
+      content: `确定删除草稿“${this.data.documentNo}”吗？草稿尚未发送给对方，删除后无法恢复。`,
+      confirmText: '确认删除',
+      confirmColor: '#d94848',
+      success: result => {
+        if (result.confirm) this.submitDeleteDraft();
+      }
+    });
+  },
+
+  async submitDeleteDraft() {
+    try {
+      this.setData({ deleting: true });
+      await request({ url: `/trade-documents/${this.data.id}/delete`, method: 'POST', data: {} });
+      wx.showToast({ title: '草稿已删除', icon: 'success' });
+      setTimeout(() => wx.navigateBack({ delta: 1 }), 500);
+    } catch (error) {
+      wx.showToast({ title: error.message || '删除失败', icon: 'none' });
+    } finally {
+      this.setData({ deleting: false });
+    }
   },
 
   async submitPublishDraft() {

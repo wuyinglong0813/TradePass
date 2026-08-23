@@ -34,7 +34,7 @@ Page({
     activeSection: 'PENDING',
     sectionTabs: [
       { key: 'PENDING', label: '待我处理', count: 0 },
-      { key: 'RESULT', label: '处理结果', count: 0 }
+      { key: 'RESULT', label: '处理记录', count: 0 }
     ],
     activeTab: 'CONTRACT',
     tabs: [
@@ -99,7 +99,8 @@ Page({
         companyName: item.sourceCompanyName || '往来公司',
         iconText: resultIcon(item.resultType),
         typeClass: String(item.resultType || '').toLowerCase(),
-        statusClass: item.resultStatus === 'REJECTED' ? 'rejected' : 'approved',
+        statusClass: item.resultStatus === 'REJECTED'
+          ? 'rejected' : (item.resultStatus === 'CANCELLED' ? 'cancelled' : 'approved'),
         canOpen: item.resultType === 'SALES_ORDER' || item.resultType === 'RETURN_ORDER' || !!item.contractId,
         isRead: !!item.isRead,
         timeText: formatResultTime(item.createdAt)
@@ -111,7 +112,7 @@ Page({
         results,
         sectionTabs: [
           { key: 'PENDING', label: '待我处理', count: contracts.length + fulfillmentItems.length },
-          { key: 'RESULT', label: '处理结果', count: unreadResultCount }
+          { key: 'RESULT', label: '处理记录', count: unreadResultCount }
         ],
         tabs: [
           { key: 'CONTRACT', label: '合同', count: contracts.length },

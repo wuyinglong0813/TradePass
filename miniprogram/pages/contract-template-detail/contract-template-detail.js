@@ -1,5 +1,12 @@
 const { request } = require('../../utils/request');
-const { DEFAULT_TEMPLATE, calcTableTotal, reorderClauses, toChineseNum } = require('../../utils/chineseCurrency');
+const {
+  DEFAULT_TEMPLATE,
+  calcTableTotal,
+  findContractColumn,
+  normalizeContractTable,
+  reorderClauses,
+  toChineseNum
+} = require('../../utils/chineseCurrency');
 
 function normalizeNumericText(value) {
   const text = String(value == null ? '' : value).trim();
@@ -16,6 +23,9 @@ Page({
     fields: [],
     tableSection: null,
     tableRows: [],
+    quantityColumnIndex: 3,
+    priceColumnIndex: 4,
+    amountColumnIndex: 5,
     totalAmount: '0',
     totalAmountCn: '零元整',
     clauses: [],
@@ -47,15 +57,21 @@ Page({
   initFromTemplate(tpl) {
     const tableSection = (tpl.sections || []).find(s => s.type === 'table');
     const rawClauses = (tpl.sections || []).filter(s => s.type === 'clause');
-    const rows = (tableSection && tableSection.rows) ? tableSection.rows.map(r => [...r]) : [['', '', '', '0', '0', '0', '']];
-    const result = calcTableTotal(rows);
+    const normalizedTable = normalizeContractTable(
+      tableSection && tableSection.columns,
+      tableSection && tableSection.rows
+    );
+    const result = calcTableTotal(normalizedTable.rows, normalizedTable.columns);
     const clauses = reorderClauses(rawClauses);
 
     this.setData({
       title: tpl.title || '购销合同',
       fields: (tpl.fields || []).map(f => ({ ...f })),
-      tableSection: tableSection ? { title: tableSection.title, columns: [...tableSection.columns] } : null,
+      tableSection: tableSection ? { title: tableSection.title, columns: normalizedTable.columns } : null,
       tableRows: result.rows,
+      quantityColumnIndex: findContractColumn(normalizedTable.columns, ['数量'], 3),
+      priceColumnIndex: findContractColumn(normalizedTable.columns, ['单价'], 4),
+      amountColumnIndex: findContractColumn(normalizedTable.columns, ['金额'], 5),
       totalAmount: String(result.totalAmount),
       totalAmountCn: result.totalAmountCn,
       clauses
@@ -79,7 +95,7 @@ Page({
     const { row, col } = e.currentTarget.dataset;
     const rows = [...this.data.tableRows];
     if (!rows[row]) rows[row] = [];
-    const value = Number(col) === 3 || Number(col) === 4
+    const value = Number(col) === this.data.quantityColumnIndex || Number(col) === this.data.priceColumnIndex
       ? normalizeNumericText(e.detail.value)
       : e.detail.value;
     rows[row][col] = value;
@@ -105,9 +121,11 @@ Page({
   },
 
   addTableRow() {
-    const cols = this.data.tableSection ? this.data.tableSection.columns.length : 6;
+    const cols = this.data.tableSection ? this.data.tableSection.columns.length : 7;
     const newRow = new Array(cols).fill('');
-    newRow[3] = '0'; newRow[4] = '0'; newRow[5] = '0';
+    newRow[this.data.quantityColumnIndex] = '0';
+    newRow[this.data.priceColumnIndex] = '0';
+    newRow[this.data.amountColumnIndex] = '0';
     this.recalcTable([...this.data.tableRows, newRow]);
   },
 
@@ -118,7 +136,7 @@ Page({
   },
 
   recalcTable(rows) {
-    const result = calcTableTotal(rows);
+    const result = calcTableTotal(rows, (this.data.tableSection && this.data.tableSection.columns) || []);
     this.setData({ tableRows: result.rows, totalAmount: String(result.totalAmount), totalAmountCn: result.totalAmountCn });
   },
 
@@ -150,7 +168,8 @@ Page({
     const { templateId, name, category, title, fields, tableSection, tableRows, clauses } = this.data;
     if (!name.trim()) { wx.showToast({ title: '请输入模板名称', icon: 'none' }); return; }
 
-    const saveRows = tableRows.map(r => r.map((value, index) => value || (index >= 3 && index <= 5 ? '0' : '')));
+    const numericColumns = [this.data.quantityColumnIndex, this.data.priceColumnIndex, this.data.amountColumnIndex];
+    const saveRows = tableRows.map(r => r.map((value, index) => value || (numericColumns.includes(index) ? '0' : '')));
 
     const content = JSON.stringify({
       title: title || name,

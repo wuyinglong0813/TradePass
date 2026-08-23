@@ -527,7 +527,7 @@ public class TradeService {
                 "撤回待签合同 " + contract.getContractNo());
         if (approvalService != null && contract.getCounterpartyCompanyId() != null) {
             approvalService.recordResult(contract.getCounterpartyCompanyId(), companyId,
-                    "CONTRACT", id, id, "CANCELLED", "合同已被发起方撤回",
+                    "CONTRACT", id, null, "CANCELLED", "合同已被发起方撤回",
                     "发起方已撤回合同 " + contract.getContractNo(), null);
         }
         return "合同审批已撤回";
@@ -582,16 +582,16 @@ public class TradeService {
     public String deleteContract(Long id) {
         long companyId = AuthContext.requireCompanyId();
         accessControlService.requirePermission(companyId, "contract_sign");
-        TradeContract contract = ensureOutgoingContract(id, companyId, List.of("REJECTED"));
+        TradeContract contract = ensureOutgoingContract(id, companyId, List.of("REJECTED", "CANCELLED"));
         int updated = tradeContractMapper.update(new LambdaUpdateWrapper<TradeContract>()
                 .eq(TradeContract::getId, id)
                 .eq(TradeContract::getCompanyId, companyId)
-                .eq(TradeContract::getStatus, "REJECTED")
+                .in(TradeContract::getStatus, List.of("REJECTED", "CANCELLED"))
                 .eq(TradeContract::getInitiatorHidden, false)
                 .set(TradeContract::getInitiatorHidden, true));
         if (updated != 1) throw new BusinessException("合同状态已变化，请刷新后重试");
         auditLogService.log(companyId, "CONTRACT", id, "DELETE",
-                "从发起方合同列表删除被拒绝合同 " + contract.getContractNo());
+                "从发起方合同列表删除合同 " + contract.getContractNo());
         return "合同已从我方列表删除";
     }
 

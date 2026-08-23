@@ -68,7 +68,8 @@
     <!-- 产品表格 -->
     <view class="card" wx:if="{{tableSection}}">
       <view class="section-title">{{tableSection.title}}</view>
-      <scroll-view class="table-scroll" scroll-x enable-flex>
+      <view class="table-scroll-hint">左右滑动可编辑全部列</view>
+      <scroll-view class="table-scroll" scroll-x enhanced show-scrollbar="{{false}}" scroll-left="{{tableScrollLeft}}" bindscroll="onTableScroll" enable-flex>
         <view class="table-wrap">
           <view class="table-row table-header">
             <view class="th" wx:for="{{tableSection.columns}}" wx:for-item="col" wx:key="*this">
@@ -78,11 +79,14 @@
           </view>
           <view class="table-row" wx:for="{{tableRows}}" wx:for-item="row" wx:for-index="ri" wx:key="ri">
             <view class="td" wx:for="{{tableSection.columns}}" wx:for-item="col" wx:for-index="ci" wx:key="ci">
-              <block wx:if="{{ci === 5}}">
+              <block wx:if="{{ci === amountColumnIndex}}">
                 <input class="td-input num auto" type="digit" value="{{row[ci]}}" disabled/>
               </block>
-              <block wx:elif="{{ci === 3 || ci === 4}}">
+              <block wx:elif="{{ci === quantityColumnIndex || ci === priceColumnIndex}}">
                 <input class="td-input num" type="digit" value="{{row[ci]}}" placeholder="0" cursor-spacing="120" adjust-position data-row="{{ri}}" data-col="{{ci}}" bindfocus="onNumberCellFocus" bindblur="onNumberCellBlur" bindinput="onTableCellChange"/>
+              </block>
+              <block wx:elif="{{ci === productColumnIndex}}">
+                <input class="td-input" type="text" value="{{row[ci]}}" data-row="{{ri}}" data-col="{{ci}}" bindinput="onTableCellChange" bindblur="onProductCellBlur"/>
               </block>
               <block wx:else>
                 <input class="td-input" type="text" value="{{row[ci]}}" data-row="{{ri}}" data-col="{{ci}}" bindinput="onTableCellChange"/>
@@ -94,6 +98,13 @@
           </view>
         </view>
       </scroll-view>
+      <view class="table-scrollbar" wx:if="{{tableScrollbarVisible}}" bindtouchstart="onTableScrollbarTouchStart" catchtouchmove="onTableScrollbarTouchMove" bindtouchend="onTableScrollbarTouchEnd" bindtouchcancel="onTableScrollbarTouchEnd">
+        <view class="table-scrollbar-track">
+          <view class="table-scrollbar-thumb" style="width: {{tableScrollbarThumbWidth}}%; left: {{tableScrollbarThumbLeft}}%;">
+            <view class="table-scrollbar-grip"></view>
+          </view>
+        </view>
+      </view>
       <view class="inventory-suggestions" wx:if="{{productSuggestions.length > 0}}">
         <view class="suggestion-title">从库存商品中选择品名</view>
         <view class="suggestion-item" wx:for="{{productSuggestions}}" wx:key="productName"
@@ -113,6 +124,10 @@
       <view class="table-add" bindtap="addTableRow">＋ 添加产品行</view>
 
       <view class="table-summary">
+        <view class="sum-row" wx:if="{{feeItems.length > 0}}">
+          <text class="sum-label">商品：</text>
+          <text class="sum-secondary">¥{{productTotalAmount}}</text>
+        </view>
         <view class="sum-row">
           <text class="sum-label">合计：</text>
           <text class="sum-amount">¥{{totalAmount}}</text>
@@ -122,6 +137,43 @@
           <text class="sum-chinese">{{totalAmountCn}}</text>
         </view>
       </view>
+    </view>
+
+    <view class="card fee-card">
+      <view class="section-title fee-section-title">
+        <view><text>其他费用</text><view class="fee-section-hint">计入合同金额，但不会进入库存</view></view>
+        <text class="fee-add" bindtap="addFeeItem">＋ 添加费用</text>
+      </view>
+      <view class="fee-empty" wx:if="{{feeItems.length === 0}}">运费、装卸费等请在这里填写，不要作为商品录入</view>
+      <view class="fee-item {{activeFeeTypeIndex === index ? 'picker-open' : ''}}" wx:for="{{feeItems}}" wx:key="index">
+        <view class="fee-item-head">
+          <view><text class="fee-item-index">费用 {{index + 1}}</text><text class="fee-item-kind">{{item.feeType}}</text></view>
+          <view class="fee-delete" data-index="{{index}}" bindtap="deleteFeeItem">删除</view>
+        </view>
+        <view class="fee-form-row fee-type-row" data-index="{{index}}" bindtap="toggleFeeTypeMenu">
+          <text class="fee-form-label">费用类型</text>
+          <view class="fee-type-picker">
+            <text>{{item.feeType}}</text>
+            <text class="fee-picker-arrow {{activeFeeTypeIndex === index ? 'open' : ''}}">⌄</text>
+          </view>
+        </view>
+        <view class="fee-type-menu" wx:if="{{activeFeeTypeIndex === index}}">
+          <view class="fee-type-option {{item.feeType === option ? 'selected' : ''}}"
+            wx:for="{{feeTypeOptions}}" wx:for-item="option" wx:for-index="optionIndex" wx:key="*this"
+            data-index="{{index}}" data-type="{{option}}" catchtap="selectFeeType">
+            <text>{{option}}</text><text class="fee-type-check" wx:if="{{item.feeType === option}}">✓</text>
+          </view>
+        </view>
+        <view class="fee-form-row">
+          <text class="fee-form-label">金额</text>
+          <view class="fee-amount-input"><text>¥</text><input type="digit" value="{{item.amount}}" placeholder="0.00" data-index="{{index}}" data-field="amount" bindinput="onFeeFieldInput"/></view>
+        </view>
+        <view class="fee-form-row fee-remark-wrap">
+          <text class="fee-form-label">备注</text>
+          <input class="fee-remark" value="{{item.remark}}" maxlength="200" placeholder="例如：送货上门、到付等" data-index="{{index}}" data-field="remark" bindinput="onFeeFieldInput"/>
+        </view>
+      </view>
+      <view class="fee-total" wx:if="{{feeItems.length > 0}}">费用小计：<text>¥{{feeTotalAmount}}</text></view>
     </view>
 
     <!-- 合同条款可在套用模板后继续修改 -->

@@ -77,6 +77,8 @@ function numberToChineseCurrency(num) {
 /**
  * 默认购销合同模板 JSON
  */
+const DEFAULT_CONTRACT_COLUMNS = ['产品名称', '规格型号', '单位', '数量', '单价(元)', '金额(元)', '备注'];
+
 const DEFAULT_TEMPLATE = {
   title: '购销合同',
   fields: [
@@ -89,8 +91,8 @@ const DEFAULT_TEMPLATE = {
     {
       title: '产品名称、规格、数量、单价、金额',
       type: 'table',
-      columns: ['产品名称', '规格型号', '单位', '数量', '单价(元)', '金额(元)'],
-      rows: [['', '', '', '0', '0', '0']]
+      columns: DEFAULT_CONTRACT_COLUMNS,
+      rows: [['', '', '', '0', '0', '0', '']]
     },
     { title: '质量要求、技术标准', type: 'clause', content: '' },
     { title: '交货时间、地点、方式', type: 'clause', content: '' },
@@ -107,23 +109,71 @@ const DEFAULT_TEMPLATE = {
 
 /**
  * 计算产品表格合计
- * @param {Array<Array<string>>} rows - 每行 [产品名称, 规格, 单位, 数量, 单价, 金额]
+ * @param {Array<Array<string>>} rows - 合同商品行
+ * @param {Array<string>} columns - 合同商品列
  * @returns {{ rows, totalAmount: number, totalAmountCn: string }}
  */
-function calcTableTotal(rows) {
+function calcTableTotal(rows, columns = DEFAULT_CONTRACT_COLUMNS) {
+  const normalizedColumns = normalizeContractColumns(columns);
+  const quantityIndex = findContractColumn(normalizedColumns, ['数量'], 3);
+  const priceIndex = findContractColumn(normalizedColumns, ['单价'], 4);
+  const amountIndex = findContractColumn(normalizedColumns, ['金额'], 5);
   let total = 0;
   const calcRows = (rows || []).map(row => {
-    const qty = parseFloat(row[3]) || 0;
-    const price = parseFloat(row[4]) || 0;
+    const next = normalizedColumns.map((_, index) => {
+      const value = (row || [])[index];
+      return value == null ? '' : String(value);
+    });
+    const qty = parseFloat(next[quantityIndex]) || 0;
+    const price = parseFloat(next[priceIndex]) || 0;
     const amount = Math.round(qty * price * 100) / 100;
     total += amount;
-    return [row[0] || '', row[1] || '', row[2] || '', row[3] || '0', row[4] || '0', String(amount)];
+    next[quantityIndex] = next[quantityIndex] || '0';
+    next[priceIndex] = next[priceIndex] || '0';
+    next[amountIndex] = String(amount);
+    return next;
   });
   return {
     rows: calcRows,
     totalAmount: Math.round(total * 100) / 100,
     totalAmountCn: numberToChineseCurrency(Math.round(total * 100) / 100)
   };
+}
+
+function findContractColumn(columns, aliases, fallback = -1) {
+  const index = (columns || []).findIndex(column => aliases.some(alias => String(column || '').includes(alias)));
+  if (index >= 0) return index;
+  return fallback >= 0 && fallback < (columns || []).length ? fallback : -1;
+}
+
+function normalizeContractColumns(columns) {
+  const normalized = Array.isArray(columns) && columns.length > 0
+    ? columns.map(column => String(column || ''))
+    : DEFAULT_CONTRACT_COLUMNS.slice();
+  if (!normalized.some(column => column.includes('备注'))) normalized.push('备注');
+  return normalized;
+}
+
+function normalizeContractTable(columns, rows) {
+  const sourceColumns = Array.isArray(columns) ? columns.map(column => String(column || '')) : [];
+  const normalizedColumns = normalizeContractColumns(sourceColumns);
+  const remarkAdded = normalizedColumns.length > sourceColumns.length;
+  const normalizedRows = (rows || []).map(row => {
+    const next = Array.isArray(row) ? row.map(value => value == null ? '' : String(value)) : [];
+    if (remarkAdded) next.push('');
+    while (next.length < normalizedColumns.length) next.push('');
+    return next.slice(0, normalizedColumns.length);
+  });
+  return {
+    columns: normalizedColumns,
+    rows: normalizedRows.length > 0
+      ? normalizedRows
+      : [normalizedColumns.map(column => ['数量', '单价', '金额'].some(alias => column.includes(alias)) ? '0' : '')]
+  };
+}
+
+function calcFeeTotal(fees) {
+  return Math.round((fees || []).reduce((sum, item) => sum + (parseFloat(item && item.amount) || 0), 0) * 100) / 100;
 }
 
 const CHINESE_NUMS = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十',
@@ -156,4 +206,15 @@ function reorderClauses(clauses) {
   });
 }
 
-module.exports = { numberToChineseCurrency, DEFAULT_TEMPLATE, calcTableTotal, toChineseNum, reorderClauses };
+module.exports = {
+  numberToChineseCurrency,
+  DEFAULT_CONTRACT_COLUMNS,
+  DEFAULT_TEMPLATE,
+  calcTableTotal,
+  calcFeeTotal,
+  findContractColumn,
+  normalizeContractColumns,
+  normalizeContractTable,
+  toChineseNum,
+  reorderClauses
+};

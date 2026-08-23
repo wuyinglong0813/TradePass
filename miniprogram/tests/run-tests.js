@@ -6,6 +6,8 @@ const path = require('path');
 const {
   numberToChineseCurrency,
   calcTableTotal,
+  calcFeeTotal,
+  normalizeContractTable,
   toChineseNum,
   reorderClauses
 } = require('../utils/chineseCurrency');
@@ -33,6 +35,18 @@ test('calcTableTotal normalizes rows and rounds currency values', () => {
   assert.strictEqual(result.rows[0][5], '6.67');
   assert.strictEqual(result.rows[1][5], '0');
   assert.strictEqual(result.totalAmountCn, '陆元陆角柒分');
+});
+
+test('contract table appends remarks without losing them and keeps fees separate', () => {
+  const normalized = normalizeContractTable(
+    ['产品名称', '规格型号', '单位', '数量', '单价(元)', '金额(元)'],
+    [['商品A', 'S', '件', '2', '3', '6']]
+  );
+  assert.deepStrictEqual(normalized.columns.slice(-2), ['金额(元)', '备注']);
+  normalized.rows[0][6] = '加急送货';
+  const calculated = calcTableTotal(normalized.rows, normalized.columns);
+  assert.strictEqual(calculated.rows[0][6], '加急送货');
+  assert.strictEqual(calcFeeTotal([{ amount: '12.30' }, { amount: 'bad' }]), 12.3);
 });
 
 test('clause helpers strip old prefixes and produce stable labels', () => {
@@ -199,7 +213,7 @@ test('home exposes the ordered approval center with a message indicator', () => 
   assert.ok(approvalScript.includes('/approvals/fulfillment'));
   assert.ok(approvalScript.includes('/approvals/results'));
   assert.ok(approvalScript.includes("label: '待我处理'"));
-  assert.ok(approvalScript.includes("label: '处理结果'"));
+  assert.ok(approvalScript.includes("label: '处理记录'"));
   assert.ok(approvalScript.includes('sales-order-detail'));
   assert.ok(approvalScript.includes("label: '合同'"));
   assert.ok(approvalScript.includes("label: '履约资料'"));

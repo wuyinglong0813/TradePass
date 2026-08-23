@@ -144,6 +144,25 @@ class SalesOrderInventoryServiceTest {
     }
 
     @Test
+    void snapshotsFeeRowsWithoutTreatingThemAsZeroQuantityProducts() {
+        document.setContent("""
+                {"columns":["序号","品名","规格","单位","数量","单价","金额","备注"],
+                 "rowTypes":["PRODUCT","FEE"],
+                 "rows":[
+                   ["1","商品A","A-1","件","2","3.5","7",""],
+                   ["2","运费","","项","0","15","15","送货上门"]
+                 ]}
+                """);
+
+        service.saveDocumentItems(document);
+
+        verify(jdbc).update(argThat(sql -> sql.contains("business_document_item")),
+                eq(31L), eq(3L), eq(4L), eq(2), eq("FEE"), eq("运费"), eq(""), eq("项"),
+                eq(new BigDecimal("1.0000")), eq(new BigDecimal("15.000000")),
+                eq(new BigDecimal("15.00")), eq("送货上门"));
+    }
+
+    @Test
     void exposesSharedSalesOrderDetailAndStateFlags() {
         doReturn(List.of(item)).when(jdbc).query(anyString(), any(RowMapper.class), any(Object[].class));
 

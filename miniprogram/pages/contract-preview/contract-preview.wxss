@@ -575,6 +575,8 @@ page { background: #f4f8fd; }
 .document-table-scroll { margin-top: 18rpx; width: 100%; }
 .document-edit-table { border-left: 1rpx solid #e0e8f1; border-top: 1rpx solid #e0e8f1; }
 .document-edit-table-row { display: flex; }
+.document-edit-table-row.fee-row .document-edit-cell { background: #fff8ed; }
+.document-fee-hint { color: #b07837; font-size: 20rpx; margin-top: 10rpx; }
 .document-edit-cell {
   align-items: center;
   border-bottom: 1rpx solid #e0e8f1;
@@ -839,6 +841,13 @@ page { background: #f4f8fd; }
   padding: 8rpx 2rpx 3rpx;
   text-align: right;
 }
+
+.pdf-fee-section { border: 1rpx solid #dfe7ef; margin-top: 10rpx; }
+.pdf-fee-title { background: #f2f6fa; color: #52657a; font-size: 14rpx; font-weight: 600; padding: 7rpx 9rpx; }
+.pdf-fee-row { border-top: 1rpx solid #e7edf3; color: #5f6d7d; display: grid; font-size: 13rpx; gap: 6rpx; grid-template-columns: 1fr .7fr 1.4fr; padding: 6rpx 9rpx; }
+.pdf-fee-row text:nth-child(2) { text-align: right; }
+.pdf-fee-total { border-top: 1rpx solid #dfe7ef; color: #e06139; font-size: 13rpx; font-weight: 600; padding: 6rpx 9rpx; text-align: right; }
+.pdf-fee-grand { background: #fff8ed; border-top: 1rpx solid #eadcc7; color: #bd552d; font-size: 14rpx; font-weight: 700; padding: 7rpx 9rpx; text-align: right; }
 
 .pdf-clause-content { font-family: serif; margin-top: 9rpx; }
 .pdf-clause-title { font-size: 15rpx; font-weight: 600; }

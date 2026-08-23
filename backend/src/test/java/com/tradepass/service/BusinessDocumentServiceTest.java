@@ -270,4 +270,67 @@ class BusinessDocumentServiceTest {
         assertThat(objectMapper.readTree(inserted.get().getContent()).path("counterpartyName").asText())
                 .isEqualTo("供应企业");
     }
+
+    @Test
+    void supplierCanAlsoCreateReturnOrderForBuyerConfirmation() {
+        BusinessDocumentTemplate template = new BusinessDocumentTemplate();
+        template.setId(16L);
+        template.setCompanyId(3L);
+        template.setDocumentType(BusinessDocumentService.RETURN_ORDER);
+        template.setName("供方退货单");
+        template.setContent("{\"columns\":[\"序号\",\"品名\",\"数量\",\"金额\"],\"blankRows\":8}");
+        when(templateMapper.selectOne(any())).thenReturn(template);
+
+        TradeContract contract = new TradeContract();
+        contract.setId(26L);
+        contract.setCompanyId(3L);
+        contract.setCounterpartyCompanyId(4L);
+        contract.setCounterpartyName("采购企业");
+        contract.setDirection("SALE");
+        contract.setStatus("ACTIVE");
+        contract.setTerms("{\"sections\":[{\"type\":\"table\",\"columns\":[\"品名\",\"数量\",\"金额\"],\"rows\":[[\"电线\",\"2\",\"1000\"]]}]}");
+        when(contractMapper.selectById(26L)).thenReturn(contract);
+
+        Company supplier = new Company();
+        supplier.setId(3L);
+        supplier.setName("供应企业");
+        Company buyer = new Company();
+        buyer.setId(4L);
+        buyer.setName("采购企业");
+        when(companyMapper.selectById(3L)).thenReturn(supplier);
+        when(companyMapper.selectById(4L)).thenReturn(buyer);
+
+        AtomicReference<BusinessDocument> inserted = new AtomicReference<>();
+        doAnswer(invocation -> {
+            BusinessDocument document = invocation.getArgument(0);
+            document.setId(36L);
+            inserted.set(document);
+            return 1;
+        }).when(documentMapper).insert(any(BusinessDocument.class));
+        when(documentMapper.selectById(36L)).thenAnswer(invocation -> inserted.get());
+
+        service.createDocument(26L, Map.of(
+                "documentType", BusinessDocumentService.RETURN_ORDER,
+                "templateId", 16L));
+
+        assertThat(inserted.get().getCompanyId()).isEqualTo(3L);
+        assertThat(inserted.get().getRecipientCompanyId()).isEqualTo(4L);
+        assertThat(inserted.get().getSupplierCompanyId()).isEqualTo(3L);
+        assertThat(inserted.get().getBuyerCompanyId()).isEqualTo(4L);
+    }
+
+    @Test
+    void ownerCanSoftDeleteUnpublishedDraft() {
+        BusinessDocument draft = new BusinessDocument();
+        draft.setId(37L);
+        draft.setCompanyId(3L);
+        draft.setDocumentType(BusinessDocumentService.SALES_ORDER);
+        draft.setDocumentNo("XS-DRAFT-37");
+        draft.setStatus("DRAFT");
+        when(documentMapper.selectOne(any())).thenReturn(draft);
+
+        assertThat(service.deleteDraft(37L)).isEqualTo("销售单草稿已删除");
+        assertThat(draft.getDeletedBy()).isEqualTo(7L);
+        assertThat(draft.getDeletedAt()).isNotNull();
+    }
 }

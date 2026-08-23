@@ -131,15 +131,6 @@ public class ApprovalService {
                     (recipient_company_id, source_company_id, result_type, source_id,
                      contract_id, result_status, title, detail, rejected_reason)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON DUPLICATE KEY UPDATE
-                    source_company_id = VALUES(source_company_id),
-                    contract_id = VALUES(contract_id),
-                    result_status = VALUES(result_status),
-                    title = VALUES(title),
-                    detail = VALUES(detail),
-                    rejected_reason = VALUES(rejected_reason),
-                    read_at = NULL,
-                    created_at = CURRENT_TIMESTAMP
                 """, recipientCompanyId, sourceCompanyId, resultType, sourceId,
                 contractId, resultStatus, title, detail,
                 rejectedReason == null || rejectedReason.isBlank() ? null : rejectedReason.trim());
