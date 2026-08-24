@@ -97,6 +97,20 @@ public class SalesOrderInventoryService {
         }
     }
 
+    public void selectReturnWarehouse(BusinessDocument document, long companyId, Long warehouseId) {
+        if (document == null || !"RETURN_ORDER".equals(document.getDocumentType())) return;
+        requireWarehouse(companyId, warehouseId,
+                Long.valueOf(companyId).equals(document.getBuyerCompanyId())
+                        ? "请选择退货出库仓库" : "请选择退货入库仓库");
+        if (Long.valueOf(companyId).equals(document.getBuyerCompanyId())) {
+            document.setOutboundWarehouseId(warehouseId);
+        } else if (Long.valueOf(companyId).equals(document.getSupplierCompanyId())) {
+            document.setInboundWarehouseId(warehouseId);
+        } else {
+            throw new BusinessException("当前企业不是退货单供需方");
+        }
+    }
+
     public Map<String, Object> documentDetail(Long documentId) {
         long companyId = AuthContext.requireCompanyId();
         accessControlService.requireAnyPermission(companyId,
@@ -135,27 +149,39 @@ public class SalesOrderInventoryService {
         Long buyerCompanyId = buyerCompanyId(document, contract);
         view.put("supplierCompanyId", supplierCompanyId);
         view.put("buyerCompanyId", buyerCompanyId);
+        view.put("viewerCompanyId", companyId);
+        view.put("outboundWarehouseId", document.getOutboundWarehouseId());
+        view.put("inboundWarehouseId", document.getInboundWarehouseId());
         boolean canReceive = recipient && canReceivePermission;
+        boolean contractReadOnly = contract == null || contractLocked(contract);
         boolean inboundOwner = "RETURN_ORDER".equals(document.getDocumentType())
                 ? Long.valueOf(companyId).equals(supplierCompanyId) : recipient;
         boolean canInbound = inboundOwner && accessControlService.hasPermission(companyId, "inventory_receive");
-        view.put("canReceive", canReceive && "ISSUED".equals(document.getStatus()));
-        view.put("canReject", canReceive && "ISSUED".equals(document.getStatus()));
-        view.put("canInbound", canInbound && ("ACKNOWLEDGED".equals(document.getStatus())
+        view.put("canReceive", !contractReadOnly && canReceive && "ISSUED".equals(document.getStatus()));
+        view.put("canReject", !contractReadOnly && canReceive && "ISSUED".equals(document.getStatus()));
+        view.put("canInbound", !contractReadOnly && canInbound && ("ACKNOWLEDGED".equals(document.getStatus())
                 || (recipient && "ISSUED".equals(document.getStatus()))));
+        view.put("contractReadOnly", contractReadOnly);
         view.put("contractStatus", contract == null ? "" : contract.getStatus());
         boolean editable = "DRAFT".equals(document.getStatus()) || "REJECTED".equals(document.getStatus());
-        view.put("canEditDraft", owner && editable && contract != null
+        view.put("canEditDraft", !contractReadOnly && owner && editable && contract != null
                 && ("PENDING".equals(contract.getStatus()) || "ACTIVE".equals(contract.getStatus())));
-        view.put("canPublish", owner && editable && contract != null
+        view.put("canPublish", !contractReadOnly && owner && editable && contract != null
                 && "ACTIVE".equals(contract.getStatus()));
-        view.put("canDeleteDraft", owner && "DRAFT".equals(document.getStatus()));
+        boolean creator = owner && Long.valueOf(AuthContext.userId()).equals(document.getCreatedBy());
+        view.put("canDeleteDraft", !contractReadOnly && creator && ("DRAFT".equals(document.getStatus())
+                || "REJECTED".equals(document.getStatus())));
+        view.put("canWithdraw", !contractReadOnly && creator && "ISSUED".equals(document.getStatus()));
+        view.put("canRequestVoid", !contractReadOnly
+                && List.of("ACKNOWLEDGED", "INBOUNDED").contains(document.getStatus()));
         return view;
     }
 
     public List<Map<String, Object>> listWarehouses() {
         long companyId = AuthContext.requireCompanyId();
-        accessControlService.requireAnyPermission(companyId, "inventory_view", "inventory_receive");
+        accessControlService.requireAnyPermission(companyId,
+                "inventory_view", "inventory_receive", "sales_order_receive",
+                "contract_sign", "order_create");
         return jdbc.query("""
                         SELECT id, name, address, enabled, created_at
                         FROM warehouse WHERE company_id = ? AND enabled = 1
@@ -288,6 +314,9 @@ public class SalesOrderInventoryService {
             throw new BusinessException("接收方式不正确");
         }
         TradeContract contract = document == null ? null : contractMapper.selectById(document.getContractId());
+        if (contract != null && contractLocked(contract)) {
+            throw new BusinessException("合同正在等待处理、已结束或已作废，单据仅允许查看");
+        }
         boolean recipient = document != null
                 && Long.valueOf(companyId).equals(document.getRecipientCompanyId());
         boolean supplierCompletingReturnInbound = document != null
@@ -339,9 +368,23 @@ public class SalesOrderInventoryService {
                     : userIdentityService.currentDisplayName();
             if (signerName == null || signerName.isBlank()) signerName = "用户" + AuthContext.userId();
         }
+        boolean returnOrder = "RETURN_ORDER".equals(document.getDocumentType());
+        Long supplierCompanyId = supplierCompanyId(document, contract);
+        Long buyerCompanyId = buyerCompanyId(document, contract);
+        if (returnOrder && !REJECT.equals(normalized)) {
+            if (Long.valueOf(companyId).equals(buyerCompanyId)) {
+                requireWarehouse(companyId, warehouseId, "请选择退货出库仓库");
+                document.setOutboundWarehouseId(warehouseId);
+            } else if (Long.valueOf(companyId).equals(supplierCompanyId) && INBOUND.equals(normalized)) {
+                requireWarehouse(companyId, warehouseId, "请选择退货入库仓库");
+                document.setInboundWarehouseId(warehouseId);
+            }
+            documentMapper.updateById(document);
+        }
         if (INBOUND.equals(normalized)) {
             accessControlService.requirePermission(companyId, "inventory_receive");
-            requireWarehouse(companyId, warehouseId);
+            requireWarehouse(companyId, warehouseId,
+                    returnOrder ? "请选择退货入库仓库" : "请选择入库仓库");
         }
 
         Long receiptId = existingReceipt(companyId, documentId);
@@ -392,6 +435,13 @@ public class SalesOrderInventoryService {
             return documentDetail(documentId);
         }
 
+        List<Map<String, Object>> items = documentItems(documentId).stream()
+                .filter(item -> !"FEE".equals(item.get("lineType")))
+                .toList();
+        if (items.isEmpty()) throw new BusinessException(documentLabel + "没有可入库商品");
+        Long transferId = returnOrder
+                ? createReturnTransfer(document, items, AuthContext.userId()) : null;
+
         String inboundNo = createInboundNo();
         jdbc.update("""
                 INSERT INTO inventory_inbound
@@ -399,10 +449,6 @@ public class SalesOrderInventoryService {
                 VALUES (?, ?, ?, ?, ?)
                 """, companyId, warehouseId, documentId, inboundNo, AuthContext.userId());
         Long inboundId = jdbc.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
-        List<Map<String, Object>> items = documentItems(documentId).stream()
-                .filter(item -> !"FEE".equals(item.get("lineType")))
-                .toList();
-        if (items.isEmpty()) throw new BusinessException(documentLabel + "没有可入库商品");
         for (Map<String, Object> item : items) {
             BigDecimal quantity = (BigDecimal) item.get("quantity");
             if (quantity == null || quantity.signum() <= 0) throw new BusinessException("销售单商品数量必须大于 0");
@@ -443,7 +489,7 @@ public class SalesOrderInventoryService {
                     """, companyId, warehouseId, productId,
                     "RETURN_ORDER".equals(document.getDocumentType())
                             ? "RETURN_ORDER_INBOUND" : "SALES_ORDER_INBOUND",
-                    inboundId, quantity, balance, AuthContext.userId());
+                    returnOrder ? transferId : inboundId, quantity, balance, AuthContext.userId());
         }
         jdbc.update("UPDATE sales_order_receipt SET decision = 'INBOUND', status = 'INBOUNDED' WHERE id = ?", receiptId);
         document.setStatus("INBOUNDED");
@@ -468,6 +514,128 @@ public class SalesOrderInventoryService {
         approvalService.recordResult(document.getCompanyId(), sourceCompanyId,
                 document.getDocumentType(), document.getId(), document.getContractId(), resultStatus,
                 title, detail, rejectedReason);
+    }
+
+    @Transactional
+    public void reverseDocumentInventory(Long documentId, long actionRequestId, long userId) {
+        BusinessDocument document = documentMapper.selectById(documentId);
+        if (document == null || !"INBOUNDED".equals(document.getStatus())) return;
+        if ("RETURN_ORDER".equals(document.getDocumentType())) {
+            reverseReturnTransfer(documentId, actionRequestId, userId);
+        } else {
+            reverseSalesInbound(documentId, actionRequestId, userId);
+        }
+    }
+
+    private void reverseReturnTransfer(Long documentId, long actionRequestId, long userId) {
+        List<TransferRecord> transfers = jdbc.query("""
+                        SELECT id, outbound_company_id, outbound_warehouse_id,
+                               inbound_company_id, inbound_warehouse_id, status
+                        FROM inventory_transfer WHERE source_document_id = ? FOR UPDATE
+                        """, (rs, rowNum) -> new TransferRecord(
+                        rs.getLong("id"), rs.getLong("outbound_company_id"),
+                        rs.getLong("outbound_warehouse_id"), rs.getLong("inbound_company_id"),
+                        rs.getLong("inbound_warehouse_id"), rs.getString("status")), documentId);
+        if (transfers.isEmpty() || "REVERSED".equals(transfers.get(0).status())) return;
+        TransferRecord transfer = transfers.get(0);
+        List<InventoryMovement> inbound = originalMovements(
+                transfer.inboundCompanyId(), "RETURN_ORDER_INBOUND", transfer.id());
+        List<InventoryMovement> outbound = originalMovements(
+                transfer.outboundCompanyId(), "RETURN_ORDER_OUTBOUND", transfer.id());
+        validateDecreaseMovements(inbound);
+        for (InventoryMovement movement : inbound) {
+            applyMovement(movement, movement.quantity().negate(),
+                    "RETURN_ORDER_INBOUND_VOID", actionRequestId, userId);
+        }
+        for (InventoryMovement movement : outbound) {
+            applyMovement(movement, movement.quantity().abs(),
+                    "RETURN_ORDER_OUTBOUND_VOID", actionRequestId, userId);
+        }
+        jdbc.update("""
+                UPDATE inventory_transfer
+                SET status = 'REVERSED', reversed_by_action_id = ?, reversed_at = CURRENT_TIMESTAMP
+                WHERE id = ? AND status = 'COMPLETED'
+                """, actionRequestId, transfer.id());
+    }
+
+    private void reverseSalesInbound(Long documentId, long actionRequestId, long userId) {
+        List<InboundRecord> inbounds = jdbc.query("""
+                        SELECT id, company_id, warehouse_id, status
+                        FROM inventory_inbound WHERE source_document_id = ? FOR UPDATE
+                        """, (rs, rowNum) -> new InboundRecord(
+                        rs.getLong("id"), rs.getLong("company_id"),
+                        rs.getLong("warehouse_id"), rs.getString("status")), documentId);
+        if (inbounds.isEmpty() || "REVERSED".equals(inbounds.get(0).status())) return;
+        InboundRecord inbound = inbounds.get(0);
+        List<InventoryMovement> movements = originalMovements(
+                inbound.companyId(), "SALES_ORDER_INBOUND", inbound.id());
+        validateDecreaseMovements(movements);
+        for (InventoryMovement movement : movements) {
+            applyMovement(movement, movement.quantity().negate(),
+                    "SALES_ORDER_INBOUND_VOID", actionRequestId, userId);
+        }
+        jdbc.update("UPDATE inventory_inbound SET status = 'REVERSED' WHERE id = ?", inbound.id());
+    }
+
+    private List<InventoryMovement> originalMovements(long companyId, String bizType, long bizId) {
+        return jdbc.query("""
+                        SELECT company_id, warehouse_id, product_id, quantity_delta
+                        FROM inventory_transaction
+                        WHERE company_id = ? AND biz_type = ? AND biz_id = ?
+                        ORDER BY id
+                        """, (rs, rowNum) -> new InventoryMovement(
+                        rs.getLong("company_id"), rs.getLong("warehouse_id"),
+                        rs.getLong("product_id"), rs.getBigDecimal("quantity_delta").abs()),
+                companyId, bizType, bizId);
+    }
+
+    private void validateDecreaseMovements(List<InventoryMovement> movements) {
+        for (InventoryMovement movement : movements) {
+            BalanceSnapshot balance = lockBalance(movement);
+            if (balance.quantity().compareTo(movement.quantity()) < 0) {
+                throw new BusinessException("当前库存不足，不能作废已入库单据；请先处理后续出库记录");
+            }
+        }
+    }
+
+    private void applyMovement(InventoryMovement movement, BigDecimal delta,
+                               String bizType, long bizId, long userId) {
+        BalanceSnapshot balance = lockBalance(movement);
+        BigDecimal nextQuantity = balance.quantity().add(delta);
+        if (nextQuantity.signum() < 0) throw new BusinessException("库存不足，不能完成作废冲销");
+        BigDecimal unitCost = balance.quantity().signum() == 0
+                ? balance.unitPrice() : balance.amount().divide(balance.quantity(), 6, RoundingMode.HALF_UP);
+        BigDecimal nextAmount = balance.amount().add(
+                unitCost.multiply(delta).setScale(2, RoundingMode.HALF_UP));
+        if (nextQuantity.signum() == 0) nextAmount = BigDecimal.ZERO.setScale(2);
+        jdbc.update("""
+                UPDATE inventory_balance
+                SET quantity = ?, inventory_amount = ?, unit_price = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE company_id = ? AND warehouse_id = ? AND product_id = ?
+                """, nextQuantity, nextAmount,
+                nextQuantity.signum() == 0 ? BigDecimal.ZERO : unitCost,
+                movement.companyId(), movement.warehouseId(), movement.productId());
+        jdbc.update("""
+                INSERT INTO inventory_transaction
+                (company_id, warehouse_id, product_id, biz_type, biz_id,
+                 quantity_delta, balance_after, created_by)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, movement.companyId(), movement.warehouseId(), movement.productId(),
+                bizType, bizId, delta, nextQuantity, userId);
+    }
+
+    private BalanceSnapshot lockBalance(InventoryMovement movement) {
+        List<BalanceSnapshot> rows = jdbc.query("""
+                        SELECT quantity, unit_price, inventory_amount
+                        FROM inventory_balance
+                        WHERE company_id = ? AND warehouse_id = ? AND product_id = ?
+                        FOR UPDATE
+                        """, (rs, rowNum) -> new BalanceSnapshot(
+                        rs.getBigDecimal("quantity"), rs.getBigDecimal("unit_price"),
+                        rs.getBigDecimal("inventory_amount")),
+                movement.companyId(), movement.warehouseId(), movement.productId());
+        if (rows.isEmpty()) throw new BusinessException("库存记录不存在，不能完成作废冲销");
+        return rows.get(0);
     }
 
     private BusinessDocument requireDocumentParty(Long documentId, long companyId) {
@@ -589,11 +757,93 @@ public class SalesOrderInventoryService {
     }
 
     private void requireWarehouse(long companyId, Long warehouseId) {
-        if (warehouseId == null) throw new BusinessException("请选择入库仓库");
+        requireWarehouse(companyId, warehouseId, "请选择入库仓库");
+    }
+
+    private void requireWarehouse(long companyId, Long warehouseId, String emptyMessage) {
+        if (warehouseId == null) throw new BusinessException(emptyMessage);
         Long count = jdbc.queryForObject("""
                 SELECT COUNT(1) FROM warehouse WHERE id = ? AND company_id = ? AND enabled = 1
                 """, Long.class, warehouseId, companyId);
         if (count == null || count == 0) throw new BusinessException("仓库不存在");
+    }
+
+    private Long createReturnTransfer(BusinessDocument document, List<Map<String, Object>> items,
+                                      long createdBy) {
+        Long buyerCompanyId = document.getBuyerCompanyId();
+        Long supplierCompanyId = document.getSupplierCompanyId();
+        if (buyerCompanyId == null || supplierCompanyId == null) {
+            throw new BusinessException("退货单供需企业信息不完整");
+        }
+        requireWarehouse(buyerCompanyId, document.getOutboundWarehouseId(), "退货方尚未选择出库仓库");
+        requireWarehouse(supplierCompanyId, document.getInboundWarehouseId(), "收货方尚未选择入库仓库");
+
+        List<OutboundStock> stocks = new ArrayList<>();
+        for (Map<String, Object> item : items) {
+            BigDecimal quantity = (BigDecimal) item.get("quantity");
+            List<OutboundStock> matches = jdbc.query("""
+                            SELECT product.id AS product_id, balance.quantity, balance.unit_price,
+                                   balance.inventory_amount
+                            FROM inventory_product product
+                            JOIN inventory_balance balance ON balance.product_id = product.id
+                              AND balance.company_id = product.company_id
+                            WHERE product.company_id = ? AND balance.warehouse_id = ?
+                              AND product.product_name = ? AND product.specification = ?
+                              AND product.base_unit = ?
+                            FOR UPDATE
+                            """, (rs, rowNum) -> new OutboundStock(
+                            rs.getLong("product_id"), quantity, rs.getBigDecimal("quantity"),
+                            rs.getBigDecimal("unit_price"), rs.getBigDecimal("inventory_amount"),
+                            String.valueOf(item.get("productName"))),
+                    buyerCompanyId, document.getOutboundWarehouseId(),
+                    String.valueOf(item.get("productName")), safeSpec(item.get("specification")),
+                    String.valueOf(item.get("baseUnit")));
+            if (matches.isEmpty() || matches.get(0).balanceQuantity().compareTo(quantity) < 0) {
+                BigDecimal available = matches.isEmpty() ? BigDecimal.ZERO : matches.get(0).balanceQuantity();
+                throw new BusinessException("退货出库库存不足：" + item.get("productName")
+                        + "，可用 " + available.stripTrailingZeros().toPlainString()
+                        + "，需要 " + quantity.stripTrailingZeros().toPlainString());
+            }
+            stocks.add(matches.get(0));
+        }
+
+        jdbc.update("""
+                INSERT INTO inventory_transfer
+                (source_document_id, outbound_company_id, outbound_warehouse_id,
+                 inbound_company_id, inbound_warehouse_id, created_by)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """, document.getId(), buyerCompanyId, document.getOutboundWarehouseId(),
+                supplierCompanyId, document.getInboundWarehouseId(), createdBy);
+        Long transferId = jdbc.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
+        for (OutboundStock stock : stocks) {
+            BigDecimal averageCost = stock.balanceQuantity().signum() == 0
+                    ? BigDecimal.ZERO : stock.inventoryAmount().divide(
+                    stock.balanceQuantity(), 6, RoundingMode.HALF_UP);
+            BigDecimal amountDelta = averageCost.multiply(stock.quantity()).setScale(2, RoundingMode.HALF_UP);
+            BigDecimal nextQuantity = stock.balanceQuantity().subtract(stock.quantity());
+            BigDecimal nextAmount = nextQuantity.signum() == 0
+                    ? BigDecimal.ZERO.setScale(2) : stock.inventoryAmount().subtract(amountDelta);
+            jdbc.update("""
+                    UPDATE inventory_balance
+                    SET quantity = ?, inventory_amount = ?, unit_price = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE company_id = ? AND warehouse_id = ? AND product_id = ?
+                    """, nextQuantity, nextAmount,
+                    nextQuantity.signum() == 0 ? BigDecimal.ZERO : averageCost,
+                    buyerCompanyId, document.getOutboundWarehouseId(), stock.productId());
+            jdbc.update("""
+                    INSERT INTO inventory_transaction
+                    (company_id, warehouse_id, product_id, biz_type, biz_id,
+                     quantity_delta, balance_after, created_by)
+                    VALUES (?, ?, ?, 'RETURN_ORDER_OUTBOUND', ?, ?, ?, ?)
+                    """, buyerCompanyId, document.getOutboundWarehouseId(), stock.productId(),
+                    transferId, stock.quantity().negate(), nextQuantity, createdBy);
+        }
+        return transferId;
+    }
+
+    private String safeSpec(Object value) {
+        String text = value == null ? "" : String.valueOf(value);
+        return "null".equals(text) ? "" : text.trim();
     }
 
     private Long findOrCreateProduct(long companyId, String name, String specification, String unit) {
@@ -628,7 +878,18 @@ public class SalesOrderInventoryService {
         if ("REJECTED".equals(status)) return "已驳回";
         if ("ACKNOWLEDGED".equals(status)) return "已通过待入库";
         if ("INBOUNDED".equals(status)) return "已通过并入库";
+        if ("VOIDED".equals(status)) return "已作废";
         return status;
+    }
+
+    private boolean contractLocked(TradeContract contract) {
+        if ("COMPLETED".equals(contract.getStatus()) || "VOIDED".equals(contract.getStatus())) return true;
+        if (contract.getStatus() == null) return false;
+        Long count = jdbc.queryForObject("""
+                SELECT COUNT(1) FROM bilateral_action_request
+                WHERE contract_id = ? AND status = 'PENDING'
+                """, Long.class, contract.getId());
+        return count != null && count > 0;
     }
 
     private void recordReconciliation(BusinessDocument document) {
@@ -683,5 +944,24 @@ public class SalesOrderInventoryService {
     private record SalesItem(int lineNo, String lineType, String productName, String specification,
                              String baseUnit, BigDecimal quantity, BigDecimal unitPrice,
                              BigDecimal amount, String remark) {
+    }
+
+    private record OutboundStock(long productId, BigDecimal quantity, BigDecimal balanceQuantity,
+                                 BigDecimal unitPrice, BigDecimal inventoryAmount,
+                                 String productName) {
+    }
+
+    private record TransferRecord(long id, long outboundCompanyId, long outboundWarehouseId,
+                                  long inboundCompanyId, long inboundWarehouseId, String status) {
+    }
+
+    private record InboundRecord(long id, long companyId, long warehouseId, String status) {
+    }
+
+    private record InventoryMovement(long companyId, long warehouseId, long productId,
+                                     BigDecimal quantity) {
+    }
+
+    private record BalanceSnapshot(BigDecimal quantity, BigDecimal unitPrice, BigDecimal amount) {
     }
 }

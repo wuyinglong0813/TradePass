@@ -34,6 +34,7 @@ public class ApprovalService {
         if (canReviewAttachments(companyId)) {
             items.addAll(pendingAttachments(companyId));
         }
+        items.addAll(pendingBilateralActions(companyId));
         items.sort(Comparator.comparing(
                 item -> String.valueOf(item.getOrDefault("createdAt", "")),
                 Comparator.reverseOrder()));
@@ -89,6 +90,7 @@ public class ApprovalService {
                     SELECT COUNT(1) FROM business_document
                     WHERE recipient_company_id = ? AND document_type IN ('SALES_ORDER', 'RETURN_ORDER')
                       AND status = 'ISSUED'
+                      AND deleted_at IS NULL
                     """, companyId);
         }
         if (canReviewAttachments(companyId)) {
@@ -96,8 +98,13 @@ public class ApprovalService {
                     SELECT COUNT(1) FROM contract_attachment
                     WHERE recipient_company_id = ? AND status = 'PENDING_CONFIRMATION'
                       AND category IN ('PAYMENT_VOUCHER', 'INVOICE')
+                      AND deleted_at IS NULL
                     """, companyId);
         }
+        pendingFulfillment += count("""
+                SELECT COUNT(1) FROM bilateral_action_request
+                WHERE approver_company_id = ? AND status = 'PENDING'
+                """, companyId);
         long unreadResults = count("""
                 SELECT COUNT(1) FROM approval_result_notification
                 WHERE recipient_company_id = ? AND read_at IS NULL
@@ -166,6 +173,7 @@ public class ApprovalService {
                         WHERE document.recipient_company_id = ?
                           AND document.document_type IN ('SALES_ORDER', 'RETURN_ORDER')
                           AND document.status = 'ISSUED'
+                          AND document.deleted_at IS NULL
                         ORDER BY document.created_at DESC, document.id DESC
                         """, (rs, rowNum) -> item(
                         rs.getLong("id"), rs.getString("document_type"),
@@ -191,6 +199,7 @@ public class ApprovalService {
                         WHERE attachment.recipient_company_id = ?
                           AND attachment.status = 'PENDING_CONFIRMATION'
                           AND attachment.category IN ('PAYMENT_VOUCHER', 'INVOICE')
+                          AND attachment.deleted_at IS NULL
                         ORDER BY attachment.created_at DESC, attachment.id DESC
                         """, (rs, rowNum) -> {
                     String category = rs.getString("category");
@@ -208,6 +217,48 @@ public class ApprovalService {
                     String contentType = rs.getString("content_type");
                     view.put("contentType", contentType == null ? "" : contentType);
                     view.put("isImage", contentType != null && contentType.startsWith("image/"));
+                    return view;
+                }, companyId);
+    }
+
+    private List<Map<String, Object>> pendingBilateralActions(long companyId) {
+        return jdbc.query("""
+                        SELECT action.id, action.contract_id, action.biz_type, action.biz_id,
+                               action.action_type, action.reason, action.created_at,
+                               action.requester_company_id AS source_company_id,
+                               company.name AS source_company_name,
+                               contract.contract_no, contract.name AS contract_name,
+                               attachment.category,
+                               COALESCE(document.document_no, attachment.original_name,
+                                        contract.contract_no) AS document_no
+                        FROM bilateral_action_request action
+                        JOIN company ON company.id = action.requester_company_id
+                        JOIN trade_contract contract ON contract.id = action.contract_id
+                        LEFT JOIN contract_attachment attachment
+                          ON action.biz_type = 'ATTACHMENT' AND attachment.id = action.biz_id
+                        LEFT JOIN business_document document
+                          ON action.biz_type = 'BUSINESS_DOCUMENT' AND document.id = action.biz_id
+                        WHERE action.approver_company_id = ? AND action.status = 'PENDING'
+                        ORDER BY action.created_at DESC, action.id DESC
+                        """, (rs, rowNum) -> {
+                    String bizType = rs.getString("biz_type");
+                    String actionType = rs.getString("action_type");
+                    String category = rs.getString("category");
+                    String targetText = "CONTRACT".equals(bizType) ? "合同"
+                            : ("ATTACHMENT".equals(bizType)
+                            ? (ContractAttachmentService.INVOICE.equals(category) ? "发票" : "转款凭证")
+                            : "业务单据");
+                    Map<String, Object> view = item(rs.getLong("id"), "BILATERAL_ACTION",
+                            targetText + ("END".equals(actionType) ? "结束" : "作废"),
+                            rs.getLong("source_company_id"), rs.getString("source_company_name"),
+                            rs.getLong("contract_id"), rs.getString("contract_no"),
+                            rs.getString("contract_name"), rs.getString("document_no"),
+                            null, null, rs.getTimestamp("created_at"));
+                    view.put("actionId", rs.getLong("id"));
+                    view.put("bizType", bizType);
+                    view.put("bizId", rs.getLong("biz_id"));
+                    view.put("actionType", actionType);
+                    view.put("reason", rs.getString("reason"));
                     return view;
                 }, companyId);
     }

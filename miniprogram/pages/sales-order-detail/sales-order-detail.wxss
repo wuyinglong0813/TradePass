@@ -66,6 +66,11 @@ button::after { border: 0; }
 .receive-title { color: #1e72c8; font-size: 28rpx; font-weight: 700; }
 .receive-tip { color: #7f8e9f; font-size: 21rpx; line-height: 1.6; margin-top: 8rpx; }
 .done-tip { color: #289660; font-size: 23rpx; padding: 28rpx; text-align: center; }
+.done-tip.voided { color: #8b5d5d; }
+.memo-summary.readonly { opacity: .72; }
+.action-notice { background: #fff8e8; border: 1rpx solid #efcf89; border-radius: 14rpx; color: #84611a; font-size: 22rpx; line-height: 1.65; margin: 18rpx 24rpx; padding: 20rpx 24rpx; }
+.action-notice-title { color: #704d08; font-size: 26rpx; font-weight: 700; }
+.draft-actions.standalone { margin: 18rpx 24rpx; }
 .signature-mask { align-items: flex-end; background: rgba(11,25,43,.5); bottom: 0; display: flex; left: 0; position: fixed; right: 0; top: 0; z-index: 280; }
 .signature-sheet { background: #fff; border-radius: 30rpx 30rpx 0 0; box-sizing: border-box; padding: 15rpx 28rpx calc(28rpx + env(safe-area-inset-bottom)); width: 100%; }
 .signature-handle { background: #dce3eb; border-radius: 4rpx; height: 7rpx; margin: 0 auto 22rpx; width: 74rpx; }

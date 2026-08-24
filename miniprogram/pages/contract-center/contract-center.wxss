@@ -40,6 +40,7 @@ page { background: #f4f8fd; }
 .status-PENDING { background: #fff3d6; color: #9a6511; }
 .status-ACTIVE { background: #e7f2ff; color: #3498ff; }
 .status-COMPLETED { background: #edf2f8; color: #687571; }
+.status-VOIDED { background: #f8ecec; color: #a04b4b; }
 .status-REJECTED { background: #fdeaea; color: #b44343; }
 .counterparty { color: #7f8c88; font-size: 23rpx; margin-top: 10rpx; }
 .item-bottom { border-top: 1rpx solid #edf2f8; gap: 32rpx; margin-top: 20rpx; padding-top: 18rpx; }

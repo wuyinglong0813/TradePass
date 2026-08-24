@@ -374,6 +374,7 @@ page {
   background: #edf2f8;
   color: #68788d;
 }
+.status-VOIDED { background: #f8ecec; color: #a04b4b; }
 
 .contract-name {
   color: #17263a;

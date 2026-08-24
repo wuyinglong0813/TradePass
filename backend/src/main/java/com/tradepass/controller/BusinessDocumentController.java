@@ -67,13 +67,20 @@ public class BusinessDocumentController {
     }
 
     @PostMapping("/trade-documents/{id}/publish")
-    public ApiResponse<Map<String, Object>> publishDraft(@PathVariable Long id) {
-        return ApiResponse.ok(businessDocumentService.publishDraft(id));
+    public ApiResponse<Map<String, Object>> publishDraft(@PathVariable Long id,
+                                                         @RequestBody(required = false) Map<String, Object> body) {
+        return ApiResponse.ok(businessDocumentService.publishDraft(id,
+                body == null ? null : longValue(body.get("warehouseId"))));
     }
 
     @PostMapping("/trade-documents/{id}/delete")
     public ApiResponse<String> deleteDraft(@PathVariable Long id) {
         return ApiResponse.ok(businessDocumentService.deleteDraft(id));
+    }
+
+    @PostMapping("/trade-documents/{id}/withdraw")
+    public ApiResponse<String> withdraw(@PathVariable Long id) {
+        return ApiResponse.ok(businessDocumentService.withdraw(id));
     }
 
     @GetMapping(value = "/trade-documents/{id}/pdf", produces = MediaType.APPLICATION_PDF_VALUE)
@@ -97,5 +104,14 @@ public class BusinessDocumentController {
         byte[] pdf = businessDocumentPdfService.generate(document);
         return ApiResponse.ok(FileDataPayload.of(
                 businessDocumentPdfService.fileName(document), MediaType.APPLICATION_PDF_VALUE, pdf));
+    }
+
+    private Long longValue(Object value) {
+        if (value == null || String.valueOf(value).isBlank()) return null;
+        try {
+            return Long.valueOf(String.valueOf(value));
+        } catch (NumberFormatException exception) {
+            throw new com.tradepass.common.BusinessException("仓库 ID 格式不正确");
+        }
     }
 }

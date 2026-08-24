@@ -43,6 +43,8 @@ public class BusinessDocumentService {
     private final ObjectMapper objectMapper;
     private final SalesOrderInventoryService inventoryService;
     private final UserIdentityService userIdentityService;
+    private ApprovalService approvalService;
+    private BilateralActionService bilateralActionService;
 
     @Autowired
     public BusinessDocumentService(BusinessDocumentTemplateMapper templateMapper,
@@ -74,6 +76,16 @@ public class BusinessDocumentService {
                             ObjectMapper objectMapper) {
         this(templateMapper, documentMapper, contractMapper, companyMapper,
                 accessControlService, auditLogService, objectMapper, null, null);
+    }
+
+    @Autowired
+    void setApprovalService(ApprovalService approvalService) {
+        this.approvalService = approvalService;
+    }
+
+    @Autowired
+    void setBilateralActionService(BilateralActionService bilateralActionService) {
+        this.bilateralActionService = bilateralActionService;
     }
 
     public List<Map<String, Object>> listTemplates(String type) {
@@ -154,6 +166,7 @@ public class BusinessDocumentService {
             throw new BusinessException("请选择单据模板");
         }
         TradeContract contract = requireContractParty(contractId, companyId);
+        requireContractMutable(contract);
         if (!"PENDING".equals(contract.getStatus()) && !"ACTIVE".equals(contract.getStatus())) {
             throw new BusinessException("当前合同状态不能创建" + typeLabel(type));
         }
@@ -213,6 +226,7 @@ public class BusinessDocumentService {
         accessControlService.requireAnyPermission(companyId, "contract_sign", "order_create");
         BusinessDocument document = requireOwnedEditableDocument(id, companyId);
         TradeContract contract = requireContractParty(document.getContractId(), companyId);
+        requireContractMutable(contract);
         if (!"PENDING".equals(contract.getStatus()) && !"ACTIVE".equals(contract.getStatus())) {
             throw new BusinessException("当前合同状态不能编辑单据草稿");
         }
@@ -230,10 +244,16 @@ public class BusinessDocumentService {
 
     @Transactional
     public Map<String, Object> publishDraft(Long id) {
+        return publishDraft(id, null);
+    }
+
+    @Transactional
+    public Map<String, Object> publishDraft(Long id, Long warehouseId) {
         long companyId = AuthContext.requireCompanyId();
         accessControlService.requireAnyPermission(companyId, "contract_sign", "order_create");
         BusinessDocument document = requireOwnedEditableDocument(id, companyId);
         TradeContract contract = requireContractParty(document.getContractId(), companyId);
+        requireContractMutable(contract);
         if (!"ACTIVE".equals(contract.getStatus())) {
             throw new BusinessException("合同生效后才能发布" + typeLabel(document.getDocumentType()));
         }
@@ -246,6 +266,10 @@ public class BusinessDocumentService {
         document.setRecipientCompanyId(companyId == supplierCompanyId ? buyerCompanyId : supplierCompanyId);
         document.setSupplierCompanyId(supplierCompanyId);
         document.setBuyerCompanyId(buyerCompanyId);
+        if (RETURN_ORDER.equals(document.getDocumentType())) {
+            if (inventoryService == null) throw new BusinessException("退货库存服务尚未启用");
+            inventoryService.selectReturnWarehouse(document, companyId, warehouseId);
+        }
         document.setStatus("ISSUED");
         document.setRejectedReason(null);
         documentMapper.updateById(document);
@@ -276,16 +300,50 @@ public class BusinessDocumentService {
         BusinessDocument document = documentMapper.selectOne(new LambdaQueryWrapper<BusinessDocument>()
                 .eq(BusinessDocument::getId, id)
                 .eq(BusinessDocument::getCompanyId, companyId)
-                .eq(BusinessDocument::getStatus, "DRAFT")
+                .eq(BusinessDocument::getCreatedBy, AuthContext.userId())
+                .in(BusinessDocument::getStatus, List.of("DRAFT", "REJECTED"))
                 .isNull(BusinessDocument::getDeletedAt)
                 .last("LIMIT 1"));
         if (document == null) throw new BusinessException("可删除的单据草稿不存在");
+        if (bilateralActionService != null) {
+            requireContractMutable(requireContractParty(document.getContractId(), companyId));
+        }
         document.setDeletedBy(AuthContext.userId());
         document.setDeletedAt(LocalDateTime.now());
         documentMapper.updateById(document);
         auditLogService.log(companyId, "BUSINESS_DOCUMENT", id, "DELETE",
                 "删除" + typeLabel(document.getDocumentType()) + "草稿 " + document.getDocumentNo());
         return typeLabel(document.getDocumentType()) + "草稿已删除";
+    }
+
+    @Transactional
+    public String withdraw(Long id) {
+        long companyId = AuthContext.requireCompanyId();
+        accessControlService.requireAnyPermission(companyId, "contract_sign", "order_create");
+        BusinessDocument document = documentMapper.selectOne(new LambdaQueryWrapper<BusinessDocument>()
+                .eq(BusinessDocument::getId, id)
+                .eq(BusinessDocument::getCompanyId, companyId)
+                .eq(BusinessDocument::getCreatedBy, AuthContext.userId())
+                .eq(BusinessDocument::getStatus, "ISSUED")
+                .isNull(BusinessDocument::getDeletedAt)
+                .last("LIMIT 1"));
+        if (document == null) throw new BusinessException("可撤回的单据不存在");
+        if (bilateralActionService != null) {
+            requireContractMutable(requireContractParty(document.getContractId(), companyId));
+        }
+        document.setStatus("WITHDRAWN");
+        document.setDeletedBy(AuthContext.userId());
+        document.setDeletedAt(LocalDateTime.now());
+        documentMapper.updateById(document);
+        auditLogService.log(companyId, "BUSINESS_DOCUMENT", id, "WITHDRAW",
+                "撤回" + typeLabel(document.getDocumentType()) + " " + document.getDocumentNo());
+        if (approvalService != null && document.getRecipientCompanyId() != null) {
+            approvalService.recordResult(document.getRecipientCompanyId(), companyId,
+                    document.getDocumentType(), document.getId(), document.getContractId(),
+                    "CANCELLED", typeLabel(document.getDocumentType()) + "已撤回",
+                    "发起方已撤回" + typeLabel(document.getDocumentType()) + " " + document.getDocumentNo(), null);
+        }
+        return typeLabel(document.getDocumentType()) + "已撤回";
     }
 
     public String typeLabel(String type) {
@@ -588,6 +646,14 @@ public class BusinessDocumentService {
         return contract;
     }
 
+    private void requireContractMutable(TradeContract contract) {
+        if (bilateralActionService != null) {
+            bilateralActionService.requireContractMutable(contract);
+        } else if ("COMPLETED".equals(contract.getStatus()) || "VOIDED".equals(contract.getStatus())) {
+            throw new BusinessException("合同已结束或作废，仅允许查看");
+        }
+    }
+
     private BusinessDocument requireOwnedEditableDocument(Long id, long companyId) {
         BusinessDocument document = documentMapper.selectById(id);
         if (document == null || document.getDeletedAt() != null || (!SALES_ORDER.equals(document.getDocumentType())
@@ -634,11 +700,29 @@ public class BusinessDocumentService {
         view.put("templateName", document.getTemplateName());
         view.put("createdAt", document.getCreatedAt());
         boolean draft = "DRAFT".equals(document.getStatus()) || "REJECTED".equals(document.getStatus());
+        boolean contractReadOnly = bilateralActionService != null
+                ? bilateralActionService.isContractReadOnly(contract)
+                : "COMPLETED".equals(contract.getStatus()) || "VOIDED".equals(contract.getStatus());
+        BilateralActionService.ActionState actionState = bilateralActionService == null
+                ? BilateralActionService.ActionState.empty()
+                : bilateralActionService.state(viewerCompanyId,
+                BilateralActionService.BUSINESS_DOCUMENT, document.getId());
         view.put("contractStatus", contract.getStatus());
-        view.put("canEditDraft", owner && draft
+        view.put("contractReadOnly", contractReadOnly);
+        view.put("pendingActionId", actionState.id());
+        view.put("pendingActionType", actionState.actionType());
+        view.put("pendingActionReason", actionState.reason());
+        view.put("canReviewAction", actionState.approverCompany());
+        view.put("canCancelAction", actionState.requesterUser());
+        view.put("canEditDraft", !contractReadOnly && owner && draft
                 && ("PENDING".equals(contract.getStatus()) || "ACTIVE".equals(contract.getStatus())));
-        view.put("canPublish", owner && draft && "ACTIVE".equals(contract.getStatus()));
-        view.put("canDeleteDraft", owner && "DRAFT".equals(document.getStatus()));
+        view.put("canPublish", !contractReadOnly && owner && draft && "ACTIVE".equals(contract.getStatus()));
+        boolean creator = owner && Long.valueOf(AuthContext.userId()).equals(document.getCreatedBy());
+        view.put("canDeleteDraft", !contractReadOnly && creator && ("DRAFT".equals(document.getStatus())
+                || "REJECTED".equals(document.getStatus())));
+        view.put("canWithdraw", !contractReadOnly && creator && "ISSUED".equals(document.getStatus()));
+        view.put("canRequestVoid", !contractReadOnly
+                && List.of("ACKNOWLEDGED", "INBOUNDED").contains(document.getStatus()));
         return view;
     }
 
@@ -693,6 +777,7 @@ public class BusinessDocumentService {
         if ("REJECTED".equals(status)) return "已驳回";
         if ("ACKNOWLEDGED".equals(status)) return "已通过待入库";
         if ("INBOUNDED".equals(status)) return "已通过并入库";
+        if ("VOIDED".equals(status)) return "已作废";
         return status;
     }
 

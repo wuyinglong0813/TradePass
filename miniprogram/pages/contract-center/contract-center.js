@@ -9,7 +9,8 @@ Page({
       { key: 'ALL', label: '全部' },
       { key: 'PENDING', label: '待签署' },
       { key: 'ACTIVE', label: '履约中' },
-      { key: 'COMPLETED', label: '已完成' }
+      { key: 'COMPLETED', label: '已结束' },
+      { key: 'VOIDED', label: '已作废' }
     ],
     contracts: [],
     visibleContracts: [],
@@ -57,7 +58,7 @@ Page({
         reset && !signatureMode ? request({ url: '/contracts/summary' }) : Promise.resolve(null)
       ]);
       const list = Array.isArray(payload) ? payload : (payload.items || []);
-      const statusText = { PENDING: '待签署', ACTIVE: '履约中', COMPLETED: '已完成', REJECTED: '已拒绝', CANCELLED: '已撤回' };
+      const statusText = { PENDING: '待签署', ACTIVE: '履约中', COMPLETED: '已结束', VOIDED: '已作废', REJECTED: '已拒绝', CANCELLED: '已撤回' };
       const nextContracts = (list || []).map(item => {
         const counterpartyName = item.viewerCounterpartyName || item.counterpartyName || '往来公司';
         return {

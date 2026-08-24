@@ -64,6 +64,10 @@ Page({
     canCancelContract: false,
     canEditContract: false,
     canDeleteContract: false,
+    canRequestEnd: false,
+    canRequestVoid: false,
+    contractReadOnly: false,
+    activeContractAction: null,
     contractActionLoading: false,
     canCreateSalesOrder: false,
     canCreateReturnOrder: false,
@@ -137,15 +141,19 @@ Page({
   async loadContractDetail() {
     const { request } = require('../../utils/request');
     try {
-      const contract = await request({
-        url: `/contracts/${this.data.contractId}`
-      });
+      const [contract, activeContractAction] = await Promise.all([
+        request({ url: `/contracts/${this.data.contractId}` }),
+        request({
+          url: `/bilateral-actions/active?bizType=CONTRACT&bizId=${this.data.contractId}`
+        }).catch(() => ({}))
+      ]);
       const statusMap = {
         PENDING: '待签署',
         ACTIVE: '履行中',
         REJECTED: '已拒绝',
         CANCELLED: '已撤回',
-        COMPLETED: '已完成'
+        COMPLETED: '已结束',
+        VOIDED: '已作废'
       };
       // 尝试解析结构化合同数据
       let sData = null;
@@ -193,16 +201,23 @@ Page({
         || String(contract.createdAt || '').slice(0, 10);
       const viewerDirection = contract.viewerDirection || contract.direction;
       const isSupplier = viewerDirection === 'SALE';
+      const actionPending = !!(activeContractAction && activeContractAction.id);
+      const contractReadOnly = actionPending || ['COMPLETED', 'VOIDED'].includes(contract.status);
       const canCreateSalesOrder = isSupplier
+        && !contractReadOnly && (contract.status === 'PENDING' || contract.status === 'ACTIVE');
+      const canCreateReturnOrder = !contractReadOnly
         && (contract.status === 'PENDING' || contract.status === 'ACTIVE');
-      const canCreateReturnOrder = contract.status === 'PENDING' || contract.status === 'ACTIVE';
       const outgoing = contract.perspective === 'OUTGOING';
       const createAsDraft = true;
 
       this.setData({
         contract: {
           ...contract,
-          statusText: statusMap[contract.status] || contract.status,
+          statusText: actionPending
+            ? (activeContractAction.bizType === 'CONTRACT'
+              ? (activeContractAction.actionType === 'END' ? '结束待确认' : '作废待确认')
+              : `${activeContractAction.targetText || '履约资料'}作废待确认`)
+            : (statusMap[contract.status] || contract.status),
           amount: contract.amount || 0
         },
         contractName: contract.name || this.data.contractName,
@@ -219,9 +234,13 @@ Page({
           ? String(contractTable.summary.totalAmount) : String(contract.amount || ''),
         contractTotalAmountCn: contractTable.summary && contractTable.summary.totalAmountCn
           ? String(contractTable.summary.totalAmountCn) : '',
-        canCancelContract: outgoing && contract.status === 'PENDING',
-        canEditContract: outgoing && ['PENDING', 'REJECTED', 'CANCELLED'].includes(contract.status),
-        canDeleteContract: outgoing && ['REJECTED', 'CANCELLED'].includes(contract.status),
+        canCancelContract: !contractReadOnly && outgoing && contract.status === 'PENDING',
+        canEditContract: !contractReadOnly && outgoing && ['PENDING', 'REJECTED', 'CANCELLED'].includes(contract.status),
+        canDeleteContract: !contractReadOnly && outgoing && ['REJECTED', 'CANCELLED'].includes(contract.status),
+        canRequestEnd: !contractReadOnly && contract.status === 'ACTIVE',
+        canRequestVoid: !contractReadOnly && contract.status === 'ACTIVE',
+        contractReadOnly,
+        activeContractAction: actionPending ? activeContractAction : null,
         canCreateSalesOrder,
         canCreateReturnOrder,
         createAsDraft,
@@ -278,6 +297,153 @@ Page({
         if (result.confirm) this.submitContractAction('delete');
       }
     });
+  },
+
+  requestContractEnd() {
+    if (!this.data.canRequestEnd || this.data.contractActionLoading) return;
+    wx.showModal({
+      title: '结束合同风险提示',
+      content: '对方确认后，合同及销售单、退货单、发票、凭证、物流资料将永久只读，不能再上传、编辑、删除、作废或重新开启。请先确认双方业务、库存和账务均已处理完成。',
+      confirmText: '我已了解',
+      confirmColor: '#d97706',
+      success: riskResult => {
+        if (!riskResult.confirm) return;
+        wx.showModal({
+          title: '填写结束原因',
+          editable: true,
+          placeholderText: '请输入合同结束原因',
+          confirmText: '下一步',
+          success: reasonResult => {
+            const reason = String(reasonResult.content || '').trim();
+            if (!reasonResult.confirm) return;
+            if (!reason) {
+              wx.showToast({ title: '请输入结束原因', icon: 'none' });
+              return;
+            }
+            wx.showModal({
+              title: '最终确认',
+              editable: true,
+              placeholderText: '请输入“确认结束”',
+              confirmText: '提交申请',
+              confirmColor: '#d94848',
+              success: confirmResult => {
+                if (!confirmResult.confirm) return;
+                if (String(confirmResult.content || '').trim() !== '确认结束') {
+                  wx.showToast({ title: '请输入“确认结束”', icon: 'none' });
+                  return;
+                }
+                this.submitBilateralAction('CONTRACT', this.data.contractId, 'END', reason, true);
+              }
+            });
+          }
+        });
+      }
+    });
+  },
+
+  requestContractVoid() {
+    if (!this.data.canRequestVoid || this.data.contractActionLoading) return;
+    wx.showModal({
+      title: '申请作废合同',
+      content: '',
+      editable: true,
+      placeholderText: '请输入作废原因',
+      confirmText: '提交申请',
+      confirmColor: '#d94848',
+      success: result => {
+        if (!result.confirm) return;
+        const reason = String(result.content || '').trim();
+        if (!reason) {
+          wx.showToast({ title: '请输入作废原因', icon: 'none' });
+          return;
+        }
+        this.submitBilateralAction('CONTRACT', this.data.contractId, 'VOID', reason, false);
+      }
+    });
+  },
+
+  async submitBilateralAction(bizType, bizId, actionType, reason, riskConfirmed) {
+    if (this.data.contractActionLoading) return;
+    const { request } = require('../../utils/request');
+    try {
+      this.setData({ contractActionLoading: true });
+      await request({
+        url: '/bilateral-actions',
+        method: 'POST',
+        data: { bizType, bizId, actionType, reason, riskConfirmed }
+      });
+      wx.showToast({ title: '申请已提交，等待对方确认', icon: 'success' });
+      await this.loadContractDetail();
+    } catch (error) {
+      wx.showToast({ title: error.message || '申请提交失败', icon: 'none' });
+    } finally {
+      this.setData({ contractActionLoading: false });
+    }
+  },
+
+  reviewContractAction(e) {
+    const decision = e.currentTarget.dataset.decision;
+    const action = this.data.activeContractAction;
+    if (!action || !action.id || !action.canReview) return;
+    if (decision === 'REJECT') {
+      wx.showModal({
+        title: `拒绝${action.actionText || '合同操作'}申请`,
+        editable: true,
+        placeholderText: '请输入拒绝原因',
+        confirmText: '确认拒绝',
+        success: result => {
+          if (result.confirm && String(result.content || '').trim()) {
+            this.submitContractActionDecision(action.id, 'REJECT', String(result.content).trim());
+          }
+        }
+      });
+      return;
+    }
+    wx.showModal({
+      title: `同意${action.actionText || '合同操作'}`,
+      content: action.actionType === 'END'
+        ? '确认后合同永久只读，不能恢复或继续履约。'
+        : '确认后合同将标记为已作废。',
+      confirmText: '确认同意',
+      confirmColor: '#d94848',
+      success: result => {
+        if (result.confirm) this.submitContractActionDecision(action.id, 'APPROVE', '');
+      }
+    });
+  },
+
+  async submitContractActionDecision(actionId, decision, reason) {
+    const { request } = require('../../utils/request');
+    try {
+      this.setData({ contractActionLoading: true });
+      await request({
+        url: `/bilateral-actions/${actionId}/decision`,
+        method: 'POST',
+        data: { decision, reason }
+      });
+      wx.showToast({ title: decision === 'APPROVE' ? '已确认' : '已拒绝', icon: 'success' });
+      await this.loadContractDetail();
+    } catch (error) {
+      wx.showToast({ title: error.message || '处理失败', icon: 'none' });
+    } finally {
+      this.setData({ contractActionLoading: false });
+    }
+  },
+
+  async cancelContractBilateralAction() {
+    const action = this.data.activeContractAction;
+    if (!action || !action.id || !action.canCancel || this.data.contractActionLoading) return;
+    const { request } = require('../../utils/request');
+    try {
+      this.setData({ contractActionLoading: true });
+      await request({ url: `/bilateral-actions/${action.id}/cancel`, method: 'POST', data: {} });
+      wx.showToast({ title: '申请已撤回', icon: 'success' });
+      await this.loadContractDetail();
+    } catch (error) {
+      wx.showToast({ title: error.message || '撤回失败', icon: 'none' });
+    } finally {
+      this.setData({ contractActionLoading: false });
+    }
   },
 
   async submitContractAction(action) {
@@ -483,6 +649,31 @@ Page({
     }
   },
 
+  deleteLogisticsDocument(e) {
+    const document = e.currentTarget.dataset.document;
+    if (!document || !document.id || !document.canDelete) return;
+    wx.showModal({
+      title: '删除物流单',
+      content: `确定删除“${document.originalName}”吗？删除后双方列表中都不再显示。`,
+      confirmText: '确认删除',
+      confirmColor: '#d94848',
+      success: result => {
+        if (result.confirm) this.submitDeleteLogistics(document.id);
+      }
+    });
+  },
+
+  async submitDeleteLogistics(id) {
+    const { request } = require('../../utils/request');
+    try {
+      await request({ url: `/logistics-documents/${id}/delete`, method: 'POST', data: {} });
+      wx.showToast({ title: '物流单已删除', icon: 'success' });
+      await this.loadFulfillmentData();
+    } catch (error) {
+      wx.showToast({ title: error.message || '删除失败', icon: 'none' });
+    }
+  },
+
   formatFileSize(size) {
     const bytes = Number(size || 0);
     if (bytes < 1024) return `${bytes}B`;
@@ -572,6 +763,10 @@ Page({
   },
 
   openMemoEditor() {
+    if (this.data.contractReadOnly) {
+      wx.showToast({ title: '合同当前仅允许查看', icon: 'none' });
+      return;
+    }
     this.setData({ showMemoEditor: true, memoDraft: this.data.personalMemo });
   },
 
@@ -581,7 +776,7 @@ Page({
   },
 
   async saveContractMemo() {
-    if (this.data.memoSaving) return;
+    if (this.data.memoSaving || this.data.contractReadOnly) return;
     const { request } = require('../../utils/request');
     try {
       this.setData({ memoSaving: true });
@@ -903,6 +1098,97 @@ Page({
     } finally {
       this.setData({ attachmentLoading: false });
     }
+  },
+
+  withdrawAttachment(e) {
+    const attachment = e.currentTarget.dataset.attachment;
+    if (!attachment || !attachment.canWithdraw) return;
+    wx.showModal({
+      title: '撤回待确认资料',
+      content: '撤回后，对方待办将移除并保留“上传方已撤回”的处理记录。',
+      confirmText: '确认撤回',
+      success: result => {
+        if (result.confirm) this.submitAttachmentRemoval(attachment, 'withdraw');
+      }
+    });
+  },
+
+  deleteAttachment(e) {
+    const attachment = e.currentTarget.dataset.attachment;
+    if (!attachment || !attachment.canDelete) return;
+    wx.showModal({
+      title: '删除资料',
+      content: `确定删除“${attachment.originalName}”吗？`,
+      confirmText: '确认删除',
+      confirmColor: '#d94848',
+      success: result => {
+        if (result.confirm) this.submitAttachmentRemoval(attachment, 'delete');
+      }
+    });
+  },
+
+  async submitAttachmentRemoval(attachment, action) {
+    const { request } = require('../../utils/request');
+    try {
+      await request({
+        url: `/contract-attachments/${attachment.id}/${action}`,
+        method: 'POST',
+        data: {}
+      });
+      wx.showToast({ title: action === 'withdraw' ? '资料已撤回' : '资料已删除', icon: 'success' });
+      await this.loadAttachments(attachment.category);
+    } catch (error) {
+      wx.showToast({ title: error.message || '操作失败', icon: 'none' });
+    }
+  },
+
+  requestAttachmentVoid(e) {
+    const attachment = e.currentTarget.dataset.attachment;
+    if (!attachment || !attachment.canRequestVoid) return;
+    wx.showModal({
+      title: `申请作废${attachment.category === 'INVOICE' ? '发票' : '转款凭证'}`,
+      editable: true,
+      placeholderText: '请输入作废原因',
+      confirmText: '提交申请',
+      confirmColor: '#d94848',
+      success: result => {
+        if (!result.confirm) return;
+        const reason = String(result.content || '').trim();
+        if (!reason) {
+          wx.showToast({ title: '请输入作废原因', icon: 'none' });
+          return;
+        }
+        this.submitBilateralAction('ATTACHMENT', attachment.id, 'VOID', reason, false);
+      }
+    });
+  },
+
+  reviewAttachmentVoid(e) {
+    const attachment = e.currentTarget.dataset.attachment;
+    const decision = e.currentTarget.dataset.decision;
+    if (!attachment || !attachment.pendingActionId || !attachment.canReviewAction) return;
+    if (decision === 'REJECT') {
+      wx.showModal({
+        title: '拒绝作废申请', editable: true, placeholderText: '请输入拒绝原因',
+        confirmText: '确认拒绝',
+        success: result => {
+          const reason = String(result.content || '').trim();
+          if (result.confirm && reason) {
+            this.submitContractActionDecision(attachment.pendingActionId, 'REJECT', reason);
+          }
+        }
+      });
+      return;
+    }
+    wx.showModal({
+      title: '确认作废资料',
+      content: '确认后原资料保留为“已作废”，相关对账金额将生成冲销记录。',
+      confirmText: '确认作废',
+      confirmColor: '#d94848',
+      success: result => {
+        if (result.confirm) this.submitContractActionDecision(attachment.pendingActionId, 'APPROVE', '');
+      }
+    });
   },
 
   viewAttachment(e) {

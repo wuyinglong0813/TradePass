@@ -98,6 +98,16 @@ public class CollaborationController {
                 String.valueOf(body.getOrDefault("reason", ""))));
     }
 
+    @PostMapping("/contract-attachments/{id}/withdraw")
+    public ApiResponse<String> withdrawAttachment(@PathVariable Long id) {
+        return ApiResponse.ok(attachmentService.withdraw(id));
+    }
+
+    @PostMapping("/contract-attachments/{id}/delete")
+    public ApiResponse<String> deleteAttachment(@PathVariable Long id) {
+        return ApiResponse.ok(attachmentService.delete(id));
+    }
+
     @GetMapping("/contract-attachments/{id}/content")
     public ResponseEntity<byte[]> attachmentContent(@PathVariable Long id,
                                                      @RequestParam(defaultValue = "false") boolean download) {

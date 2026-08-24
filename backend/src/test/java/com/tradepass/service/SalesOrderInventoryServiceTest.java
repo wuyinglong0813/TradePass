@@ -17,6 +17,7 @@ import org.springframework.jdbc.core.ResultSetExtractor;
 import org.springframework.jdbc.core.RowMapper;
 
 import java.math.BigDecimal;
+import java.sql.ResultSet;
 import java.util.List;
 import java.util.Map;
 
@@ -27,6 +28,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -314,6 +316,58 @@ class SalesOrderInventoryServiceTest {
         verify(accessControlService).requirePermission(4L, "inventory_receive");
         verify(jdbc, atLeastOnce()).update(
                 argThat(sql -> sql.contains("inventory_amount")), any(Object[].class));
+    }
+
+    @Test
+    void returnInboundDecreasesBuyerAndIncreasesSupplierInventory() throws Exception {
+        document.setCompanyId(4L);
+        document.setRecipientCompanyId(3L);
+        document.setSupplierCompanyId(3L);
+        document.setBuyerCompanyId(4L);
+        document.setDocumentType("RETURN_ORDER");
+        document.setStatus("ISSUED");
+        document.setOutboundWarehouseId(44L);
+        contract.setStatus("ACTIVE");
+        AuthContext.set(18L, 3L);
+        when(accessControlService.hasPermission(3L, "inventory_receive")).thenReturn(true);
+
+        doReturn((Object) null).when(jdbc)
+                .query(anyString(), any(ResultSetExtractor.class), any(Object[].class));
+        doAnswer(invocation -> {
+            String sql = invocation.getArgument(0);
+            RowMapper<?> mapper = invocation.getArgument(1);
+            if (sql.contains("FROM business_document_item")) return List.of(item);
+            if (sql.contains("JOIN inventory_balance balance")) {
+                ResultSet rs = mock(ResultSet.class);
+                when(rs.getLong("product_id")).thenReturn(501L);
+                when(rs.getBigDecimal("quantity")).thenReturn(new BigDecimal("10.0000"));
+                when(rs.getBigDecimal("unit_price")).thenReturn(new BigDecimal("2.000000"));
+                when(rs.getBigDecimal("inventory_amount")).thenReturn(new BigDecimal("20.00"));
+                return List.of(mapper.mapRow(rs, 0));
+            }
+            return List.of();
+        }).when(jdbc).query(anyString(), any(RowMapper.class), any(Object[].class));
+        when(jdbc.queryForObject(anyString(), eq(Long.class), any(Object[].class)))
+                .thenAnswer(invocation -> invocation.<String>getArgument(0)
+                        .contains("bilateral_action_request") ? 0L : 1L);
+        when(jdbc.queryForObject(anyString(), eq(Long.class))).thenReturn(60L, 70L, 80L, 90L);
+        when(jdbc.queryForObject(anyString(), eq(BigDecimal.class), any(Object[].class)))
+                .thenReturn(new BigDecimal("2.0000"));
+
+        Map<String, Object> result = service.receive(
+                31L, "INBOUND", 55L, null, "签名.png", SIGNATURE);
+
+        assertThat(result).containsEntry("status", "INBOUNDED");
+        assertThat(document.getInboundWarehouseId()).isEqualTo(55L);
+        verify(jdbc).update(argThat(sql -> sql.contains("'RETURN_ORDER_OUTBOUND'")),
+                eq(4L), eq(44L), eq(501L), eq(70L),
+                eq(new BigDecimal("-2.0000")), eq(new BigDecimal("8.0000")), eq(18L));
+        verify(jdbc).update(argThat(sql -> sql.contains("INSERT INTO inventory_inbound")),
+                eq(3L), eq(55L), eq(31L), anyString(), eq(18L));
+        verify(jdbc).update(argThat(sql -> sql.contains("INSERT INTO inventory_transaction")
+                        && !sql.contains("'RETURN_ORDER_OUTBOUND'")),
+                eq(3L), eq(55L), eq(90L), eq("RETURN_ORDER_INBOUND"), eq(70L),
+                eq(new BigDecimal("2.0000")), eq(new BigDecimal("2.0000")), eq(18L));
     }
 
     @Test

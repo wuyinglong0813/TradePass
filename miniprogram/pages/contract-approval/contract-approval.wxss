@@ -69,3 +69,4 @@ page { background: #f4f8fd; }
 .empty-hint { align-items: center; display: flex; flex-direction: column; padding: 90rpx 24rpx; }
 .empty-hint image { height: 104rpx; opacity: .75; width: 104rpx; }
 .empty-title { color: #7e8b98; font-size: 24rpx; margin-top: 18rpx; }
+.action-reason { background: #fff8e8; border-radius: 10rpx; color: #80601d; font-size: 21rpx; line-height: 1.55; margin: 14rpx 0; padding: 12rpx 15rpx; }

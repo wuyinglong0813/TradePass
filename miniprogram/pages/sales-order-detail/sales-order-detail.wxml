@@ -7,12 +7,12 @@
       <view class="hero-row"><view>{{detail.companyName}} → {{detail.counterpartyName}}</view><view class="status {{detail.status === 'DRAFT' ? 'draft' : (detail.status === 'REJECTED' ? 'rejected' : '')}}">{{detail.statusText}}</view></view>
     </view>
 
-    <view class="memo-summary" bindtap="openMemoEditor">
+    <view class="memo-summary {{detail.contractReadOnly ? 'readonly' : ''}}" bindtap="openMemoEditor">
       <view class="memo-summary-icon">记</view>
       <view class="memo-summary-body">
         <view class="memo-summary-head"><text>我的进展</text><text wx:if="{{memoUpdatedAt}}">{{memoUpdatedAt}}</text></view>
         <view class="memo-summary-text {{memo ? '' : 'empty'}}">{{memoPreview}}</view>
-        <view class="memo-summary-private">仅当前账号可见</view>
+        <view class="memo-summary-private">{{detail.contractReadOnly ? '合同当前只读，不可修改' : '仅当前账号可见'}}</view>
       </view>
       <view class="memo-summary-arrow">›</view>
     </view>
@@ -26,8 +26,23 @@
       <view class="draft-actions">
         <button wx:if="{{detail.canEditDraft}}" class="secondary" bindtap="openDraftEditor">编辑草稿</button>
         <button wx:if="{{detail.canPublish}}" class="primary" loading="{{publishing}}" disabled="{{publishing}}" bindtap="publishDraft">提交给对方确认</button>
-        <button wx:if="{{detail.canDeleteDraft}}" class="danger" loading="{{deleting}}" disabled="{{deleting}}" bindtap="deleteDraft">删除草稿</button>
+        <button wx:if="{{detail.canDeleteDraft}}" class="danger" loading="{{deleting}}" disabled="{{deleting}}" bindtap="deleteDraft">删除{{detail.status === 'REJECTED' ? '已驳回单据' : '草稿'}}</button>
       </view>
+    </view>
+
+    <view class="action-notice" wx:if="{{activeAction}}">
+      <view class="action-notice-title">{{documentLabel}}作废申请待处理</view>
+      <view>原因：{{activeAction.reason}}</view>
+      <view class="draft-actions" wx:if="{{activeAction.canReview}}">
+        <button class="secondary" data-decision="REJECT" bindtap="reviewDocumentVoid">拒绝</button>
+        <button class="danger" data-decision="APPROVE" bindtap="reviewDocumentVoid">确认作废</button>
+      </view>
+      <view class="draft-actions" wx:if="{{activeAction.canCancel}}"><button class="secondary" bindtap="cancelDocumentVoid">撤回申请</button></view>
+    </view>
+
+    <view class="draft-actions standalone" wx:if="{{detail.canWithdraw || detail.canRequestVoid}}">
+      <button wx:if="{{detail.canWithdraw}}" class="secondary" loading="{{actionLoading}}" bindtap="withdrawDocument">撤回待确认单据</button>
+      <button wx:if="{{detail.canRequestVoid}}" class="danger" loading="{{actionLoading}}" bindtap="requestDocumentVoid">申请作废</button>
     </view>
 
     <view class="card summary-card">
@@ -50,7 +65,7 @@
 
     <view class="receive-card" wx:if="{{detail.canReceive || detail.canInbound || detail.canReject}}">
       <view class="receive-title">{{documentLabel}}确认</view>
-      <view class="receive-tip">首次通过需要当前用户手写签名；通过后{{isReturnOrder ? '以负数冲减双方对账' : '正式进入双方对账'}}，也可以直接形成入库记录。</view>
+      <view class="receive-tip">首次通过需要当前用户手写签名；通过后{{isReturnOrder ? '退货方库存减少、供方库存增加，并以负数冲减双方对账' : '正式进入双方对账'}}。</view>
       <view class="receive-actions">
         <button wx:if="{{detail.canReject}}" class="secondary" loading="{{receiving}}" disabled="{{receiving}}" bindtap="rejectSalesOrder">驳回</button>
         <button wx:if="{{detail.canReceive}}" class="secondary" loading="{{receiving}}" disabled="{{receiving}}" bindtap="receiveOnly">通过，暂不入库</button>
@@ -59,6 +74,7 @@
     </view>
     <view class="done-tip" wx:if="{{detail.status === 'ACKNOWLEDGED'}}">该{{documentLabel}}已通过并更新对账，{{detail.canInbound ? '可选择仓库完成入库' : '等待合同供方完成入库'}}</view>
     <view class="done-tip" wx:if="{{detail.status === 'INBOUNDED'}}">该{{documentLabel}}已通过、更新对账并完成入库</view>
+    <view class="done-tip voided" wx:if="{{detail.status === 'VOIDED'}}">该{{documentLabel}}已作废，原记录仅供查看</view>
   </block>
 
   <view class="memo-mask" wx:if="{{showMemoEditor}}" bindtap="closeMemoEditor">

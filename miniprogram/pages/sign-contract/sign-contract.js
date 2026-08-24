@@ -564,7 +564,10 @@ Page({
     const maxLeft = 100 - this.data.tableScrollbarThumbWidth;
     const left = Math.max(0, Math.min(maxLeft,
       (scrollLeft / maxScroll) * maxLeft));
-    this.setData({ tableScrollbarThumbLeft: left });
+    this.setData({
+      tableScrollLeft: scrollLeft,
+      tableScrollbarThumbLeft: left
+    });
   },
 
   onTableScrollbarTouchStart(e) {

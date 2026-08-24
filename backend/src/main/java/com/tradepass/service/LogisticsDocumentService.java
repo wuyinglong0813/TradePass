@@ -28,6 +28,7 @@ public class LogisticsDocumentService {
     private final AuditLogService auditLogService;
     private final ObjectStorageService objectStorageService;
     private final StorageProperties storageProperties;
+    private BilateralActionService bilateralActionService;
 
     @Autowired
     public LogisticsDocumentService(LogisticsDocumentMapper documentMapper,
@@ -51,10 +52,18 @@ public class LogisticsDocumentService {
         this(documentMapper, contractMapper, accessControlService, auditLogService, null, null);
     }
 
+    @Autowired
+    void setBilateralActionService(BilateralActionService bilateralActionService) {
+        this.bilateralActionService = bilateralActionService;
+    }
+
     public List<Map<String, Object>> listDocuments(Long contractId) {
         long companyId = AuthContext.requireCompanyId();
         accessControlService.requireAnyPermission(companyId, "contract_view", "contract_sign");
-        requireContractParty(contractId, companyId);
+        TradeContract contract = requireContractParty(contractId, companyId);
+        boolean contractReadOnly = bilateralActionService != null
+                ? bilateralActionService.isContractReadOnly(contract)
+                : "COMPLETED".equals(contract.getStatus()) || "VOIDED".equals(contract.getStatus());
         return documentMapper.selectList(new LambdaQueryWrapper<LogisticsDocument>()
                         .select(LogisticsDocument::getId,
                                 LogisticsDocument::getCompanyId,
@@ -65,10 +74,11 @@ public class LogisticsDocumentService {
                                 LogisticsDocument::getCreatedBy,
                                 LogisticsDocument::getCreatedAt)
                         .eq(LogisticsDocument::getContractId, contractId)
+                        .isNull(LogisticsDocument::getDeletedAt)
                         .orderByDesc(LogisticsDocument::getCreatedAt)
                         .orderByDesc(LogisticsDocument::getId))
                 .stream()
-                .map(this::documentView)
+                .map(document -> documentView(document, contractReadOnly))
                 .toList();
     }
 
@@ -76,7 +86,8 @@ public class LogisticsDocumentService {
     public Map<String, Object> upload(Long contractId, String originalName, byte[] imageData) {
         long companyId = AuthContext.requireCompanyId();
         accessControlService.requireAnyPermission(companyId, "contract_sign", "order_create");
-        requireContractParty(contractId, companyId);
+        TradeContract contract = requireContractParty(contractId, companyId);
+        requireContractMutable(contract);
         if (imageData == null || imageData.length == 0) {
             throw new BusinessException("请选择物流单图片");
         }
@@ -121,7 +132,7 @@ public class LogisticsDocumentService {
         long companyId = AuthContext.requireCompanyId();
         accessControlService.requireAnyPermission(companyId, "contract_view", "contract_sign");
         LogisticsDocument document = documentMapper.selectById(id);
-        if (document == null) {
+        if (document == null || document.getDeletedAt() != null) {
             throw new BusinessException("物流单图片不存在");
         }
         requireContractParty(document.getContractId(), companyId);
@@ -135,6 +146,26 @@ public class LogisticsDocumentService {
                     document.getFileSize(), document.getSha256())));
         }
         return document;
+    }
+
+    @Transactional
+    public String delete(Long id) {
+        long companyId = AuthContext.requireCompanyId();
+        accessControlService.requireAnyPermission(companyId, "contract_sign", "order_create");
+        LogisticsDocument document = documentMapper.selectById(id);
+        if (document == null || document.getDeletedAt() != null
+                || !Long.valueOf(companyId).equals(document.getCompanyId())
+                || !Long.valueOf(AuthContext.userId()).equals(document.getCreatedBy())) {
+            throw new BusinessException("仅上传人可以删除物流单");
+        }
+        TradeContract contract = requireContractParty(document.getContractId(), companyId);
+        requireContractMutable(contract);
+        document.setDeletedBy(AuthContext.userId());
+        document.setDeletedAt(java.time.LocalDateTime.now());
+        documentMapper.updateById(document);
+        auditLogService.log(companyId, "LOGISTICS_DOCUMENT", id, "DELETE",
+                "删除合同物流单图片 " + document.getOriginalName());
+        return "物流单已删除";
     }
 
     private ObjectStorageService.StoredObject store(long companyId, Long contractId, String contentType,
@@ -165,7 +196,19 @@ public class LogisticsDocumentService {
         return contract;
     }
 
+    private void requireContractMutable(TradeContract contract) {
+        if (bilateralActionService != null) {
+            bilateralActionService.requireContractMutable(contract);
+        } else if ("COMPLETED".equals(contract.getStatus()) || "VOIDED".equals(contract.getStatus())) {
+            throw new BusinessException("合同已结束或作废，仅允许查看");
+        }
+    }
+
     private Map<String, Object> documentView(LogisticsDocument document) {
+        return documentView(document, false);
+    }
+
+    private Map<String, Object> documentView(LogisticsDocument document, boolean contractReadOnly) {
         Map<String, Object> view = new LinkedHashMap<>();
         view.put("id", document.getId());
         view.put("contractId", document.getContractId());
@@ -173,6 +216,10 @@ public class LogisticsDocumentService {
         view.put("originalName", document.getOriginalName());
         view.put("contentType", document.getContentType());
         view.put("fileSize", document.getFileSize());
+        view.put("contractReadOnly", contractReadOnly);
+        view.put("canDelete", !contractReadOnly
+                && Long.valueOf(AuthContext.requireCompanyId()).equals(document.getCompanyId())
+                && Long.valueOf(AuthContext.userId()).equals(document.getCreatedBy()));
         view.put("createdAt", document.getCreatedAt());
         return view;
     }

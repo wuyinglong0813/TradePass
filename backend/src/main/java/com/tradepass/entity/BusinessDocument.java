@@ -26,6 +26,8 @@ public class BusinessDocument {
     private Long acknowledgedBy;
     private LocalDateTime acknowledgedAt;
     private String rejectedReason;
+    private Long outboundWarehouseId;
+    private Long inboundWarehouseId;
     private Long deletedBy;
     private LocalDateTime deletedAt;
     private LocalDateTime createdAt;
@@ -64,6 +66,10 @@ public class BusinessDocument {
     public void setAcknowledgedAt(LocalDateTime acknowledgedAt) { this.acknowledgedAt = acknowledgedAt; }
     public String getRejectedReason() { return rejectedReason; }
     public void setRejectedReason(String rejectedReason) { this.rejectedReason = rejectedReason; }
+    public Long getOutboundWarehouseId() { return outboundWarehouseId; }
+    public void setOutboundWarehouseId(Long outboundWarehouseId) { this.outboundWarehouseId = outboundWarehouseId; }
+    public Long getInboundWarehouseId() { return inboundWarehouseId; }
+    public void setInboundWarehouseId(Long inboundWarehouseId) { this.inboundWarehouseId = inboundWarehouseId; }
     public Long getDeletedBy() { return deletedBy; }
     public void setDeletedBy(Long deletedBy) { this.deletedBy = deletedBy; }
     public LocalDateTime getDeletedAt() { return deletedAt; }

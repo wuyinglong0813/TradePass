@@ -20,6 +20,7 @@ function resultIcon(type) {
   if (type === 'SALES_ORDER') return '销';
   if (type === 'RETURN_ORDER') return '退';
   if (type === 'INVOICE') return '票';
+  if (type === 'BILATERAL_ACTION') return '废';
   return '款';
 }
 
@@ -85,9 +86,10 @@ Page({
         companyName: item.sourceCompanyName || '往来公司',
         amountText: item.amount == null ? '' : money(item.amount),
         dateText: item.businessDate || String(item.createdAt || '').substring(0, 10),
-        iconText: item.approvalType === 'SALES_ORDER' ? '销'
+        iconText: item.approvalType === 'BILATERAL_ACTION' ? '审'
+          : (item.approvalType === 'SALES_ORDER' ? '销'
           : (item.approvalType === 'RETURN_ORDER' ? '退'
-            : (item.approvalType === 'INVOICE' ? '票' : '款')),
+            : (item.approvalType === 'INVOICE' ? '票' : '款'))),
         typeClass: String(item.approvalType || '').toLowerCase()
       }));
       const results = (resultList || []).map(item => ({
@@ -286,6 +288,55 @@ Page({
     if (!item) return;
     if (item.approvalType === 'SALES_ORDER' || item.approvalType === 'RETURN_ORDER') {
       wx.navigateTo({ url: `/pages/sales-order-detail/sales-order-detail?id=${item.id}` });
+    } else if (item.approvalType === 'BILATERAL_ACTION') {
+      if (item.bizType === 'BUSINESS_DOCUMENT') {
+        wx.navigateTo({ url: `/pages/sales-order-detail/sales-order-detail?id=${item.bizId}` });
+      } else {
+        wx.navigateTo({ url: `/pages/contract-preview/contract-preview?contractId=${item.contractId}` });
+      }
+    }
+  },
+
+  reviewBilateralAction(e) {
+    const item = e.currentTarget.dataset.item;
+    const decision = e.currentTarget.dataset.decision;
+    if (!item || !item.actionId) return;
+    if (decision === 'REJECT') {
+      wx.showModal({
+        title: `拒绝${item.typeText}申请`, editable: true,
+        placeholderText: '请输入拒绝原因', confirmText: '确认拒绝',
+        success: result => {
+          const reason = String(result.content || '').trim();
+          if (result.confirm && reason) this.submitBilateralDecision(item, 'REJECT', reason);
+        }
+      });
+      return;
+    }
+    wx.showModal({
+      title: `确认${item.typeText}`,
+      content: item.actionType === 'END'
+        ? '确认后合同及履约资料永久只读，不能恢复。'
+        : '确认后将保留原记录并冲销相关对账和库存影响。',
+      confirmText: '确认同意', confirmColor: '#d94848',
+      success: result => {
+        if (result.confirm) this.submitBilateralDecision(item, 'APPROVE', '');
+      }
+    });
+  },
+
+  async submitBilateralDecision(item, decision, reason) {
+    try {
+      wx.showLoading({ title: '处理中...' });
+      await request({
+        url: `/bilateral-actions/${item.actionId}/decision`,
+        method: 'POST', data: { decision, reason }
+      });
+      wx.showToast({ title: decision === 'APPROVE' ? '已确认' : '已拒绝', icon: 'success' });
+      await this.loadPending();
+    } catch (error) {
+      wx.showToast({ title: error.message || '处理失败', icon: 'none' });
+    } finally {
+      wx.hideLoading();
     }
   },
 

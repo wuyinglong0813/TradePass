@@ -185,6 +185,42 @@ public class ReconciliationAccountService {
                 issuerCompanyId, approvedBy, approvedAt);
     }
 
+    /**
+     * 以追加负数流水的方式冲销已确认业务，原对账记录始终保留。
+     */
+    public void reverseSource(String sourceType, long sourceId, long actionRequestId,
+                              long approvedBy, LocalDateTime approvedAt) {
+        List<ReversalSource> sources = jdbc.query("""
+                        SELECT id, company_a_id, company_b_id, contract_id, source_type,
+                               business_date, document_no, amount, supplier_company_id,
+                               buyer_company_id, issuer_company_id
+                        FROM reconciliation_entry
+                        WHERE source_type = ? AND source_id = ? AND reversal_of_id IS NULL
+                        LIMIT 1
+                        """, (rs, rowNum) -> new ReversalSource(
+                        rs.getLong("id"), rs.getLong("company_a_id"), rs.getLong("company_b_id"),
+                        rs.getLong("contract_id"), rs.getString("source_type"),
+                        rs.getObject("business_date", LocalDate.class), rs.getString("document_no"),
+                        rs.getBigDecimal("amount"), rs.getLong("supplier_company_id"),
+                        rs.getLong("buyer_company_id"), rs.getLong("issuer_company_id")),
+                sourceType, sourceId);
+        if (sources.isEmpty()) return;
+        ReversalSource source = sources.get(0);
+        jdbc.update("""
+                INSERT INTO reconciliation_entry
+                (company_a_id, company_b_id, contract_id, source_type, source_id,
+                 business_date, document_no, amount, supplier_company_id, buyer_company_id,
+                 issuer_company_id, approved_by, approved_at, reversal_of_id, action_request_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE reversal_of_id = VALUES(reversal_of_id)
+                """, source.companyAId(), source.companyBId(), source.contractId(),
+                source.sourceType() + "_VOID", actionRequestId, source.businessDate(),
+                safe(source.documentNo()) + "（作废冲销）", source.amount().negate(),
+                source.supplierCompanyId(), source.buyerCompanyId(), source.issuerCompanyId(),
+                approvedBy, approvedAt == null ? LocalDateTime.now() : approvedAt,
+                source.id(), actionRequestId);
+    }
+
     private void insertEntry(long leftCompanyId, long rightCompanyId, Long contractId,
                              String sourceType, Long sourceId, LocalDate businessDate,
                              String documentNo, BigDecimal amount, long supplierCompanyId,
@@ -243,13 +279,14 @@ public class ReconciliationAccountService {
         List<Map<String, Object>> detail = new ArrayList<>();
         for (Entry entry : entries) {
             boolean mySale = entry.supplierCompanyId() == companyId;
-            if (SALES_ORDER.equals(entry.sourceType()) || RETURN_ORDER.equals(entry.sourceType())) {
+            String sourceType = baseSourceType(entry.sourceType());
+            if (SALES_ORDER.equals(sourceType) || RETURN_ORDER.equals(sourceType)) {
                 if (mySale) mySales = mySales.add(entry.amount());
                 else myPurchases = myPurchases.add(entry.amount());
-            } else if (INVOICE.equals(entry.sourceType())) {
+            } else if (INVOICE.equals(sourceType)) {
                 if (mySale) issuedInvoices = issuedInvoices.add(entry.amount());
                 else receivedInvoices = receivedInvoices.add(entry.amount());
-            } else if (PAYMENT_VOUCHER.equals(entry.sourceType())) {
+            } else if (PAYMENT_VOUCHER.equals(sourceType)) {
                 if (mySale) receivedPayments = receivedPayments.add(entry.amount());
                 else paidPayments = paidPayments.add(entry.amount());
             }
@@ -278,11 +315,13 @@ public class ReconciliationAccountService {
 
     private Map<String, Object> entryView(Entry entry, boolean mySale) {
         Map<String, Object> view = new LinkedHashMap<>();
+        String sourceType = baseSourceType(entry.sourceType());
+        boolean reversal = !sourceType.equals(entry.sourceType());
         view.put("id", entry.id());
         view.put("contractId", entry.contractId());
         view.put("contractNo", safe(entry.contractNo()));
         view.put("sourceType", entry.sourceType());
-        view.put("sourceTypeText", switch (entry.sourceType()) {
+        view.put("sourceTypeText", (reversal ? "作废冲销 · " : "") + switch (sourceType) {
             case SALES_ORDER -> "销售单";
             case RETURN_ORDER -> "退货单";
             case PAYMENT_VOUCHER -> "转款凭证";
@@ -297,6 +336,11 @@ public class ReconciliationAccountService {
         view.put("directionText", mySale ? "我方销售" : "我方采购");
         view.put("approvedAt", entry.approvedAt());
         return view;
+    }
+
+    private static String baseSourceType(String sourceType) {
+        return sourceType != null && sourceType.endsWith("_VOID")
+                ? sourceType.substring(0, sourceType.length() - 5) : sourceType;
     }
 
     private void requireRelation(long companyId, Long counterpartyCompanyId) {
@@ -334,8 +378,8 @@ public class ReconciliationAccountService {
             for (ContractAccount contract : contracts) {
                 List<WorkbookEntry> entries = entriesByContract.getOrDefault(contract.id(), List.of());
                 List<WorkbookEntry> sales = entries.stream()
-                        .filter(entry -> SALES_ORDER.equals(entry.sourceType())
-                                || RETURN_ORDER.equals(entry.sourceType()))
+                        .filter(entry -> SALES_ORDER.equals(baseSourceType(entry.sourceType()))
+                                || RETURN_ORDER.equals(baseSourceType(entry.sourceType())))
                         .toList();
                 List<WorkbookEntry> payments = entriesOfType(entries, PAYMENT_VOUCHER);
                 List<WorkbookEntry> invoices = entriesOfType(entries, INVOICE);
@@ -389,15 +433,16 @@ public class ReconciliationAccountService {
         int payments = 0;
         int invoices = 0;
         for (WorkbookEntry entry : entries) {
-            if (SALES_ORDER.equals(entry.sourceType()) || RETURN_ORDER.equals(entry.sourceType())) sales++;
-            else if (PAYMENT_VOUCHER.equals(entry.sourceType())) payments++;
-            else if (INVOICE.equals(entry.sourceType())) invoices++;
+            String sourceType = baseSourceType(entry.sourceType());
+            if (SALES_ORDER.equals(sourceType) || RETURN_ORDER.equals(sourceType)) sales++;
+            else if (PAYMENT_VOUCHER.equals(sourceType)) payments++;
+            else if (INVOICE.equals(sourceType)) invoices++;
         }
         return Math.max(1, Math.max(sales, Math.max(payments, invoices)));
     }
 
     private List<WorkbookEntry> entriesOfType(List<WorkbookEntry> entries, String sourceType) {
-        return entries.stream().filter(entry -> sourceType.equals(entry.sourceType())).toList();
+        return entries.stream().filter(entry -> sourceType.equals(baseSourceType(entry.sourceType()))).toList();
     }
 
     private void clearDataRows(Sheet sheet, int startRow, int endRow) {
@@ -453,6 +498,12 @@ public class ReconciliationAccountService {
                          LocalDate businessDate, String documentNo, BigDecimal amount,
                          long supplierCompanyId, long buyerCompanyId, long issuerCompanyId,
                          LocalDateTime approvedAt, String contractNo) {
+    }
+
+    private record ReversalSource(long id, long companyAId, long companyBId, long contractId,
+                                  String sourceType, LocalDate businessDate, String documentNo,
+                                  BigDecimal amount, long supplierCompanyId, long buyerCompanyId,
+                                  long issuerCompanyId) {
     }
 
     record ContractAccount(Long id, String contractNo, BigDecimal amount, LocalDate date) {

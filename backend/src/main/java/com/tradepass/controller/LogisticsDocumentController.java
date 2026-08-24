@@ -87,6 +87,11 @@ public class LogisticsDocumentController {
                 document.getOriginalName(), document.getContentType(), document.getImageData()));
     }
 
+    @PostMapping("/logistics-documents/{id}/delete")
+    public ApiResponse<String> delete(@PathVariable Long id) {
+        return ApiResponse.ok(logisticsDocumentService.delete(id));
+    }
+
     private byte[] decodeBase64(Object value) {
         try {
             return Base64.getDecoder().decode(value == null ? "" : String.valueOf(value));

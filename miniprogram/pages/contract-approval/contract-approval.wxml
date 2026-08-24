@@ -102,8 +102,14 @@
             </view>
             <view class="pending-badge">待确认</view>
           </view>
+          <view class="action-reason" wx:if="{{document.approvalType === 'BILATERAL_ACTION'}}">申请原因：{{document.reason}}</view>
           <view class="card-actions single" wx:if="{{document.approvalType === 'SALES_ORDER' || document.approvalType === 'RETURN_ORDER'}}">
             <button class="action primary" data-item="{{document}}" catchtap="openFulfillment">查看并确认</button>
+          </view>
+          <view class="card-actions" wx:elif="{{document.approvalType === 'BILATERAL_ACTION'}}">
+            <button class="action ghost" data-item="{{document}}" catchtap="openFulfillment">查看业务</button>
+            <button class="action reject" data-item="{{document}}" data-decision="REJECT" catchtap="reviewBilateralAction">拒绝</button>
+            <button class="action primary" data-item="{{document}}" data-decision="APPROVE" catchtap="reviewBilateralAction">确认{{document.actionType === 'END' ? '结束' : '作废'}}</button>
           </view>
           <view class="card-actions" wx:else>
             <button class="action ghost" data-item="{{document}}" catchtap="viewAttachment">查看资料</button>

@@ -36,7 +36,9 @@ Page({
     signatureWarehouseId: '',
     signatureSignerName: '',
     signatureActionText: '确认签字并通过',
-    loading: false
+    loading: false,
+    activeAction: null,
+    actionLoading: false
   },
 
   onLoad(options) {
@@ -55,10 +57,13 @@ Page({
     if (!this.data.id || this.data.loading) return;
     this.setData({ loading: true });
     try {
-      const [detail, memo, warehouses] = await Promise.all([
+      const [detail, memo, warehouses, activeAction] = await Promise.all([
         request({ url: `/trade-documents/${this.data.id}` }),
         request({ url: `/trade-documents/${this.data.id}/memo` }),
-        request({ url: '/warehouses' }).catch(() => [])
+        request({ url: '/warehouses' }).catch(() => []),
+        request({
+          url: `/bilateral-actions/active?bizType=BUSINESS_DOCUMENT&bizId=${this.data.id}`
+        }).catch(() => ({}))
       ]);
       const content = (detail && detail.content) || {};
       const isReturnOrder = detail.documentType === 'RETURN_ORDER';
@@ -79,6 +84,7 @@ Page({
         isReturnOrder,
         items: detail.items || [],
         warehouses: warehouses || [],
+        activeAction: activeAction && activeAction.id ? activeAction : null,
         memo: (memo && memo.content) || '',
         memoDraft: (memo && memo.content) || '',
         memoPreview: this.memoPreviewText((memo && memo.content) || ''),
@@ -103,6 +109,10 @@ Page({
   },
 
   openMemoEditor() {
+    if (this.data.detail && this.data.detail.contractReadOnly) {
+      wx.showToast({ title: '合同当前仅允许查看', icon: 'none' });
+      return;
+    }
     this.setData({ showMemoEditor: true, memoDraft: this.data.memo });
   },
 
@@ -112,7 +122,7 @@ Page({
   },
 
   async saveMemo() {
-    if (this.data.memoSaving) return;
+    if (this.data.memoSaving || (this.data.detail && this.data.detail.contractReadOnly)) return;
     try {
       this.setData({ memoSaving: true });
       const memo = await request({
@@ -269,12 +279,36 @@ Page({
 
   publishDraft() {
     if (!this.data.detail || !this.data.detail.canPublish || this.data.publishing) return;
+    if (this.data.isReturnOrder) {
+      this.chooseReturnWarehouseForPublish();
+      return;
+    }
+    this.confirmPublishDraft(null);
+  },
+
+  chooseReturnWarehouseForPublish() {
+    if (this.data.warehouses.length === 0) {
+      wx.showToast({ title: '请先在库存管理中创建仓库', icon: 'none' });
+      return;
+    }
+    const detail = this.data.detail || {};
+    const isBuyer = String(detail.viewerCompanyId) === String(detail.buyerCompanyId);
+    wx.showActionSheet({
+      itemList: this.data.warehouses.map(item => `${item.name}（${isBuyer ? '退货出库' : '退货入库'}）`),
+      success: result => {
+        const warehouse = this.data.warehouses[result.tapIndex];
+        if (warehouse) this.confirmPublishDraft(warehouse.id);
+      }
+    });
+  },
+
+  confirmPublishDraft(warehouseId) {
     wx.showModal({
       title: `提交${this.data.documentLabel}确认`,
-      content: `提交后将等待对方确认；通过后${this.data.isReturnOrder ? '按负数冲减' : '自动更新'}双方对账。`,
+      content: `提交后将等待对方确认；通过后${this.data.isReturnOrder ? '退货方库存减少、供方库存增加，并冲减' : '自动更新'}双方对账。`,
       confirmText: '提交确认',
       success: result => {
-        if (result.confirm) this.submitPublishDraft();
+        if (result.confirm) this.submitPublishDraft(warehouseId);
       }
     });
   },
@@ -282,8 +316,8 @@ Page({
   deleteDraft() {
     if (!this.data.detail || !this.data.detail.canDeleteDraft || this.data.deleting) return;
     wx.showModal({
-      title: `删除${this.data.documentLabel}草稿`,
-      content: `确定删除草稿“${this.data.documentNo}”吗？草稿尚未发送给对方，删除后无法恢复。`,
+      title: `删除${this.data.documentLabel}`,
+      content: `确定删除“${this.data.documentNo}”吗？删除后无法恢复。`,
       confirmText: '确认删除',
       confirmColor: '#d94848',
       success: result => {
@@ -296,7 +330,7 @@ Page({
     try {
       this.setData({ deleting: true });
       await request({ url: `/trade-documents/${this.data.id}/delete`, method: 'POST', data: {} });
-      wx.showToast({ title: '草稿已删除', icon: 'success' });
+      wx.showToast({ title: '单据已删除', icon: 'success' });
       setTimeout(() => wx.navigateBack({ delta: 1 }), 500);
     } catch (error) {
       wx.showToast({ title: error.message || '删除失败', icon: 'none' });
@@ -305,10 +339,133 @@ Page({
     }
   },
 
-  async submitPublishDraft() {
+  withdrawDocument() {
+    if (!this.data.detail || !this.data.detail.canWithdraw || this.data.actionLoading) return;
+    wx.showModal({
+      title: `撤回${this.data.documentLabel}`,
+      content: '撤回后对方待办会移除，并保留“发起方已撤回”的处理记录。',
+      confirmText: '确认撤回',
+      success: result => {
+        if (result.confirm) this.submitWithdrawDocument();
+      }
+    });
+  },
+
+  async submitWithdrawDocument() {
+    try {
+      this.setData({ actionLoading: true });
+      await request({ url: `/trade-documents/${this.data.id}/withdraw`, method: 'POST', data: {} });
+      wx.showToast({ title: '单据已撤回', icon: 'success' });
+      setTimeout(() => wx.navigateBack({ delta: 1 }), 500);
+    } catch (error) {
+      wx.showToast({ title: error.message || '撤回失败', icon: 'none' });
+    } finally {
+      this.setData({ actionLoading: false });
+    }
+  },
+
+  requestDocumentVoid() {
+    if (!this.data.detail || !this.data.detail.canRequestVoid || this.data.actionLoading) return;
+    wx.showModal({
+      title: `申请作废${this.data.documentLabel}`,
+      editable: true,
+      placeholderText: '请输入作废原因',
+      confirmText: '提交申请',
+      confirmColor: '#d94848',
+      success: result => {
+        if (!result.confirm) return;
+        const reason = String(result.content || '').trim();
+        if (!reason) {
+          wx.showToast({ title: '请输入作废原因', icon: 'none' });
+          return;
+        }
+        this.submitDocumentVoidRequest(reason);
+      }
+    });
+  },
+
+  async submitDocumentVoidRequest(reason) {
+    try {
+      this.setData({ actionLoading: true });
+      await request({
+        url: '/bilateral-actions', method: 'POST',
+        data: { bizType: 'BUSINESS_DOCUMENT', bizId: this.data.id,
+          actionType: 'VOID', reason, riskConfirmed: false }
+      });
+      wx.showToast({ title: '作废申请已提交', icon: 'success' });
+      await this.loadAll();
+    } catch (error) {
+      wx.showToast({ title: error.message || '申请失败', icon: 'none' });
+    } finally {
+      this.setData({ actionLoading: false });
+    }
+  },
+
+  reviewDocumentVoid(e) {
+    const decision = e.currentTarget.dataset.decision;
+    const action = this.data.activeAction;
+    if (!action || !action.id || !action.canReview) return;
+    if (decision === 'REJECT') {
+      wx.showModal({
+        title: '拒绝作废申请', editable: true, placeholderText: '请输入拒绝原因',
+        confirmText: '确认拒绝',
+        success: result => {
+          const reason = String(result.content || '').trim();
+          if (result.confirm && reason) this.submitDocumentActionDecision('REJECT', reason);
+        }
+      });
+      return;
+    }
+    wx.showModal({
+      title: `确认作废${this.data.documentLabel}`,
+      content: '确认后将冲销对账和已产生的库存流水，原记录仍保留为已作废。',
+      confirmText: '确认作废', confirmColor: '#d94848',
+      success: result => {
+        if (result.confirm) this.submitDocumentActionDecision('APPROVE', '');
+      }
+    });
+  },
+
+  async submitDocumentActionDecision(decision, reason) {
+    const action = this.data.activeAction;
+    if (!action || !action.id || this.data.actionLoading) return;
+    try {
+      this.setData({ actionLoading: true });
+      await request({
+        url: `/bilateral-actions/${action.id}/decision`, method: 'POST', data: { decision, reason }
+      });
+      wx.showToast({ title: decision === 'APPROVE' ? '已作废' : '已拒绝', icon: 'success' });
+      await this.loadAll();
+    } catch (error) {
+      wx.showToast({ title: error.message || '处理失败', icon: 'none' });
+    } finally {
+      this.setData({ actionLoading: false });
+    }
+  },
+
+  async cancelDocumentVoid() {
+    const action = this.data.activeAction;
+    if (!action || !action.id || !action.canCancel || this.data.actionLoading) return;
+    try {
+      this.setData({ actionLoading: true });
+      await request({ url: `/bilateral-actions/${action.id}/cancel`, method: 'POST', data: {} });
+      wx.showToast({ title: '申请已撤回', icon: 'success' });
+      await this.loadAll();
+    } catch (error) {
+      wx.showToast({ title: error.message || '撤回失败', icon: 'none' });
+    } finally {
+      this.setData({ actionLoading: false });
+    }
+  },
+
+  async submitPublishDraft(warehouseId) {
     try {
       this.setData({ publishing: true });
-      await request({ url: `/trade-documents/${this.data.id}/publish`, method: 'POST', data: {} });
+      await request({
+        url: `/trade-documents/${this.data.id}/publish`,
+        method: 'POST',
+        data: { warehouseId: warehouseId || null }
+      });
       wx.showToast({ title: '已提交，等待对方确认', icon: 'success' });
       await this.loadAll();
     } catch (error) {
@@ -319,6 +476,23 @@ Page({
   },
 
   receiveOnly() {
+    const detail = this.data.detail || {};
+    const buyerConfirmingReturn = this.data.isReturnOrder
+      && String(detail.viewerCompanyId) === String(detail.buyerCompanyId);
+    if (buyerConfirmingReturn) {
+      if (this.data.warehouses.length === 0) {
+        wx.showToast({ title: '请先创建退货出库仓库', icon: 'none' });
+        return;
+      }
+      wx.showActionSheet({
+        itemList: this.data.warehouses.map(item => `${item.name}（退货出库）`),
+        success: result => {
+          const warehouse = this.data.warehouses[result.tapIndex];
+          if (warehouse) this.openSignatureEditor('RECEIVE_ONLY', warehouse.id);
+        }
+      });
+      return;
+    }
     this.openSignatureEditor('RECEIVE_ONLY');
   },
 

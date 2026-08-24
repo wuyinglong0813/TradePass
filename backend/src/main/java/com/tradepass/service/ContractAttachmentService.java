@@ -33,6 +33,7 @@ public class ContractAttachmentService {
     private final StorageProperties storageProperties;
     private final ReconciliationAccountService reconciliationAccountService;
     private ApprovalService approvalService;
+    private BilateralActionService bilateralActionService;
 
     @Autowired
     public ContractAttachmentService(JdbcTemplate jdbc,
@@ -56,6 +57,11 @@ public class ContractAttachmentService {
         this.approvalService = approvalService;
     }
 
+    @Autowired
+    void setBilateralActionService(BilateralActionService bilateralActionService) {
+        this.bilateralActionService = bilateralActionService;
+    }
+
     ContractAttachmentService(JdbcTemplate jdbc,
                               TradeContractMapper contractMapper,
                               AccessControlService accessControlService,
@@ -77,7 +83,10 @@ public class ContractAttachmentService {
         long companyId = AuthContext.requireCompanyId();
         accessControlService.requireAnyPermission(companyId,
                 "contract_view", "contract_sign", "reconciliation");
-        requireContractParty(contractId, companyId);
+        TradeContract contract = requireContractParty(contractId, companyId);
+        boolean contractReadOnly = bilateralActionService != null
+                ? bilateralActionService.isContractReadOnly(contract)
+                : "COMPLETED".equals(contract.getStatus()) || "VOIDED".equals(contract.getStatus());
         String normalized = normalizeCategory(category);
         return jdbc.query("""
                         SELECT attachment.id, attachment.contract_id, attachment.uploader_company_id,
@@ -93,6 +102,7 @@ public class ContractAttachmentService {
                         LEFT JOIN company ON company.id = attachment.uploader_company_id
                         LEFT JOIN sys_user user ON user.id = attachment.created_by
                         WHERE attachment.contract_id = ? AND attachment.category = ?
+                          AND attachment.deleted_at IS NULL
                         ORDER BY attachment.created_at DESC, attachment.id DESC
                         """, (rs, rowNum) -> {
                     Map<String, Object> view = new LinkedHashMap<>();
@@ -123,6 +133,23 @@ public class ContractAttachmentService {
                     view.put("canConfirm", canConfirm);
                     view.put("canResubmit", "REJECTED".equals(status)
                             && Long.valueOf(companyId).equals(rs.getLong("uploader_company_id")));
+                    boolean uploader = Long.valueOf(companyId).equals(rs.getLong("uploader_company_id"))
+                            && AuthContext.userId() == rs.getLong("created_by");
+                    BilateralActionService.ActionState actionState = bilateralActionService == null
+                            ? BilateralActionService.ActionState.empty()
+                            : bilateralActionService.state(companyId,
+                            BilateralActionService.ATTACHMENT, rs.getLong("id"));
+                    view.put("contractReadOnly", contractReadOnly);
+                    view.put("pendingActionId", actionState.id());
+                    view.put("pendingActionType", actionState.actionType());
+                    view.put("pendingActionReason", actionState.reason());
+                    view.put("canReviewAction", actionState.approverCompany());
+                    view.put("canCancelAction", actionState.requesterUser());
+                    view.put("canWithdraw", !contractReadOnly && uploader && "PENDING_CONFIRMATION".equals(status));
+                    view.put("canDelete", !contractReadOnly && uploader && ("REJECTED".equals(status)
+                            || (OTHER.equals(rs.getString("category")) && "APPROVED".equals(status))));
+                    view.put("canRequestVoid", !contractReadOnly && "APPROVED".equals(status)
+                            && !OTHER.equals(rs.getString("category")));
                     view.put("createdAt", rs.getTimestamp("created_at").toLocalDateTime());
                     return view;
                 }, contractId, normalized);
@@ -143,6 +170,7 @@ public class ContractAttachmentService {
         accessControlService.requireAnyPermission(companyId,
                 "contract_attachment_upload", "contract_sign", "order_create", "reconciliation");
         TradeContract contract = requireContractParty(contractId, companyId);
+        requireContractMutable(contract);
         String normalized = normalizeCategory(category);
         String contentType = FileTypeInspector.inspect(data);
         validateContentType(normalized, contentType, originalName);
@@ -206,9 +234,11 @@ public class ContractAttachmentService {
     public Map<String, Object> decide(Long id, String decision, String reason) {
         long companyId = AuthContext.requireCompanyId();
         accessControlService.requireAnyPermission(companyId,
-                "contract_attachment_upload", "reconciliation", "invoice_view");
+                "contract_attachment_upload", "contract_sign", "order_create",
+                "reconciliation", "invoice_view");
         AttachmentRecord attachment = requireAttachment(id);
-        requireContractParty(attachment.contractId(), companyId);
+        TradeContract contract = requireContractParty(attachment.contractId(), companyId);
+        requireContractMutable(contract);
         if (!Long.valueOf(companyId).equals(attachment.recipientCompanyId())) {
             throw new BusinessException("仅接收方企业可以确认该资料");
         }
@@ -252,7 +282,6 @@ public class ContractAttachmentService {
                 """, AuthContext.userId(), confirmedAt, id);
         if (updated == 0) return findView(attachment.contractId(), attachment.category(), id);
         if (reconciliationAccountService != null) {
-            TradeContract contract = requireContractParty(attachment.contractId(), companyId);
             boolean invoice = INVOICE.equals(attachment.category());
             reconciliationAccountService.recordAttachment(contract, attachment.category(), id,
                     invoice ? attachment.invoiceDate() : attachment.voucherDate(),
@@ -267,6 +296,63 @@ public class ContractAttachmentService {
                 "对方已确认" + categoryLabel(attachment.category()) + " " + attachment.originalName(),
                 null);
         return findView(attachment.contractId(), attachment.category(), id);
+    }
+
+    @Transactional
+    public String withdraw(Long id) {
+        long companyId = AuthContext.requireCompanyId();
+        accessControlService.requireAnyPermission(companyId,
+                "contract_attachment_upload", "contract_sign", "order_create",
+                "reconciliation", "invoice_view");
+        AttachmentRecord attachment = requireAttachment(id);
+        TradeContract contract = requireContractParty(attachment.contractId(), companyId);
+        requireContractMutable(contract);
+        if (!Long.valueOf(companyId).equals(attachment.uploaderCompanyId())
+                || AuthContext.userId() != attachment.createdBy()
+                || !"PENDING_CONFIRMATION".equals(attachment.status())) {
+            throw new BusinessException("仅上传人可以撤回待确认资料");
+        }
+        int updated = jdbc.update("""
+                UPDATE contract_attachment
+                SET status = 'WITHDRAWN', deleted_by = ?, deleted_at = CURRENT_TIMESTAMP
+                WHERE id = ? AND status = 'PENDING_CONFIRMATION' AND deleted_at IS NULL
+                """, AuthContext.userId(), id);
+        if (updated != 1) throw new BusinessException("资料状态已变化，请刷新后重试");
+        auditLogService.log(companyId, "CONTRACT_ATTACHMENT", id, "WITHDRAW",
+                "撤回" + categoryLabel(attachment.category()) + " " + attachment.originalName());
+        if (approvalService != null && attachment.recipientCompanyId() != null) {
+            approvalService.recordResult(attachment.recipientCompanyId(), companyId,
+                    attachment.category(), id, attachment.contractId(), "CANCELLED",
+                    categoryLabel(attachment.category()) + "已撤回",
+                    "上传方已撤回" + categoryLabel(attachment.category()) + " " + attachment.originalName(), null);
+        }
+        return categoryLabel(attachment.category()) + "已撤回";
+    }
+
+    @Transactional
+    public String delete(Long id) {
+        long companyId = AuthContext.requireCompanyId();
+        accessControlService.requireAnyPermission(companyId,
+                "contract_attachment_upload", "contract_sign", "order_create",
+                "reconciliation", "invoice_view");
+        AttachmentRecord attachment = requireAttachment(id);
+        TradeContract contract = requireContractParty(attachment.contractId(), companyId);
+        requireContractMutable(contract);
+        boolean deletableStatus = "REJECTED".equals(attachment.status())
+                || (OTHER.equals(attachment.category()) && "APPROVED".equals(attachment.status()));
+        if (!Long.valueOf(companyId).equals(attachment.uploaderCompanyId())
+                || AuthContext.userId() != attachment.createdBy() || !deletableStatus) {
+            throw new BusinessException("仅上传人可以删除已拒绝或其它资料");
+        }
+        int updated = jdbc.update("""
+                UPDATE contract_attachment
+                SET deleted_by = ?, deleted_at = CURRENT_TIMESTAMP
+                WHERE id = ? AND deleted_at IS NULL
+                """, AuthContext.userId(), id);
+        if (updated != 1) throw new BusinessException("资料已删除，请刷新列表");
+        auditLogService.log(companyId, "CONTRACT_ATTACHMENT", id, "DELETE",
+                "删除" + categoryLabel(attachment.category()) + " " + attachment.originalName());
+        return categoryLabel(attachment.category()) + "已删除";
     }
 
     private void recordAttachmentResult(AttachmentRecord attachment, long sourceCompanyId,
@@ -285,7 +371,7 @@ public class ContractAttachmentService {
         List<FilePayload> files = jdbc.query("""
                         SELECT id, contract_id, original_name, content_type, file_size, file_data, sha256,
                                storage_bucket, object_key, object_version_id
-                        FROM contract_attachment WHERE id = ?
+                        FROM contract_attachment WHERE id = ? AND deleted_at IS NULL
                         """, (rs, rowNum) -> new FilePayload(
                         rs.getLong("id"), rs.getLong("contract_id"),
                         rs.getString("original_name"), rs.getString("content_type"),
@@ -335,6 +421,14 @@ public class ContractAttachmentService {
             throw new BusinessException("合同不存在");
         }
         return contract;
+    }
+
+    private void requireContractMutable(TradeContract contract) {
+        if (bilateralActionService != null) {
+            bilateralActionService.requireContractMutable(contract);
+        } else if ("COMPLETED".equals(contract.getStatus()) || "VOIDED".equals(contract.getStatus())) {
+            throw new BusinessException("合同已结束或作废，仅允许查看");
+        }
     }
 
     private String normalizeCategory(String category) {
@@ -416,8 +510,8 @@ public class ContractAttachmentService {
         List<AttachmentRecord> rows = jdbc.query("""
                         SELECT id, contract_id, uploader_company_id, recipient_company_id,
                                category, status, original_name, voucher_date, voucher_amount,
-                               invoice_no, invoice_date, invoice_amount
-                        FROM contract_attachment WHERE id = ?
+                               invoice_no, invoice_date, invoice_amount, created_by
+                        FROM contract_attachment WHERE id = ? AND deleted_at IS NULL
                         """, (rs, rowNum) -> new AttachmentRecord(
                         rs.getLong("id"), rs.getLong("contract_id"),
                         rs.getLong("uploader_company_id"),
@@ -427,7 +521,7 @@ public class ContractAttachmentService {
                         rs.getObject("voucher_date", LocalDate.class),
                         rs.getBigDecimal("voucher_amount"), rs.getString("invoice_no"),
                         rs.getObject("invoice_date", LocalDate.class),
-                        rs.getBigDecimal("invoice_amount")), id);
+                        rs.getBigDecimal("invoice_amount"), rs.getLong("created_by")), id);
         if (rows.isEmpty()) throw new BusinessException("附件不存在");
         return rows.get(0);
     }
@@ -454,6 +548,7 @@ public class ContractAttachmentService {
         if ("PENDING_CONFIRMATION".equals(status)) return "待对方确认";
         if ("APPROVED".equals(status)) return "已通过";
         if ("REJECTED".equals(status)) return "已驳回";
+        if ("VOIDED".equals(status)) return "已作废";
         if ("LEGACY".equals(status)) return "历史资料（未计入对账）";
         return status == null ? "" : status;
     }
@@ -478,7 +573,8 @@ public class ContractAttachmentService {
                                     Long recipientCompanyId, String category, String status,
                                     String originalName, LocalDate voucherDate,
                                     BigDecimal voucherAmount, String invoiceNo,
-                                    LocalDate invoiceDate, BigDecimal invoiceAmount) {
+                                    LocalDate invoiceDate, BigDecimal invoiceAmount,
+                                    long createdBy) {
     }
 
     public record FilePayload(Long id, Long contractId, String originalName, String contentType,

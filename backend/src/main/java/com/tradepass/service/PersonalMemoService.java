@@ -60,6 +60,14 @@ public class PersonalMemoService {
     @Transactional
     public Map<String, Object> save(String type, Long bizId, String content) {
         AccessTarget target = requireTarget(type, bizId);
+        if ("COMPLETED".equals(target.contractStatus()) || "VOIDED".equals(target.contractStatus())) {
+            throw new BusinessException("合同已结束或作废，备忘录仅允许查看");
+        }
+        Long pending = jdbc.queryForObject("""
+                SELECT COUNT(1) FROM bilateral_action_request
+                WHERE contract_id = ? AND status = 'PENDING'
+                """, Long.class, target.contractId());
+        if (pending != null && pending > 0) throw new BusinessException("合同正在等待双方处理，备忘录暂不可修改");
         String value = content == null ? "" : content.trim();
         if (value.length() > 4000) throw new BusinessException("备忘录不能超过 4000 字");
         jdbc.update("""
@@ -80,7 +88,7 @@ public class PersonalMemoService {
         if (CONTRACT.equals(normalized)) {
             TradeContract contract = contractMapper.selectById(bizId);
             requireContractParty(contract, companyId);
-            return new AccessTarget(companyId, CONTRACT);
+            return new AccessTarget(companyId, CONTRACT, contract.getId(), contract.getStatus());
         }
         if (SALES_ORDER.equals(normalized) || RETURN_ORDER.equals(normalized)) {
             BusinessDocument document = documentMapper.selectById(bizId);
@@ -94,7 +102,7 @@ public class PersonalMemoService {
                     && !Long.valueOf(companyId).equals(document.getCompanyId())) {
                 throw new BusinessException("销售单不存在");
             }
-            return new AccessTarget(companyId, document.getDocumentType());
+            return new AccessTarget(companyId, document.getDocumentType(), contract.getId(), contract.getStatus());
         }
         throw new BusinessException("备忘录类型不正确");
     }
@@ -106,6 +114,6 @@ public class PersonalMemoService {
         }
     }
 
-    private record AccessTarget(long companyId, String type) {
+    private record AccessTarget(long companyId, String type, Long contractId, String contractStatus) {
     }
 }

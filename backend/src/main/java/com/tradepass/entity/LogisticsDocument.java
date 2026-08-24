@@ -24,6 +24,8 @@ public class LogisticsDocument {
     private String etag;
     private String encryptionAlgorithm;
     private Long createdBy;
+    private Long deletedBy;
+    private LocalDateTime deletedAt;
     private LocalDateTime createdAt;
 
     public Long getId() { return id; }
@@ -56,6 +58,10 @@ public class LogisticsDocument {
     public void setEncryptionAlgorithm(String encryptionAlgorithm) { this.encryptionAlgorithm = encryptionAlgorithm; }
     public Long getCreatedBy() { return createdBy; }
     public void setCreatedBy(Long createdBy) { this.createdBy = createdBy; }
+    public Long getDeletedBy() { return deletedBy; }
+    public void setDeletedBy(Long deletedBy) { this.deletedBy = deletedBy; }
+    public LocalDateTime getDeletedAt() { return deletedAt; }
+    public void setDeletedAt(LocalDateTime deletedAt) { this.deletedAt = deletedAt; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 }

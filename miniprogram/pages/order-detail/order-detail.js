@@ -132,7 +132,7 @@ Page({
       });
       const list = Array.isArray(payload) ? payload : (payload.items || []);
       if (requestSeq !== this.contractRequestSeq) return;
-      const statusMap = { ACTIVE: '履行中', PENDING: '待签署', REJECTED: '已拒绝', CANCELLED: '已撤回', COMPLETED: '已完成' };
+      const statusMap = { ACTIVE: '履行中', PENDING: '待签署', REJECTED: '已拒绝', CANCELLED: '已撤回', COMPLETED: '已结束', VOIDED: '已作废' };
       const total = list.length;
       const contracts = (list || []).map((c, index) => ({
         id: parseInt(c.id),
@@ -151,7 +151,7 @@ Page({
       }));
       const pending = contracts.filter(item => item.status === 'PENDING').length;
       const active = contracts.filter(item => item.status === 'ACTIVE').length;
-      const closed = contracts.filter(item => ['COMPLETED', 'REJECTED', 'CANCELLED'].includes(item.status)).length;
+      const closed = contracts.filter(item => ['COMPLETED', 'VOIDED', 'REJECTED', 'CANCELLED'].includes(item.status)).length;
       const totalAmount = contracts.reduce((sum, item) => sum + Number(item.amount || 0), 0);
       this.setData({
         contracts,
@@ -185,7 +185,7 @@ Page({
     const filteredContracts = key === 'ALL'
       ? this.data.contracts
       : this.data.contracts.filter(item => key === 'CLOSED'
-        ? ['COMPLETED', 'REJECTED', 'CANCELLED'].includes(item.status)
+        ? ['COMPLETED', 'VOIDED', 'REJECTED', 'CANCELLED'].includes(item.status)
         : item.status === key);
     this.setData({ activeContractFilter: key, filteredContracts });
   },

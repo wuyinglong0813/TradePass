@@ -130,6 +130,7 @@ page { background: #f4f8fd; }
 .document-meta.status-ISSUED,.document-meta.status-PENDING_CONFIRMATION { color: #b87812; font-weight: 600; }
 .document-meta.status-ACKNOWLEDGED,.document-meta.status-INBOUNDED,.document-meta.status-APPROVED { color: #218657; font-weight: 600; }
 .document-meta.status-REJECTED,.document-meta.reject { color: #c34e4e; white-space: normal; }
+.document-meta.status-VOIDED { color: #8c5660; font-weight: 600; }
 .document-meta.status-LEGACY { color: #7d8997; }
 .document-actions { color: #3498ff; display: flex; flex-shrink: 0; font-size: 21rpx; }
 .document-actions view { padding: 12rpx 8rpx; }
@@ -1257,6 +1258,21 @@ page { background: #f4f8fd; }
 .page-end {
   color: #ccc; font-size: 22rpx; padding: 24rpx 0 40rpx; text-align: center;
 }
+
+.contract-lock-notice {
+  background: #fff8e8;
+  border: 1rpx solid #f0cf85;
+  border-radius: 14rpx;
+  color: #8a6418;
+  font-size: 22rpx;
+  line-height: 1.65;
+  margin: 0 24rpx 18rpx;
+  padding: 18rpx 22rpx;
+}
+.contract-lock-notice.terminal { background: #f2f5f8; border-color: #d9e0e7; color: #657487; }
+.contract-lock-title { color: #704d08; font-size: 25rpx; font-weight: 700; }
+.memo-summary.readonly { opacity: .72; }
+.document-actions .danger-text { color: #d94848; }
 
 /* ===== 结构化合同 ===== */
 .card {
