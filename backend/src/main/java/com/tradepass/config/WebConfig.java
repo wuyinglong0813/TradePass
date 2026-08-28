@@ -25,6 +25,7 @@ public class WebConfig implements WebMvcConfigurer {
                 .excludePathPatterns(
                         "/api/auth/wechat-login",   // 登录本身不需要 token
                         "/api/company-certifications/provider-callback", // 外部回调使用独立密钥校验
+                        "/api/fadada/callback",    // 法大大回调使用独立 token，并回查法大大确认状态
                         "/api/dev/**"               // dev 接口无需 token（仅 dev.enabled=true 时可访问）
                 );
     }

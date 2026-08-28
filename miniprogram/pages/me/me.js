@@ -21,6 +21,7 @@ Page({
     companyVerified: false,
     companyStatusText: '未认证',
     realNameVerified: false,
+    personalIdentityStatusText: '待实名',
     canManageAuth: false,
     companies: [],
     currentCompanyId: '',
@@ -66,6 +67,7 @@ Page({
   async loadMe() {
     try {
       const payload = await request({ url: '/me' });
+      const personalIdentity = await request({ url: '/fadada/users/me/identity', withCompany: false }).catch(() => null);
       const company = payload.company || {};
       const member = payload.member || {};
       const canManage = member.roleCode === 'LEGAL' || member.roleCode === 'ADMIN';
@@ -92,7 +94,10 @@ Page({
         companyAbbr: companyAbbr(company.name),
         companyVerified: company.certificationStatus === 'VERIFIED',
         companyStatusText: dict.certification(company.certificationStatus).text,
-        realNameVerified: company.realNameStatus === 'VERIFIED',
+        realNameVerified: !!(personalIdentity && personalIdentity.status === 'VERIFIED'),
+        personalIdentityStatusText: personalIdentity
+          ? (personalIdentity.statusText || '待认证')
+          : '待认证',
         companies,
         currentCompanyId: user.currentCompanyId || '',
         canManageAuth: canManage
@@ -109,12 +114,7 @@ Page({
       this.goLogin();
       return;
     }
-    wx.showModal({
-      title: '账号与安全',
-      content: `登录手机号：${this.data.maskedPhone}\n实名状态：${this.data.realNameVerified ? '已实名' : '待实名'}\n当前账号状态正常`,
-      showCancel: false,
-      confirmText: '我知道了'
-    });
+    wx.navigateTo({ url: '/pages/personal-cert/personal-cert' });
   },
   openAgreement() {
     wx.showModal({

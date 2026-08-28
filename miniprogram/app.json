@@ -8,6 +8,8 @@
     "pages/privacy/privacy",
     "pages/company/company",
     "pages/me/me",
+    "pages/personal-cert/personal-cert",
+    "pages/fadada-auth/fadada-auth",
     "pages/company-bind/company-bind",
     "pages/order-detail/order-detail",
     "pages/contract-center/contract-center",

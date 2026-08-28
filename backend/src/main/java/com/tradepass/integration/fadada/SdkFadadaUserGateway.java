@@ -1,0 +1,136 @@
+package com.tradepass.integration.fadada;
+
+import com.fasc.open.api.bean.base.BaseRes;
+import com.fasc.open.api.bean.common.UserIdentInfo;
+import com.fasc.open.api.exception.ApiException;
+import com.fasc.open.api.v5_1.client.OpenApiClient;
+import com.fasc.open.api.v5_1.client.ServiceClient;
+import com.fasc.open.api.v5_1.client.UserClient;
+import com.fasc.open.api.v5_1.req.user.GetUserAuthUrlReq;
+import com.fasc.open.api.v5_1.req.user.GetUserIdentityInfoReq;
+import com.fasc.open.api.v5_1.req.user.GetUserReq;
+import com.fasc.open.api.v5_1.res.common.EUrlRes;
+import com.fasc.open.api.v5_1.res.service.AccessTokenRes;
+import com.fasc.open.api.v5_1.res.user.UserIdentityInfoRes;
+import com.fasc.open.api.v5_1.res.user.UserRes;
+import com.tradepass.common.BusinessException;
+import com.tradepass.config.FadadaProperties;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
+
+import java.time.Instant;
+import java.util.List;
+
+@Component
+public class SdkFadadaUserGateway implements FadadaUserGateway {
+    private static final Logger log = LoggerFactory.getLogger(SdkFadadaUserGateway.class);
+    private final UserClient userClient;
+    private final ServiceClient serviceClient;
+    private volatile String accessToken;
+    private volatile Instant accessTokenExpiresAt = Instant.EPOCH;
+
+    public SdkFadadaUserGateway(FadadaProperties properties) {
+        OpenApiClient openApiClient = new OpenApiClient(
+                properties.getAppId(), properties.getAppSecret(), properties.getServerUrl());
+        this.userClient = new UserClient(openApiClient);
+        this.serviceClient = new ServiceClient(openApiClient);
+    }
+
+    @Override
+    public AuthUrlResult createAuthUrl(AuthUrlCommand command) {
+        GetUserAuthUrlReq request = new GetUserAuthUrlReq();
+        request.setAccessToken(accessToken());
+        request.setClientUserId(command.clientUserId());
+        request.setAuthScopes(List.of("ident_info"));
+        if (hasText(command.accountName())) {
+            request.setAccountName(command.accountName());
+            request.setNonEditableInfo(List.of("accountName"));
+        }
+        if (hasText(command.callbackUrl())) request.setCallbackUrl(command.callbackUrl());
+        if (hasText(command.redirectUrl())) request.setRedirectUrl(command.redirectUrl());
+        if (hasText(command.redirectMiniAppUrl())) request.setRedirectMiniAppUrl(command.redirectMiniAppUrl());
+        EUrlRes response = invoke(() -> userClient.getUserAuthUrl(request), "获取个人认证地址");
+        String authUrl = firstText(response.getAuthUrl(), response.geteUrl(), response.getAuthShortUrl());
+        if (!hasText(authUrl)) throw new BusinessException("法大大未返回个人认证地址");
+        return new AuthUrlResult(authUrl);
+    }
+
+    @Override
+    public UserAccountResult getUser(String clientUserId, String openUserId) {
+        GetUserReq request = new GetUserReq();
+        request.setAccessToken(accessToken());
+        if (hasText(clientUserId)) request.setClientUserId(clientUserId);
+        if (hasText(openUserId)) request.setOpenUserId(openUserId);
+        UserRes response = invoke(() -> userClient.get(request), "查询个人认证状态");
+        return new UserAccountResult(response.getClientUserId(), response.getOpenUserId(),
+                response.getBindingStatus(), response.getIdentStatus(), response.getAuthScope());
+    }
+
+    @Override
+    public UserIdentityResult getIdentityInfo(String openUserId) {
+        GetUserIdentityInfoReq request = new GetUserIdentityInfoReq();
+        request.setAccessToken(accessToken());
+        request.setOpenUserId(openUserId);
+        UserIdentityInfoRes response = invoke(() -> userClient.getIdentityInfo(request), "查询个人实名信息");
+        UserIdentInfo identity = response.getUserIdentInfo();
+        return new UserIdentityResult(response.getOpenUserId(), response.getIdentStatus(),
+                identity == null ? null : identity.getUserName(), response.getIdentMethod(),
+                response.getIdentSubmitTime(), response.getIdentSuccessTime());
+    }
+
+    private <T> T invoke(ApiCall<T> call, String action) {
+        try {
+            BaseRes<T> response = call.call();
+            if (response == null || !response.isSuccess() || response.getData() == null) {
+                String requestId = response == null ? "" : response.getRequestId();
+                String code = response == null ? "null" : response.getCode();
+                log.warn("Fadada {} failed: code={}, requestId={}", action, code, requestId);
+                throw new BusinessException(action + "失败，请稍后重试");
+            }
+            return response.getData();
+        } catch (ApiException exception) {
+            log.warn("Fadada {} request failed", action, exception);
+            throw new BusinessException(action + "失败，请稍后重试");
+        }
+    }
+
+    private String accessToken() {
+        Instant now = Instant.now();
+        if (hasText(accessToken) && now.isBefore(accessTokenExpiresAt)) return accessToken;
+        synchronized (this) {
+            now = Instant.now();
+            if (hasText(accessToken) && now.isBefore(accessTokenExpiresAt)) return accessToken;
+            AccessTokenRes response = invoke(serviceClient::getAccessToken, "获取服务访问凭证");
+            if (!hasText(response.getAccessToken())) {
+                throw new BusinessException("法大大未返回服务访问凭证");
+            }
+            long expiresIn = parseExpiresIn(response.getExpiresIn());
+            accessToken = response.getAccessToken();
+            accessTokenExpiresAt = now.plusSeconds(Math.max(60, expiresIn - 60));
+            return accessToken;
+        }
+    }
+
+    private long parseExpiresIn(String value) {
+        try {
+            return Math.max(120, Long.parseLong(value));
+        } catch (NumberFormatException exception) {
+            return 7200;
+        }
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
+    }
+
+    private String firstText(String... values) {
+        for (String value : values) if (hasText(value)) return value;
+        return null;
+    }
+
+    @FunctionalInterface
+    private interface ApiCall<T> {
+        BaseRes<T> call() throws ApiException;
+    }
+}

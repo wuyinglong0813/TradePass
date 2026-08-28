@@ -21,6 +21,15 @@ tradepass:
     callback-token: ${TRADEPASS_VERIFICATION_CALLBACK_TOKEN:}
   ca:
     mock-enabled: ${TRADEPASS_CA_MOCK_ENABLED:false}
+  fadada:
+    enabled: ${FADADA_ENABLED:false}
+    app-id: ${FADADA_APP_ID:}
+    app-secret: ${FADADA_APP_SECRET:}
+    server-url: ${FADADA_SERVER_URL:https://api.fadada.com/api/v5}
+    callback-url: ${FADADA_CALLBACK_URL:}
+    callback-token: ${FADADA_CALLBACK_TOKEN:}
+    redirect-url: ${FADADA_REDIRECT_URL:}
+    redirect-mini-app-url: ${FADADA_REDIRECT_MINI_APP_URL:}
   redis:
     enabled: ${TRADEPASS_REDIS_ENABLED:false}
     key-prefix: ${TRADEPASS_REDIS_KEY_PREFIX:tradepass}
