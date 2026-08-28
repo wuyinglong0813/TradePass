@@ -3,8 +3,10 @@ package com.tradepass.service;
 import com.tradepass.common.AuthContext;
 import com.tradepass.common.BusinessException;
 import com.tradepass.entity.Company;
+import com.tradepass.entity.FadadaUserIdentity;
 import com.tradepass.entity.SysUser;
 import com.tradepass.mapper.CompanyMapper;
+import com.tradepass.mapper.FadadaUserIdentityMapper;
 import com.tradepass.mapper.SysUserMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -18,13 +20,16 @@ import static org.mockito.Mockito.when;
 class UserIdentityServiceTest {
     private SysUserMapper userMapper;
     private CompanyMapper companyMapper;
+    private FadadaUserIdentityMapper identityMapper;
     private UserIdentityService service;
 
     @BeforeEach
     void setUp() {
         userMapper = mock(SysUserMapper.class);
         companyMapper = mock(CompanyMapper.class);
+        identityMapper = mock(FadadaUserIdentityMapper.class);
         service = new UserIdentityService(userMapper, companyMapper);
+        service.setIdentityMapper(identityMapper);
         AuthContext.set(8L, 4L);
     }
 
@@ -34,28 +39,22 @@ class UserIdentityServiceTest {
     }
 
     @Test
-    void returnsCurrentUserNameForVerifiedCompany() {
-        SysUser user = new SysUser();
-        user.setId(8L);
-        user.setNickname(" 张采购 ");
-        when(userMapper.selectById(8L)).thenReturn(user);
-        Company company = new Company();
-        company.setId(4L);
-        company.setRealNameStatus("VERIFIED");
-        when(companyMapper.selectById(4L)).thenReturn(company);
+    void returnsVerifiedPersonalName() {
+        FadadaUserIdentity identity = new FadadaUserIdentity();
+        identity.setUserId(8L);
+        identity.setLocalStatus("VERIFIED");
+        identity.setVerifiedName(" 张采购 ");
+        when(identityMapper.selectOne(org.mockito.ArgumentMatchers.any())).thenReturn(identity);
 
         assertThat(service.requireCurrentVerifiedName(4L)).isEqualTo("张采购");
     }
 
     @Test
-    void refusesConfirmationUntilCompanyRealNameVerificationCompletes() {
-        Company company = new Company();
-        company.setId(4L);
-        company.setRealNameStatus("PENDING");
-        when(companyMapper.selectById(4L)).thenReturn(company);
+    void refusesConfirmationUntilPersonalIdentityCompletes() {
+        when(identityMapper.selectOne(org.mockito.ArgumentMatchers.any())).thenReturn(null);
 
         assertThatThrownBy(() -> service.requireCurrentVerifiedName(4L))
                 .isInstanceOf(BusinessException.class)
-                .hasMessage("当前企业尚未完成实名认证，不能确认销售单");
+                .hasMessage("请先完成个人认证，再确认业务单据");
     }
 }

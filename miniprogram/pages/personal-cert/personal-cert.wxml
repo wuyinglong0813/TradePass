@@ -15,14 +15,14 @@
 
   <block wx:else>
     <view class="config-notice" wx:if="{{!providerEnabled}}">
-      <view class="notice-title">法大大服务尚未启用</view>
+      <view class="notice-title">认证服务尚未启用</view>
       <view class="notice-desc">完成后端应用参数和回调地址配置后，即可发起真实认证。</view>
     </view>
 
     <view class="info-card">
       <view class="card-title">认证信息</view>
       <view class="info-row">
-        <text class="info-label">认证服务</text><text class="info-value">法大大</text>
+        <text class="info-label">认证类型</text><text class="info-value">个人实名认证</text>
       </view>
       <view class="info-row">
         <text class="info-label">认证状态</text><text class="status-pill {{statusView.tone}}">{{identity.statusText}}</text>
@@ -42,8 +42,8 @@
     <view class="privacy-card">
       <view class="privacy-icon">盾</view>
       <view class="privacy-copy">
-        <view class="privacy-title">敏感信息由法大大认证</view>
-        <view class="privacy-desc">身份证号、人脸信息等在法大大认证页面提交，商签通不保存完整证件号或人脸照片。</view>
+        <view class="privacy-title">敏感信息安全处理</view>
+        <view class="privacy-desc">身份证号、人脸信息等在安全认证页面提交，商签通不保存完整证件号或人脸照片。</view>
       </view>
     </view>
 

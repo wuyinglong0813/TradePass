@@ -22,7 +22,7 @@
       </view>
       <view class="privacy-item">
         <view class="privacy-item-title">4. 实名与人脸认证信息</view>
-        <view class="privacy-item-desc">当前生产版本尚未接入实名和人脸认证服务，不采集人脸生物识别信息。后续启用相关能力时，我们会在收集前另行说明处理目的、方式和范围，并依法取得你的单独同意。</view>
+        <view class="privacy-item-desc">当你主动使用个人或企业认证、电子印章及合同签署功能时，我们会委托法大大提供身份核验和电子签服务。证件、人脸等敏感信息在服务商页面处理，商签通不保存完整证件号或人脸照片；具体处理前会依法取得你的授权。</view>
       </view>
       <view class="privacy-item">
         <view class="privacy-item-title">5. 本地存储信息</view>

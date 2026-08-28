@@ -57,7 +57,7 @@
 
       <view class="section-head service-head"><view><view class="section-title">账户与服务</view><view class="section-sub">账户安全、隐私与产品支持</view></view></view>
       <view class="settings-list">
-        <view class="setting-row" bindtap="openAccountSecurity"><image src="/images/icons/security.svg" mode="aspectFit"/><view class="setting-copy"><view class="setting-title">个人认证与安全</view><view class="setting-desc">手机号、法大大实名状态与登录安全</view></view><view class="row-arrow">›</view></view>
+        <view class="setting-row" bindtap="openAccountSecurity"><image src="/images/icons/security.svg" mode="aspectFit"/><view class="setting-copy"><view class="setting-title">个人认证与安全</view><view class="setting-desc">手机号、实名状态与登录安全</view></view><view class="row-arrow">›</view></view>
         <view class="setting-row" bindtap="openPrivacy"><image src="/images/icons/privacy.svg" mode="aspectFit"/><view class="setting-copy"><view class="setting-title">隐私设置</view><view class="setting-desc">个人信息与授权管理</view></view><view class="row-arrow">›</view></view>
         <view class="setting-row" bindtap="openAgreement"><image src="/images/icons/agreement.svg" mode="aspectFit"/><view class="setting-copy"><view class="setting-title">用户协议</view><view class="setting-desc">服务条款与使用规则</view></view><view class="row-arrow">›</view></view>
         <view class="setting-row" bindtap="openHelp"><image src="/images/icons/help.svg" mode="aspectFit"/><view class="setting-copy"><view class="setting-title">帮助与反馈</view><view class="setting-desc">使用指引与问题反馈</view></view><view class="row-arrow">›</view></view>

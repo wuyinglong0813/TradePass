@@ -4,13 +4,11 @@ import com.fasc.open.api.bean.base.BaseRes;
 import com.fasc.open.api.bean.common.UserIdentInfo;
 import com.fasc.open.api.exception.ApiException;
 import com.fasc.open.api.v5_1.client.OpenApiClient;
-import com.fasc.open.api.v5_1.client.ServiceClient;
 import com.fasc.open.api.v5_1.client.UserClient;
 import com.fasc.open.api.v5_1.req.user.GetUserAuthUrlReq;
 import com.fasc.open.api.v5_1.req.user.GetUserIdentityInfoReq;
 import com.fasc.open.api.v5_1.req.user.GetUserReq;
 import com.fasc.open.api.v5_1.res.common.EUrlRes;
-import com.fasc.open.api.v5_1.res.service.AccessTokenRes;
 import com.fasc.open.api.v5_1.res.user.UserIdentityInfoRes;
 import com.fasc.open.api.v5_1.res.user.UserRes;
 import com.tradepass.common.BusinessException;
@@ -19,28 +17,25 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-import java.time.Instant;
 import java.util.List;
 
 @Component
 public class SdkFadadaUserGateway implements FadadaUserGateway {
     private static final Logger log = LoggerFactory.getLogger(SdkFadadaUserGateway.class);
     private final UserClient userClient;
-    private final ServiceClient serviceClient;
-    private volatile String accessToken;
-    private volatile Instant accessTokenExpiresAt = Instant.EPOCH;
+    private final FadadaAccessTokenProvider tokenProvider;
 
-    public SdkFadadaUserGateway(FadadaProperties properties) {
+    public SdkFadadaUserGateway(FadadaProperties properties, FadadaAccessTokenProvider tokenProvider) {
         OpenApiClient openApiClient = new OpenApiClient(
                 properties.getAppId(), properties.getAppSecret(), properties.getServerUrl());
         this.userClient = new UserClient(openApiClient);
-        this.serviceClient = new ServiceClient(openApiClient);
+        this.tokenProvider = tokenProvider;
     }
 
     @Override
     public AuthUrlResult createAuthUrl(AuthUrlCommand command) {
         GetUserAuthUrlReq request = new GetUserAuthUrlReq();
-        request.setAccessToken(accessToken());
+        request.setAccessToken(tokenProvider.get());
         request.setClientUserId(command.clientUserId());
         request.setAuthScopes(List.of("ident_info"));
         if (hasText(command.accountName())) {
@@ -52,14 +47,14 @@ public class SdkFadadaUserGateway implements FadadaUserGateway {
         if (hasText(command.redirectMiniAppUrl())) request.setRedirectMiniAppUrl(command.redirectMiniAppUrl());
         EUrlRes response = invoke(() -> userClient.getUserAuthUrl(request), "获取个人认证地址");
         String authUrl = firstText(response.getAuthUrl(), response.geteUrl(), response.getAuthShortUrl());
-        if (!hasText(authUrl)) throw new BusinessException("法大大未返回个人认证地址");
+        if (!hasText(authUrl)) throw new BusinessException("认证服务未返回个人认证地址");
         return new AuthUrlResult(authUrl);
     }
 
     @Override
     public UserAccountResult getUser(String clientUserId, String openUserId) {
         GetUserReq request = new GetUserReq();
-        request.setAccessToken(accessToken());
+        request.setAccessToken(tokenProvider.get());
         if (hasText(clientUserId)) request.setClientUserId(clientUserId);
         if (hasText(openUserId)) request.setOpenUserId(openUserId);
         UserRes response = invoke(() -> userClient.get(request), "查询个人认证状态");
@@ -70,7 +65,7 @@ public class SdkFadadaUserGateway implements FadadaUserGateway {
     @Override
     public UserIdentityResult getIdentityInfo(String openUserId) {
         GetUserIdentityInfoReq request = new GetUserIdentityInfoReq();
-        request.setAccessToken(accessToken());
+        request.setAccessToken(tokenProvider.get());
         request.setOpenUserId(openUserId);
         UserIdentityInfoRes response = invoke(() -> userClient.getIdentityInfo(request), "查询个人实名信息");
         UserIdentInfo identity = response.getUserIdentInfo();
@@ -92,31 +87,6 @@ public class SdkFadadaUserGateway implements FadadaUserGateway {
         } catch (ApiException exception) {
             log.warn("Fadada {} request failed", action, exception);
             throw new BusinessException(action + "失败，请稍后重试");
-        }
-    }
-
-    private String accessToken() {
-        Instant now = Instant.now();
-        if (hasText(accessToken) && now.isBefore(accessTokenExpiresAt)) return accessToken;
-        synchronized (this) {
-            now = Instant.now();
-            if (hasText(accessToken) && now.isBefore(accessTokenExpiresAt)) return accessToken;
-            AccessTokenRes response = invoke(serviceClient::getAccessToken, "获取服务访问凭证");
-            if (!hasText(response.getAccessToken())) {
-                throw new BusinessException("法大大未返回服务访问凭证");
-            }
-            long expiresIn = parseExpiresIn(response.getExpiresIn());
-            accessToken = response.getAccessToken();
-            accessTokenExpiresAt = now.plusSeconds(Math.max(60, expiresIn - 60));
-            return accessToken;
-        }
-    }
-
-    private long parseExpiresIn(String value) {
-        try {
-            return Math.max(120, Long.parseLong(value));
-        } catch (NumberFormatException exception) {
-            return 7200;
         }
     }
 

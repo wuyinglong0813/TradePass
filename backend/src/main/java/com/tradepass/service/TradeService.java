@@ -372,6 +372,49 @@ public class TradeService {
         return toContractPayload(contract, companyId);
     }
 
+    public ContractPayload contractForElectronicSignature(Long id, long viewerCompanyId) {
+        TradeContract contract = tradeContractMapper.selectById(id);
+        if (contract == null || !isContractParty(contract, viewerCompanyId)) {
+            throw new BusinessException("合同不存在");
+        }
+        return toContractPayload(contract, viewerCompanyId);
+    }
+
+    @Transactional
+    public void activateAfterElectronicSignature(Long id, long completedBy) {
+        TradeContract contract = tradeContractMapper.selectById(id);
+        if (contract == null) throw new BusinessException("合同不存在");
+        if ("ACTIVE".equals(contract.getStatus())) return;
+        if (!"PENDING".equals(contract.getStatus())) throw new BusinessException("合同状态已变化，不能生效");
+        LocalDateTime approvedAt = LocalDateTime.now();
+        int updated = tradeContractMapper.update(new LambdaUpdateWrapper<TradeContract>()
+                .eq(TradeContract::getId, id).eq(TradeContract::getStatus, "PENDING")
+                .set(TradeContract::getStatus, "ACTIVE")
+                .set(TradeContract::getApprovedBy, completedBy)
+                .set(TradeContract::getApprovedAt, approvedAt));
+        if (updated != 1) throw new BusinessException("合同状态已变化，请刷新后重试");
+        contract.setStatus("ACTIVE");
+        contract.setApprovedBy(completedBy);
+        contract.setApprovedAt(approvedAt);
+        auditLogService.logAs(contract.getCompanyId(), completedBy, "CONTRACT", id,
+                "ELECTRONIC_SIGN_FINISH", "双方电子签署完成，合同生效 " + contract.getContractNo());
+        recordContractResult(contract, contract.getCounterpartyCompanyId(), "APPROVED",
+                "合同已签署并生效", "双方电子签署已完成 " + contract.getContractNo());
+    }
+
+    @Transactional
+    public void voidAfterElectronicAbolish(Long id, long completedBy) {
+        TradeContract contract = tradeContractMapper.selectById(id);
+        if (contract == null) throw new BusinessException("合同不存在");
+        if ("VOIDED".equals(contract.getStatus())) return;
+        int updated = tradeContractMapper.update(new LambdaUpdateWrapper<TradeContract>()
+                .eq(TradeContract::getId, id).eq(TradeContract::getStatus, "ACTIVE")
+                .set(TradeContract::getStatus, "VOIDED"));
+        if (updated != 1) throw new BusinessException("合同状态已变化，请刷新后重试");
+        auditLogService.logAs(contract.getCompanyId(), completedBy, "CONTRACT", id,
+                "ELECTRONIC_ABOLISH_FINISH", "双方电子签署作废完成 " + contract.getContractNo());
+    }
+
     public List<ContractPayload> listContracts(String counterpartyName) {
         long companyId = AuthContext.requireCompanyId();
         accessControlService.requireAnyPermission(companyId, "contract_view", "contract_sign");

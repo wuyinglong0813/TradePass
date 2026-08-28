@@ -6,12 +6,15 @@ import com.tradepass.dto.request.AddCounterpartyRequest;
 import com.tradepass.dto.request.CreateContractRequest;
 import com.tradepass.dto.request.CreateOrderRequest;
 import com.tradepass.dto.response.ContractPayload;
+import com.tradepass.dto.response.ContractSigningPayload;
+import com.tradepass.dto.response.ServiceUrlPayload;
 import com.tradepass.dto.response.FileDataPayload;
 import com.tradepass.dto.response.PagePayload;
 import com.tradepass.dto.response.TradeOrderPayload;
 import com.tradepass.service.ContractPdfService;
 import com.tradepass.service.ContractArchiveService;
 import com.tradepass.service.TradeService;
+import com.tradepass.service.FadadaContractSigningService;
 import com.tradepass.common.AuthContext;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -37,6 +40,7 @@ public class TradeController {
     private final TradeService tradeService;
     private final ContractPdfService contractPdfService;
     private final ContractArchiveService contractArchiveService;
+    private FadadaContractSigningService signingService;
 
     @Autowired
     public TradeController(TradeService tradeService, ContractPdfService contractPdfService,
@@ -54,6 +58,11 @@ public class TradeController {
 
     TradeController(TradeService tradeService) {
         this(tradeService, null);
+    }
+
+    @Autowired
+    void setSigningService(FadadaContractSigningService signingService) {
+        this.signingService = signingService;
     }
 
     @GetMapping("/orders")
@@ -190,17 +199,43 @@ public class TradeController {
     }
 
     @PostMapping("/contracts/{id}/approve")
-    public ApiResponse<String> approveContract(@PathVariable Long id) {
-        return ApiResponse.ok(tradeService.approveContract(id));
+    public ApiResponse<?> approveContract(@PathVariable Long id) {
+        return signingService == null
+                ? ApiResponse.ok(tradeService.approveContract(id))
+                : ApiResponse.ok(signingService.signUrl(id));
+    }
+
+    @GetMapping("/contracts/{id}/signing")
+    public ApiResponse<ContractSigningPayload> contractSigning(@PathVariable Long id) {
+        return ApiResponse.ok(signingService.current(id));
+    }
+
+    @PostMapping("/contracts/{id}/signing/sync")
+    public ApiResponse<ContractSigningPayload> syncContractSigning(@PathVariable Long id) {
+        return ApiResponse.ok(signingService.syncCurrent(id));
+    }
+
+    @PostMapping("/contracts/{id}/sign-url")
+    public ApiResponse<ServiceUrlPayload> contractSignUrl(@PathVariable Long id) {
+        return ApiResponse.ok(signingService.signUrl(id));
+    }
+
+    @PostMapping("/contracts/{id}/abolish-url")
+    public ApiResponse<ServiceUrlPayload> contractAbolishUrl(@PathVariable Long id,
+                                                             @RequestBody(required = false) Map<String, Object> body) {
+        String reason = body == null ? null : String.valueOf(body.getOrDefault("reason", ""));
+        return ApiResponse.ok(signingService.abolishUrl(id, reason));
     }
 
     @PostMapping("/contracts/{id}/reject")
     public ApiResponse<String> rejectContract(@PathVariable Long id) {
+        if (signingService != null) signingService.cancelPending(id, "对方拒绝签署");
         return ApiResponse.ok(tradeService.rejectContract(id));
     }
 
     @PostMapping("/contracts/{id}/cancel")
     public ApiResponse<String> cancelContract(@PathVariable Long id) {
+        if (signingService != null) signingService.cancelPending(id, "发起方撤回合同");
         return ApiResponse.ok(tradeService.cancelContract(id));
     }
 

@@ -188,6 +188,9 @@ public class BilateralActionService {
                 WHERE contract_id = ? AND status = 'PENDING'
                 """, Long.class, contract.getId());
         if (count != null && count > 0) throw new BusinessException("合同正在等待双方处理，暂不允许修改");
+        if (hasElectronicAbolishApproval(contract.getId())) {
+            throw new BusinessException("合同正在签署作废协议，暂不允许修改");
+        }
     }
 
     public boolean isContractReadOnly(TradeContract contract) {
@@ -197,7 +200,7 @@ public class BilateralActionService {
                 SELECT COUNT(1) FROM bilateral_action_request
                 WHERE contract_id = ? AND status = 'PENDING'
                 """, Long.class, contract.getId());
-        return count != null && count > 0;
+        return count != null && count > 0 || hasElectronicAbolishApproval(contract.getId());
     }
 
     private void validateRequest(Target target, String actionType, boolean riskConfirmed) {
@@ -206,6 +209,9 @@ public class BilateralActionService {
                 WHERE contract_id = ? AND status = 'PENDING'
                 """, target.contract().getId()) > 0) {
             throw new BusinessException("该合同已有待处理的双方申请，请处理完成后再操作");
+        }
+        if (hasElectronicAbolishApproval(target.contract().getId())) {
+            throw new BusinessException("合同已进入作废协议签署，不能再发起其他处理");
         }
         if (END.equals(actionType)) {
             if (!CONTRACT.equals(target.bizType())) throw new BusinessException("仅合同可以申请结束");
@@ -253,7 +259,16 @@ public class BilateralActionService {
         Target target = requireTarget(action.bizType(), action.bizId(), approvedCompanyId);
         LocalDateTime approvedAt = LocalDateTime.now();
         if (CONTRACT.equals(action.bizType())) {
-            String nextStatus = END.equals(action.actionType()) ? "COMPLETED" : "VOIDED";
+            if (VOID.equals(action.actionType())) {
+                Long electronicTaskCount = jdbc.queryForObject("""
+                        SELECT COUNT(1) FROM fadada_contract_sign_task
+                        WHERE contract_id = ? AND sign_task_id IS NOT NULL
+                        """, Long.class, action.contractId());
+                // New electronically signed contracts continue into the provider abolish task.
+                // Historical contracts keep the original local bilateral void behavior.
+                if (electronicTaskCount != null && electronicTaskCount > 0) return;
+            }
+            String nextStatus = VOID.equals(action.actionType()) ? "VOIDED" : "COMPLETED";
             int updated = jdbc.update("""
                     UPDATE trade_contract SET status = ?, updated_at = CURRENT_TIMESTAMP
                     WHERE id = ? AND status = 'ACTIVE'
@@ -390,6 +405,20 @@ public class BilateralActionService {
             accessControlService.requireAnyPermission(companyId,
                     "contract_sign", "order_create", "sales_order_receive", "inventory_receive");
         }
+    }
+
+    private boolean hasElectronicAbolishApproval(Long contractId) {
+        return count("""
+                SELECT COUNT(1)
+                FROM bilateral_action_request action_request
+                INNER JOIN fadada_contract_sign_task sign_task
+                    ON sign_task.contract_id = action_request.contract_id
+                   AND sign_task.sign_task_id IS NOT NULL
+                WHERE action_request.contract_id = ?
+                  AND action_request.biz_type = 'CONTRACT'
+                  AND action_request.action_type = 'VOID'
+                  AND action_request.status = 'APPROVED'
+                """, contractId) > 0;
     }
 
     private long count(String sql, Long contractId) {

@@ -7,11 +7,9 @@ import com.tradepass.common.BusinessException;
 import com.tradepass.config.FadadaProperties;
 import com.tradepass.dto.response.FadadaAuthUrlPayload;
 import com.tradepass.dto.response.PersonalIdentityPayload;
-import com.tradepass.entity.FadadaCallbackEvent;
 import com.tradepass.entity.FadadaUserIdentity;
 import com.tradepass.entity.SysUser;
 import com.tradepass.integration.fadada.FadadaUserGateway;
-import com.tradepass.mapper.FadadaCallbackEventMapper;
 import com.tradepass.mapper.FadadaUserIdentityMapper;
 import com.tradepass.mapper.SysUserMapper;
 import com.tradepass.support.MybatisTestSupport;
@@ -21,20 +19,16 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import java.util.List;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class FadadaPersonalIdentityServiceTest {
     private FadadaUserIdentityMapper identityMapper;
-    private FadadaCallbackEventMapper callbackEventMapper;
     private SysUserMapper userMapper;
     private FadadaUserGateway gateway;
     private FadadaProperties properties;
@@ -42,13 +36,12 @@ class FadadaPersonalIdentityServiceTest {
 
     @BeforeEach
     void setUp() {
-        MybatisTestSupport.initialize(FadadaUserIdentity.class, FadadaCallbackEvent.class, SysUser.class);
+        MybatisTestSupport.initialize(FadadaUserIdentity.class, SysUser.class);
         identityMapper = mock(FadadaUserIdentityMapper.class);
-        callbackEventMapper = mock(FadadaCallbackEventMapper.class);
         userMapper = mock(SysUserMapper.class);
         gateway = mock(FadadaUserGateway.class);
         properties = enabledProperties();
-        service = new FadadaPersonalIdentityService(identityMapper, callbackEventMapper,
+        service = new FadadaPersonalIdentityService(identityMapper,
                 userMapper, gateway, properties, new ObjectMapper());
         AuthContext.set(8L, null);
     }
@@ -82,13 +75,15 @@ class FadadaPersonalIdentityServiceTest {
         verify(gateway).createAuthUrl(command.capture());
         assertThat(command.getValue().clientUserId()).isEqualTo("tradepass-user-8");
         assertThat(command.getValue().accountName()).isEqualTo("13800000000");
-        assertThat(command.getValue().callbackUrl()).contains("token=callback-secret");
+        assertThat(command.getValue().callbackUrl())
+                .isEqualTo("https://tradepass.example.com/api/fadada/callback");
+        assertThat(command.getValue().redirectMiniAppUrl())
+                .isEqualTo("/pages/service-return/service-return?scene=personal");
     }
 
     @Test
     void allowsLocalAuthUrlVerificationBeforePublicCallbackIsConfigured() {
         properties.setCallbackUrl("");
-        properties.setCallbackToken("");
         SysUser user = new SysUser();
         user.setId(8L);
         user.setPhone("13800000000");
@@ -130,40 +125,6 @@ class FadadaPersonalIdentityServiceTest {
         verify(identityMapper).updateById(identity);
     }
 
-    @Test
-    void protectsCallbackAndProcessesDuplicateEventOnlyOnce() throws Exception {
-        FadadaUserIdentity identity = identity("IN_PROGRESS");
-        when(identityMapper.selectOne(any(Wrapper.class))).thenReturn(identity);
-        when(gateway.getUser("tradepass-user-8", "open-user-8")).thenReturn(
-                new FadadaUserGateway.UserAccountResult("tradepass-user-8", "open-user-8",
-                        "authorized", "identified", List.of("ident_info")));
-        when(gateway.getIdentityInfo("open-user-8")).thenReturn(
-                new FadadaUserGateway.UserIdentityResult("open-user-8", "identified", "张三",
-                        "face", null, "2026-08-27 10:05:00"));
-        AtomicReference<FadadaCallbackEvent> savedEvent = new AtomicReference<>();
-        when(callbackEventMapper.selectOne(any(Wrapper.class))).thenAnswer(invocation -> savedEvent.get());
-        doAnswer(invocation -> {
-            FadadaCallbackEvent event = invocation.getArgument(0);
-            event.setId(28L);
-            savedEvent.set(event);
-            return 1;
-        }).when(callbackEventMapper).insert(any(FadadaCallbackEvent.class));
-        var payload = new ObjectMapper().readTree("""
-                {"eventId":"evt-8","eventType":"user-authorize","data":{
-                  "clientUserId":"tradepass-user-8","openUserId":"open-user-8",
-                  "authResult":"success","identProcessStatus":"success"
-                }}
-                """);
-
-        assertThatThrownBy(() -> service.handleCallback("wrong", payload))
-                .isInstanceOf(BusinessException.class).hasMessage("法大大回调凭证无效");
-        service.handleCallback("callback-secret", payload);
-        service.handleCallback("callback-secret", payload);
-
-        assertThat(savedEvent.get().getStatus()).isEqualTo("PROCESSED");
-        verify(gateway, times(1)).getUser("tradepass-user-8", "open-user-8");
-    }
-
     private FadadaUserIdentity identity(String localStatus) {
         FadadaUserIdentity identity = new FadadaUserIdentity();
         identity.setId(18L);
@@ -184,8 +145,6 @@ class FadadaPersonalIdentityServiceTest {
         value.setAppSecret("app-secret");
         value.setServerUrl("https://api.fadada.com/api/v5");
         value.setCallbackUrl("https://tradepass.example.com/api/fadada/callback");
-        value.setCallbackToken("callback-secret");
-        value.setRedirectMiniAppUrl("/pages/personal-cert/personal-cert");
         return value;
     }
 }

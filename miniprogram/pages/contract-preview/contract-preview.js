@@ -69,6 +69,10 @@ Page({
     contractReadOnly: false,
     activeContractAction: null,
     contractActionLoading: false,
+    signing: null,
+    canSignContract: false,
+    signButtonText: '签署合同',
+    electronicAbolishing: false,
     canCreateSalesOrder: false,
     canCreateReturnOrder: false,
     createAsDraft: false,
@@ -115,7 +119,7 @@ Page({
   },
 
   onShow() {
-    if (this.hasLoadedContract) this.loadContractDetail();
+    if (this.hasLoadedContract) this.loadContractDetail(true);
   },
 
   onPullDownRefresh() {
@@ -138,14 +142,18 @@ Page({
   },
 
   /* 加载合同详情 */
-  async loadContractDetail() {
+  async loadContractDetail(syncSigning) {
     const { request } = require('../../utils/request');
     try {
-      const [contract, activeContractAction] = await Promise.all([
+      const [contract, activeContractAction, signing] = await Promise.all([
         request({ url: `/contracts/${this.data.contractId}` }),
         request({
           url: `/bilateral-actions/active?bizType=CONTRACT&bizId=${this.data.contractId}`
-        }).catch(() => ({}))
+        }).catch(() => ({})),
+        request({
+          url: `/contracts/${this.data.contractId}/signing${syncSigning ? '/sync' : ''}`,
+          method: syncSigning ? 'POST' : 'GET'
+        }).catch(() => null)
       ]);
       const statusMap = {
         PENDING: '待签署',
@@ -202,7 +210,11 @@ Page({
       const viewerDirection = contract.viewerDirection || contract.direction;
       const isSupplier = viewerDirection === 'SALE';
       const actionPending = !!(activeContractAction && activeContractAction.id);
-      const contractReadOnly = actionPending || ['COMPLETED', 'VOIDED'].includes(contract.status);
+      const signingStatus = String((signing && signing.status) || '');
+      const electronicAbolishing = !!(signing && signing.abolishApproved)
+        || signingStatus === 'abolishing' || signingStatus.startsWith('ABOLISH_');
+      const contractReadOnly = actionPending || electronicAbolishing
+        || ['COMPLETED', 'VOIDED'].includes(contract.status);
       const canCreateSalesOrder = isSupplier
         && !contractReadOnly && (contract.status === 'PENDING' || contract.status === 'ACTIVE');
       const canCreateReturnOrder = !contractReadOnly
@@ -238,9 +250,16 @@ Page({
         canEditContract: !contractReadOnly && outgoing && ['PENDING', 'REJECTED', 'CANCELLED'].includes(contract.status),
         canDeleteContract: !contractReadOnly && outgoing && ['REJECTED', 'CANCELLED'].includes(contract.status),
         canRequestEnd: !contractReadOnly && contract.status === 'ACTIVE',
-        canRequestVoid: !contractReadOnly && contract.status === 'ACTIVE',
+        canRequestVoid: !contractReadOnly && contract.status === 'ACTIVE'
+          && !!(signing && signing.canAbolish && !signing.abolishApproved),
         contractReadOnly,
         activeContractAction: actionPending ? activeContractAction : null,
+        signing,
+        canSignContract: !!(signing && signing.canSign),
+        signButtonText: signing && (signing.abolishApproved
+          || String(signing.status || '').startsWith('ABOLISH_') || signing.status === 'abolishing')
+          ? '签署作废协议' : '签署合同',
+        electronicAbolishing,
         canCreateSalesOrder,
         canCreateReturnOrder,
         createAsDraft,
@@ -271,6 +290,17 @@ Page({
     if (!this.data.canEditContract || this.data.contractActionLoading) return;
     wx.navigateTo({
       url: `/pages/sign-contract/sign-contract?mode=edit&contractId=${this.data.contractId}`
+    });
+  },
+
+  signContract() {
+    if (!this.data.canSignContract || this.data.contractActionLoading) return;
+    const signing = this.data.signing || {};
+    const scene = signing.abolishApproved || String(signing.status || '').startsWith('ABOLISH_')
+      || signing.status === 'abolishing'
+      ? 'abolish' : 'contract';
+    wx.navigateTo({
+      url: `/pages/fadada-auth/fadada-auth?scene=${scene}&contractId=${this.data.contractId}`
     });
   },
 
@@ -403,7 +433,7 @@ Page({
       title: `同意${action.actionText || '合同操作'}`,
       content: action.actionType === 'END'
         ? '确认后合同永久只读，不能恢复或继续履约。'
-        : '确认后合同将标记为已作废。',
+        : '确认后将进入作废协议签署，双方签署完成后合同才会作废。',
       confirmText: '确认同意',
       confirmColor: '#d94848',
       success: result => {
@@ -421,6 +451,14 @@ Page({
         method: 'POST',
         data: { decision, reason }
       });
+      if (decision === 'APPROVE' && this.data.activeContractAction
+        && this.data.activeContractAction.bizType === 'CONTRACT'
+        && this.data.activeContractAction.actionType === 'VOID') {
+        wx.navigateTo({
+          url: `/pages/fadada-auth/fadada-auth?scene=abolish&contractId=${this.data.contractId}`
+        });
+        return;
+      }
       wx.showToast({ title: decision === 'APPROVE' ? '已确认' : '已拒绝', icon: 'success' });
       await this.loadContractDetail();
     } catch (error) {

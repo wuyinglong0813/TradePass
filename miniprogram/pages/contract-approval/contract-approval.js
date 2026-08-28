@@ -243,20 +243,14 @@ Page({
     const contract = e.currentTarget.dataset.contract;
     if (!contract || !contract.id) return;
     wx.showModal({
-      title: '确认签署',
-      content: `确认签署合同“${contract.name}”？\n金额：¥${contract.amountText}\n签署后合同将生效`,
-      success: async res => {
+      title: '进入合同签署',
+      content: `即将签署合同“${contract.name}”\n金额：¥${contract.amountText}\n\n双方完成电子签署后合同才会生效。`,
+      confirmText: '去签署',
+      success: res => {
         if (!res.confirm) return;
-        try {
-          wx.showLoading({ title: '处理中...' });
-          await request({ url: `/contracts/${contract.id}/approve`, method: 'POST' });
-          wx.showToast({ title: '合同已签署生效', icon: 'success' });
-          await this.loadPending();
-        } catch (error) {
-          wx.showToast({ title: error.message || '签署失败', icon: 'none' });
-        } finally {
-          wx.hideLoading();
-        }
+        wx.navigateTo({
+          url: `/pages/fadada-auth/fadada-auth?scene=contract&contractId=${contract.id}`
+        });
       }
     });
   },
@@ -316,7 +310,9 @@ Page({
       title: `确认${item.typeText}`,
       content: item.actionType === 'END'
         ? '确认后合同及履约资料永久只读，不能恢复。'
-        : '确认后将保留原记录并冲销相关对账和库存影响。',
+        : (item.bizType === 'CONTRACT'
+          ? '确认后将进入作废协议签署，双方签署完成后合同才会作废。'
+          : '确认后将保留原记录并冲销相关对账和库存影响。'),
       confirmText: '确认同意', confirmColor: '#d94848',
       success: result => {
         if (result.confirm) this.submitBilateralDecision(item, 'APPROVE', '');
@@ -331,6 +327,12 @@ Page({
         url: `/bilateral-actions/${item.actionId}/decision`,
         method: 'POST', data: { decision, reason }
       });
+      if (decision === 'APPROVE' && item.bizType === 'CONTRACT' && item.actionType === 'VOID') {
+        wx.navigateTo({
+          url: `/pages/fadada-auth/fadada-auth?scene=abolish&contractId=${item.contractId}`
+        });
+        return;
+      }
       wx.showToast({ title: decision === 'APPROVE' ? '已确认' : '已拒绝', icon: 'success' });
       await this.loadPending();
     } catch (error) {

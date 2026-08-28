@@ -276,6 +276,8 @@ public class ContractPdfService {
             table.addCell(tableCell(label + "：" + buyer.get(label),
                     tableFont, Element.ALIGN_LEFT, Color.WHITE, 17));
         }
+        table.addCell(tableCell("供方盖章", tableFont, Element.ALIGN_CENTER, Color.WHITE, 88));
+        table.addCell(tableCell("需方盖章", tableFont, Element.ALIGN_CENTER, Color.WHITE, 88));
         document.add(table);
     }
 

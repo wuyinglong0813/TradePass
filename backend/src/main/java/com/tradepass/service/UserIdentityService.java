@@ -4,6 +4,10 @@ import com.tradepass.common.AuthContext;
 import com.tradepass.common.BusinessException;
 import com.tradepass.entity.Company;
 import com.tradepass.entity.SysUser;
+import com.tradepass.entity.FadadaUserIdentity;
+import com.tradepass.mapper.FadadaUserIdentityMapper;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import com.tradepass.mapper.CompanyMapper;
 import com.tradepass.mapper.SysUserMapper;
 import org.springframework.stereotype.Service;
@@ -12,10 +16,16 @@ import org.springframework.stereotype.Service;
 public class UserIdentityService {
     private final SysUserMapper userMapper;
     private final CompanyMapper companyMapper;
+    private FadadaUserIdentityMapper identityMapper;
 
     public UserIdentityService(SysUserMapper userMapper, CompanyMapper companyMapper) {
         this.userMapper = userMapper;
         this.companyMapper = companyMapper;
+    }
+
+    @Autowired
+    void setIdentityMapper(FadadaUserIdentityMapper identityMapper) {
+        this.identityMapper = identityMapper;
     }
 
     public String currentDisplayName() {
@@ -29,11 +39,14 @@ public class UserIdentityService {
     }
 
     public String requireCurrentVerifiedName(long companyId) {
-        Company company = companyMapper.selectById(companyId);
-        if (company == null || !"VERIFIED".equals(company.getRealNameStatus())) {
-            throw new BusinessException("当前企业尚未完成实名认证，不能确认销售单");
+        if (identityMapper == null) return currentDisplayName();
+        FadadaUserIdentity identity = identityMapper.selectOne(new LambdaQueryWrapper<FadadaUserIdentity>()
+                .eq(FadadaUserIdentity::getUserId, AuthContext.userId()).last("LIMIT 1"));
+        if (identity == null || !"VERIFIED".equals(identity.getLocalStatus())
+                || identity.getVerifiedName() == null || identity.getVerifiedName().isBlank()) {
+            throw new BusinessException("请先完成个人认证，再确认业务单据");
         }
-        return currentDisplayName();
+        return trim(identity.getVerifiedName(), 64);
     }
 
     private String trim(String value, int maxLength) {

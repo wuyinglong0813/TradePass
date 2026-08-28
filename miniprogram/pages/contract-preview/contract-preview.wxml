@@ -20,7 +20,8 @@
     <view class="memo-summary-arrow">›</view>
   </view>
 
-  <view class="contract-manage-actions" wx:if="{{canCancelContract || canEditContract || canDeleteContract || canRequestEnd || canRequestVoid || (activeContractAction && activeContractAction.bizType === 'CONTRACT')}}">
+  <view class="contract-manage-actions" wx:if="{{canSignContract || canCancelContract || canEditContract || canDeleteContract || canRequestEnd || canRequestVoid || (activeContractAction && activeContractAction.bizType === 'CONTRACT')}}">
+    <button class="contract-manage-button primary" wx:if="{{canSignContract}}" disabled="{{contractActionLoading}}" bindtap="signContract">{{signButtonText}}</button>
     <button class="contract-manage-button ghost" wx:if="{{canCancelContract}}" loading="{{contractActionLoading}}" disabled="{{contractActionLoading}}" bindtap="cancelContract">撤回审批</button>
     <button class="contract-manage-button primary" wx:if="{{canEditContract}}" disabled="{{contractActionLoading}}" bindtap="editContract">修改并重新发起</button>
     <button class="contract-manage-button danger" wx:if="{{canDeleteContract}}" loading="{{contractActionLoading}}" disabled="{{contractActionLoading}}" bindtap="deleteContract">删除合同</button>
@@ -29,6 +30,15 @@
     <button class="contract-manage-button ghost" wx:if="{{activeContractAction && activeContractAction.bizType === 'CONTRACT' && activeContractAction.canCancel}}" bindtap="cancelContractBilateralAction">撤回申请</button>
     <button class="contract-manage-button ghost" wx:if="{{activeContractAction && activeContractAction.bizType === 'CONTRACT' && activeContractAction.canReview}}" data-decision="REJECT" bindtap="reviewContractAction">拒绝申请</button>
     <button class="contract-manage-button danger" wx:if="{{activeContractAction && activeContractAction.bizType === 'CONTRACT' && activeContractAction.canReview}}" data-decision="APPROVE" bindtap="reviewContractAction">确认{{activeContractAction.actionText}}</button>
+  </view>
+
+  <view class="contract-lock-notice" wx:if="{{signing && contract && contract.status === 'PENDING'}}">
+    <view class="contract-lock-title">电子签署状态：{{signing.statusText}}</view>
+    <view>合同将在双方依次完成签署并归档后生效。</view>
+  </view>
+  <view class="contract-lock-notice" wx:elif="{{signing && contract && contract.status === 'ACTIVE' && electronicAbolishing}}">
+    <view class="contract-lock-title">合同作废签署中</view>
+    <view>双方完成作废签署前，合同履约资料暂时只读。</view>
   </view>
 
   <view class="contract-lock-notice" wx:if="{{activeContractAction}}">

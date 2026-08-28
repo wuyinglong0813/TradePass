@@ -116,6 +116,27 @@ public class CompanyCertificationService {
     }
 
     @Transactional
+    public void completeProviderCertification(long companyId, long applicantUserId,
+                                              String providerRequestId, String reason) {
+        Company company = requireCompany(companyId);
+        if ("VERIFIED".equals(company.getCertificationStatus())) return;
+        CompanyCertificationApplication application = applicationMapper.selectOne(
+                new LambdaQueryWrapper<CompanyCertificationApplication>()
+                        .eq(CompanyCertificationApplication::getProviderRequestId, providerRequestId)
+                        .last("LIMIT 1"));
+        if (application == null) {
+            application = new CompanyCertificationApplication();
+            application.setCompanyId(companyId);
+            application.setApplicantUserId(applicantUserId);
+            application.setProviderRequestId(providerRequestId);
+            application.setStatus("SUBMITTED");
+            application.setSubmittedAt(LocalDateTime.now());
+            applicationMapper.insert(application);
+        }
+        if ("SUBMITTED".equals(application.getStatus())) approve(application, company, reason);
+    }
+
+    @Transactional
     public CertificationApplicationPayload review(String suppliedToken, CertificationReviewRequest request) {
         requireValidCallbackToken(suppliedToken);
         CompanyCertificationApplication application = applicationMapper.selectOne(

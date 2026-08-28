@@ -33,12 +33,51 @@ public class ContractArchiveService {
         ensureArchive(contract, archivedBy);
     }
 
+    public void archiveSignedPdf(ContractPayload contract, byte[] pdf, String providerFileId, long archivedBy) {
+        if (!objectStorageService.isEnabled()) throw new BusinessException("签署文件归档存储尚未启用");
+        if (pdf == null || pdf.length < 5 || pdf[0] != '%' || pdf[1] != 'P' || pdf[2] != 'D' || pdf[3] != 'F') {
+            throw new BusinessException("签署文件格式不正确");
+        }
+        long contractId = parseId(contract.id());
+        int versionNo = contract.versionNo() == null ? 1 : contract.versionNo();
+        if (find(contractId, versionNo) != null) return;
+        String sha256 = FileTypeInspector.sha256(pdf);
+        long companyId = parseId(contract.companyId());
+        String objectKey = keyPrefix() + "/contract/" + companyId + "/" + contractId
+                + "/v" + versionNo + "/signed-" + sha256 + ".pdf";
+        ObjectStorageService.StoredObject stored = objectStorageService.putImmutable(
+                objectKey, pdf, PDF_CONTENT_TYPE, sha256);
+        try {
+            jdbc.update("""
+                    INSERT INTO contract_archive
+                    (contract_id, version_no, storage_provider, storage_bucket, object_key,
+                     object_version_id, etag, original_name, content_type, file_size, sha256,
+                     encryption_algorithm, archived_by, archive_source, provider_file_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'FADADA_SIGNED', ?)
+                    """, contractId, versionNo, stored.provider(), stored.bucket(), stored.objectKey(),
+                    stored.versionId(), stored.etag(), pdfService.fileName(contract), PDF_CONTENT_TYPE,
+                    stored.fileSize(), stored.sha256(), stored.encryptionAlgorithm(), archivedBy,
+                    providerFileId);
+        } catch (DuplicateKeyException race) {
+            if (find(contractId, versionNo) == null) throw race;
+        }
+    }
+
     public PdfPayload getPdf(ContractPayload contract, long currentUserId) {
-        if (!"ACTIVE".equals(contract.status()) || !objectStorageService.isEnabled()) {
+        if (!objectStorageService.isEnabled()) {
             byte[] generated = pdfService.generate(contract);
             return new PdfPayload(pdfService.fileName(contract), generated, FileTypeInspector.sha256(generated));
         }
-        ArchiveRecord archive = ensureArchive(contract, currentUserId);
+        long contractId = parseId(contract.id());
+        int versionNo = contract.versionNo() == null ? 1 : contract.versionNo();
+        ArchiveRecord archive = find(contractId, versionNo);
+        if (archive == null && "ACTIVE".equals(contract.status())) {
+            archive = ensureArchive(contract, currentUserId);
+        }
+        if (archive == null) {
+            byte[] generated = pdfService.generate(contract);
+            return new PdfPayload(pdfService.fileName(contract), generated, FileTypeInspector.sha256(generated));
+        }
         byte[] data = objectStorageService.get(new ObjectStorageService.ObjectReference(
                 archive.storageBucket(), archive.objectKey(), archive.objectVersionId(),
                 archive.fileSize(), archive.sha256()));

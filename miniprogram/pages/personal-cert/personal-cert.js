@@ -1,9 +1,9 @@
 const { request } = require('../../utils/request');
 
 const STATUS_VIEW = {
-  NOT_STARTED: { title: '待完成个人认证', desc: '完成法大大实名认证后，可建立可信的个人身份。', tone: 'pending', button: '去法大大认证' },
-  IN_PROGRESS: { title: '个人认证进行中', desc: '如已完成法大大认证，请返回后刷新认证结果。', tone: 'processing', button: '继续认证' },
-  VERIFIED: { title: '个人认证已完成', desc: '你的实名身份已经由法大大认证。', tone: 'success', button: '' },
+  NOT_STARTED: { title: '待完成个人认证', desc: '完成实名认证后，可建立可信的个人身份。', tone: 'pending', button: '开始认证' },
+  IN_PROGRESS: { title: '个人认证进行中', desc: '如已完成认证，请返回后刷新认证结果。', tone: 'processing', button: '继续认证' },
+  VERIFIED: { title: '个人认证已完成', desc: '你的实名身份已通过认证。', tone: 'success', button: '' },
   FAILED: { title: '个人认证未通过', desc: '请查看失败原因并重新发起认证。', tone: 'failed', button: '重新认证' }
 };
 
@@ -70,7 +70,7 @@ Page({
     if (!this.data.providerEnabled) {
       wx.showModal({
         title: '认证服务未启用',
-        content: '法大大个人认证参数尚未配置完成，请联系管理员。',
+        content: '个人认证参数尚未配置完成，请联系管理员。',
         showCancel: false
       });
       return;

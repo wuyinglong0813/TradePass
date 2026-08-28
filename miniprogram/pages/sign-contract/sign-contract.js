@@ -668,7 +668,7 @@ Page({
     const res = await new Promise(r => {
       wx.showModal({
         title: editMode ? '确认重新发起' : '确认签订',
-        content: `即将与 ${counterpartyName} ${editMode ? '重新发起' : '签订'}合同\n金额：¥${totalAmount}\n模板：${templates[templateIndex].name}\n\n提交后需对方公司审批通过方可生效`,
+        content: `即将与 ${counterpartyName} ${editMode ? '重新发起' : '签订'}合同\n金额：¥${totalAmount}\n模板：${templates[templateIndex].name}\n\n提交后由双方依次完成电子签署，全部签完后生效`,
         success: r
       });
     });
@@ -696,7 +696,7 @@ Page({
       });
       const resultContractId = String(result.id);
       wx.showToast({
-        title: editMode ? '合同已更新并重新发起' : '合同已发起，等待对方审批',
+        title: editMode ? '合同已更新，请继续签署' : '合同已发起，请继续签署',
         icon: 'success', duration: 1500
       });
       // 签订成功后跳转到合同预览页查看完整合同

@@ -11,9 +11,6 @@ public class FadadaProperties {
     private String appSecret = "";
     private String serverUrl = "https://api.fadada.com/api/v5";
     private String callbackUrl = "";
-    private String callbackToken = "";
-    private String redirectUrl = "";
-    private String redirectMiniAppUrl = "";
 
     public boolean isEnabled() { return enabled; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
@@ -25,12 +22,6 @@ public class FadadaProperties {
     public void setServerUrl(String serverUrl) { this.serverUrl = safe(serverUrl); }
     public String getCallbackUrl() { return callbackUrl; }
     public void setCallbackUrl(String callbackUrl) { this.callbackUrl = safe(callbackUrl); }
-    public String getCallbackToken() { return callbackToken; }
-    public void setCallbackToken(String callbackToken) { this.callbackToken = safe(callbackToken); }
-    public String getRedirectUrl() { return redirectUrl; }
-    public void setRedirectUrl(String redirectUrl) { this.redirectUrl = safe(redirectUrl); }
-    public String getRedirectMiniAppUrl() { return redirectMiniAppUrl; }
-    public void setRedirectMiniAppUrl(String redirectMiniAppUrl) { this.redirectMiniAppUrl = safe(redirectMiniAppUrl); }
 
     private String safe(String value) {
         return value == null ? "" : value.trim();

@@ -6,9 +6,9 @@ tradepass:
   # 体验版临时账号：只匹配指定的两个测试手机号，正式上线前关闭。
   experience-test-accounts:
     enabled: ${TRADEPASS_EXPERIENCE_TEST_ACCOUNTS_ENABLED:true}
-  # 体验版临时启用 CA 模拟链路；接入真实服务商前将环境变量改为 false。
+  # 生产及云托管开发版默认使用真实认证链路；仅显式开启时使用旧模拟链路。
   ca:
-    mock-enabled: ${TRADEPASS_CA_MOCK_ENABLED:true}
+    mock-enabled: ${TRADEPASS_CA_MOCK_ENABLED:false}
   storage:
     enabled: ${TRADEPASS_STORAGE_ENABLED:true}
     required: true

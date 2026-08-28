@@ -10,6 +10,7 @@
     "pages/me/me",
     "pages/personal-cert/personal-cert",
     "pages/fadada-auth/fadada-auth",
+    "pages/service-return/service-return",
     "pages/company-bind/company-bind",
     "pages/order-detail/order-detail",
     "pages/contract-center/contract-center",
