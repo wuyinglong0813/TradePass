@@ -109,8 +109,7 @@ public class SdkFadadaSigningGateway implements FadadaSigningGateway {
         request.setClientUserId(clientUserId);
         request.setRedirectMiniAppUrl(redirectMiniAppUrl);
         SignTaskActorGetUrlRes response = invoke(() -> signTaskClient.signTaskActorGetUrl(request), "获取合同签署地址");
-        if (!hasText(response.getActorSignTaskUrl())) throw new BusinessException("未获取到合同签署地址，请稍后重试");
-        return response.getActorSignTaskUrl();
+        return requiredActorEmbedUrl(response);
     }
 
     @Override
@@ -313,6 +312,12 @@ public class SdkFadadaSigningGateway implements FadadaSigningGateway {
         }
     }
 
-    private boolean hasText(String value) { return value != null && !value.isBlank(); }
+    static String requiredActorEmbedUrl(SignTaskActorGetUrlRes response) {
+        String embedUrl = response == null ? null : response.getActorSignTaskEmbedUrl();
+        if (!hasText(embedUrl)) throw new BusinessException("未获取到小程序合同签署地址，请稍后重试");
+        return embedUrl;
+    }
+
+    private static boolean hasText(String value) { return value != null && !value.isBlank(); }
     @FunctionalInterface private interface ApiCall<T> { BaseRes<T> call() throws ApiException; }
 }
