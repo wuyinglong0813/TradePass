@@ -34,6 +34,7 @@ public class FadadaCompanyService {
     private final CompanyMapper companyMapper;
     private final AccessControlService accessControl;
     private final CompanyCertificationService certificationService;
+    private final FadadaPersonalIdentityService personalIdentityService;
     private final FadadaCompanyGateway gateway;
     private final FadadaProperties properties;
     private final ObjectMapper objectMapper;
@@ -43,6 +44,7 @@ public class FadadaCompanyService {
                                 CompanyMapper companyMapper,
                                 AccessControlService accessControl,
                                 CompanyCertificationService certificationService,
+                                FadadaPersonalIdentityService personalIdentityService,
                                 FadadaCompanyGateway gateway,
                                 FadadaProperties properties,
                                 ObjectMapper objectMapper) {
@@ -51,6 +53,7 @@ public class FadadaCompanyService {
         this.companyMapper = companyMapper;
         this.accessControl = accessControl;
         this.certificationService = certificationService;
+        this.personalIdentityService = personalIdentityService;
         this.gateway = gateway;
         this.properties = properties;
         this.objectMapper = objectMapper;
@@ -65,6 +68,7 @@ public class FadadaCompanyService {
     public ServiceUrlPayload createAuthUrl(long companyId) {
         requireReady();
         accessControl.requireLegalOrClaim(companyId);
+        personalIdentityService.requireCurrentVerified();
         Company company = requireCompany(companyId);
         requireCompanyFields(company);
         FadadaCorpIdentity identity = ensure(companyId, AuthContext.userId());

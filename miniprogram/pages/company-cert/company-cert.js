@@ -97,6 +97,20 @@ Page({
     if (this.data.submitting) return;
     this.setData({ submitting: true });
     try {
+      const personalIdentity = await request({
+        url: '/fadada/users/me/identity', withCompany: false
+      });
+      if (!personalIdentity || personalIdentity.status !== 'VERIFIED') {
+        wx.showModal({
+          title: '请先完成个人认证',
+          content: '创建企业前，需要先确认当前申请人的实名身份。',
+          confirmText: '去认证',
+          success: result => {
+            if (result.confirm) wx.navigateTo({ url: '/pages/personal-cert/personal-cert' });
+          }
+        });
+        return;
+      }
       const created = await request({
         url: '/companies', method: 'POST',
         data: {
@@ -124,7 +138,7 @@ Page({
     }
   },
 
-  handleAction(e) {
+  async handleAction(e) {
     const key = e.currentTarget.dataset.key;
     const identity = this.data.identity || {};
     if (!identity.enabled) {
@@ -134,6 +148,27 @@ Page({
     if (key === 'seal' && identity.status !== 'VERIFIED') {
       wx.showToast({ title: '请先完成企业认证', icon: 'none' });
       return;
+    }
+    if (key === 'company') {
+      try {
+        const personalIdentity = await request({
+          url: '/fadada/users/me/identity', withCompany: false
+        });
+        if (!personalIdentity || personalIdentity.status !== 'VERIFIED') {
+          wx.showModal({
+            title: '请先完成个人认证',
+            content: '企业认证前，需要先确认当前申请人的实名身份。',
+            confirmText: '去认证',
+            success: result => {
+              if (result.confirm) wx.navigateTo({ url: '/pages/personal-cert/personal-cert' });
+            }
+          });
+          return;
+        }
+      } catch (error) {
+        wx.showToast({ title: error.message || '个人认证状态获取失败', icon: 'none' });
+        return;
+      }
     }
     this.openService(key, this.data.companyId);
   },

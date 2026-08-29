@@ -57,6 +57,19 @@ public class FadadaPersonalIdentityService {
     }
 
     @Transactional
+    public PersonalIdentityPayload requireCurrentVerified() {
+        requireReady();
+        FadadaUserIdentity identity = findByUserId(AuthContext.userId());
+        if (identity != null && !"VERIFIED".equals(identity.getLocalStatus())) {
+            identity = sync(identity);
+        }
+        if (identity == null || !"VERIFIED".equals(identity.getLocalStatus())) {
+            throw new BusinessException("请先完成个人实名认证，再创建或认证企业");
+        }
+        return toPayload(identity);
+    }
+
+    @Transactional
     public FadadaAuthUrlPayload createAuthUrl() {
         requireReady();
         long userId = AuthContext.userId();

@@ -24,6 +24,7 @@ import com.tradepass.dto.response.RolePayload;
 import com.tradepass.entity.Company;
 import com.tradepass.entity.CompanyInvite;
 import com.tradepass.entity.CompanyMember;
+import com.tradepass.dto.response.PersonalIdentityPayload;
 import com.tradepass.entity.CounterpartyRelationEntity;
 import com.tradepass.entity.RoleDef;
 import com.tradepass.mapper.CompanyInviteMapper;
@@ -35,6 +36,7 @@ import com.tradepass.mapper.RoleDefMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -57,6 +59,7 @@ public class CompanyService {
     private final AuditLogService auditLogService;
     private final boolean caMockEnabled;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private FadadaPersonalIdentityService personalIdentityService;
 
     public CompanyService(CompanyMapper companyMapper,
                           CompanyMemberMapper companyMemberMapper,
@@ -80,6 +83,11 @@ public class CompanyService {
         this.rolePermissionService = rolePermissionService;
         this.auditLogService = auditLogService;
         this.caMockEnabled = caMockEnabled;
+    }
+
+    @Autowired
+    void setPersonalIdentityService(FadadaPersonalIdentityService personalIdentityService) {
+        this.personalIdentityService = personalIdentityService;
     }
 
     public List<CompanySearchSummary> searchCompanies(String keyword) {
@@ -117,6 +125,12 @@ public class CompanyService {
     public CompanyProfile submitCompany(CompanySubmitRequest request) {
         Company company = companyMapper.selectOne(new LambdaQueryWrapper<Company>().eq(Company::getCreditCode, request.creditCode()).last("LIMIT 1"));
         if (company == null) {
+            if (personalIdentityService != null) {
+                PersonalIdentityPayload identity = personalIdentityService.requireCurrentVerified();
+                if (!"VERIFIED".equals(identity.status())) {
+                    throw new BusinessException("请先完成个人实名认证，再创建企业");
+                }
+            }
             company = new Company();
             company.setCreditCode(request.creditCode());
             company.setCreatedBy(AuthContext.userId());

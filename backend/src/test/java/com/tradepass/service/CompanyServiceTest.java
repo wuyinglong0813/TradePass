@@ -181,6 +181,20 @@ class CompanyServiceTest {
     }
 
     @Test
+    void requiresVerifiedPersonBeforeCreatingCompany() {
+        FadadaPersonalIdentityService personalIdentityService = mock(FadadaPersonalIdentityService.class);
+        service.setPersonalIdentityService(personalIdentityService);
+        when(companyMapper.selectOne(any(Wrapper.class))).thenReturn(null);
+        when(personalIdentityService.requireCurrentVerified())
+                .thenThrow(new BusinessException("请先完成个人实名认证，再创建或认证企业"));
+
+        assertThatThrownBy(() -> service.submitCompany(
+                new CompanySubmitRequest("10", "新企业", "NEW-CODE", "新法人")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("请先完成个人实名认证，再创建或认证企业");
+    }
+
+    @Test
     @SuppressWarnings("unchecked")
     void refusesToExposeExistingCompanyThroughSubmission() {
         Company existing = company(11L, "已入驻企业");

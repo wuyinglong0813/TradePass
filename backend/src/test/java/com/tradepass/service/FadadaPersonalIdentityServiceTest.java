@@ -21,6 +21,7 @@ import org.mockito.ArgumentCaptor;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
@@ -123,6 +124,20 @@ class FadadaPersonalIdentityServiceTest {
         assertThat(result.failureReason()).isNull();
         assertThat(identity.getOpenUserId()).isEqualTo("open-user-8");
         verify(identityMapper).updateById(identity);
+    }
+
+    @Test
+    void requiresPersonalVerificationBeforeEnterpriseOnboarding() {
+        when(identityMapper.selectOne(any(Wrapper.class))).thenReturn(null);
+
+        assertThatThrownBy(() -> service.requireCurrentVerified())
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("请先完成个人实名认证，再创建或认证企业");
+
+        FadadaUserIdentity verified = identity("VERIFIED");
+        verified.setVerifiedName("张三");
+        when(identityMapper.selectOne(any(Wrapper.class))).thenReturn(verified);
+        assertThat(service.requireCurrentVerified().status()).isEqualTo("VERIFIED");
     }
 
     private FadadaUserIdentity identity(String localStatus) {
