@@ -21,6 +21,8 @@ public record ContractPayload(
         String approvedBy,
         String approvedAt,
         String createdAt,
+        String supplierCompanyName,
+        String buyerCompanyName,
         String viewerCompanyId,
         String viewerCounterpartyCompanyId,
         String viewerCounterpartyName,

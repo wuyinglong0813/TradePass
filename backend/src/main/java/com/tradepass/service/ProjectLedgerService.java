@@ -45,6 +45,62 @@ public class ProjectLedgerService {
         return project;
     }
 
+    public Map<String, Object> contractAssignment(Long contractId) {
+        long companyId = requireManager();
+        requireActivePartyContract(companyId, contractId);
+
+        List<Map<String, Object>> assignments = jdbc.query("""
+                        SELECT project.id, project.project_no, project.name
+                        FROM project_contract_assignment assignment
+                        JOIN project_ledger project ON project.id = assignment.project_id
+                        WHERE assignment.company_id = ? AND assignment.contract_id = ?
+                        LIMIT 1
+                        """, (rs, rowNum) -> {
+                    Map<String, Object> view = new LinkedHashMap<>();
+                    view.put("assigned", true);
+                    view.put("dismissed", false);
+                    view.put("projectId", rs.getLong("id"));
+                    view.put("projectNo", rs.getString("project_no"));
+                    view.put("projectName", rs.getString("name"));
+                    return view;
+                }, companyId, contractId);
+        if (!assignments.isEmpty()) return assignments.get(0);
+        Long dismissedCount = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM project_contract_prompt_preference
+                WHERE company_id = ? AND contract_id = ?
+                """, Long.class, companyId, contractId);
+        Map<String, Object> unassigned = new LinkedHashMap<>();
+        unassigned.put("assigned", false);
+        unassigned.put("dismissed", dismissedCount != null && dismissedCount > 0);
+        return unassigned;
+    }
+
+    @Transactional
+    public Map<String, Object> dismissContractPrompt(Long contractId) {
+        long companyId = requireManager();
+        requireActivePartyContract(companyId, contractId);
+        jdbc.update("""
+                INSERT IGNORE INTO project_contract_prompt_preference
+                (company_id, contract_id, dismissed_by)
+                VALUES (?, ?, ?)
+                """, companyId, contractId, AuthContext.userId());
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("dismissed", true);
+        return result;
+    }
+
+    private void requireActivePartyContract(long companyId, Long contractId) {
+        if (contractId == null) throw new BusinessException("合同不存在");
+        Long validContractId = jdbc.query("""
+                        SELECT id FROM trade_contract
+                        WHERE id = ? AND status = 'ACTIVE'
+                          AND (company_id = ? OR counterparty_company_id = ?)
+                        LIMIT 1
+                        """, rs -> rs.next() ? rs.getLong(1) : null,
+                contractId, companyId, companyId);
+        if (validContractId == null) throw new BusinessException("合同不存在或尚未签署生效");
+    }
+
     @Transactional
     public Map<String, Object> createProject(String projectNo, String name, String description) {
         long companyId = requireManager();

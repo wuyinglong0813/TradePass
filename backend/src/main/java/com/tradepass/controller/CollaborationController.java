@@ -90,12 +90,30 @@ public class CollaborationController {
                 string(body, "invoiceAmount")));
     }
 
-    @PostMapping("/contract-attachments/{id}/decision")
+    @PostMapping(value = "/contract-attachments/{id}/decision",
+            consumes = MediaType.APPLICATION_JSON_VALUE)
     public ApiResponse<Map<String, Object>> decideAttachment(@PathVariable Long id,
                                                               @RequestBody Map<String, Object> body) {
         return ApiResponse.ok(attachmentService.decide(id,
                 String.valueOf(body.getOrDefault("decision", "")),
                 String.valueOf(body.getOrDefault("reason", ""))));
+    }
+
+    @PostMapping(value = "/contract-attachments/{id}/decision",
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<Map<String, Object>> decideAttachmentWithSignature(
+            @PathVariable Long id,
+            @RequestParam String decision,
+            @RequestParam(required = false) String reason,
+            @RequestParam("signature") MultipartFile signature) {
+        try {
+            return ApiResponse.ok(attachmentService.decide(id, decision, reason,
+                    signature.getOriginalFilename(), signature.getBytes()));
+        } catch (BusinessException exception) {
+            throw exception;
+        } catch (Exception exception) {
+            throw new BusinessException("签名图片读取失败，请重新签名");
+        }
     }
 
     @PostMapping("/contract-attachments/{id}/withdraw")

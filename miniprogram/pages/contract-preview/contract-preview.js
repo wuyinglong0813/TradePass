@@ -29,6 +29,9 @@ Page({
     otherAttachments: [],
     attachmentLoading: false,
     attachmentUploading: false,
+    showPaymentConfirmationSignature: false,
+    paymentConfirmationAttachment: null,
+    paymentConfirmationSignerName: '',
     showPaymentAmountEditor: false,
     paymentAmount: '',
     paymentDate: today(),
@@ -70,6 +73,7 @@ Page({
     activeContractAction: null,
     contractActionLoading: false,
     signing: null,
+    signedContractArchived: false,
     canSignContract: false,
     signButtonText: '签署合同',
     electronicAbolishing: false,
@@ -200,9 +204,9 @@ Page({
       const currentCompany = this.currentCompanyName();
       const viewerCounterpartyName = contract.viewerCounterpartyName || contract.counterpartyName;
       const pdfTitle = contract.name || (sData && sData.title) || this.data.contractName || '购销合同';
-      const pdfSupplier = fieldValue('supplier')
+      const pdfSupplier = contract.supplierCompanyName || fieldValue('supplier')
         || (isPurchase ? viewerCounterpartyName : currentCompany);
-      const pdfBuyer = fieldValue('buyer')
+      const pdfBuyer = contract.buyerCompanyName || fieldValue('buyer')
         || (isPurchase ? currentCompany : viewerCounterpartyName);
       const pdfDate = fieldValue('signDate')
         || contract.startDate
@@ -255,6 +259,7 @@ Page({
         contractReadOnly,
         activeContractAction: actionPending ? activeContractAction : null,
         signing,
+        signedContractArchived: !!(signing && signing.signedFileArchived),
         canSignContract: !!(signing && signing.canSign),
         signButtonText: signing && (signing.abolishApproved
           || String(signing.status || '').startsWith('ABOLISH_') || signing.status === 'abolishing')
@@ -278,6 +283,7 @@ Page({
         this.loadBusinessDocuments('SALES_ORDER');
         this.loadBusinessDocuments('RETURN_ORDER');
         this.loadFulfillmentData();
+        this.promptProjectLedgerIfNeeded(contract);
       });
       this.hasLoadedContract = true;
       wx.setNavigationBarTitle({ title: '合同详情' });
@@ -517,6 +523,86 @@ Page({
     );
     const company = companies.find(item => String(item.companyId) === currentCompanyId);
     return (company && company.companyName) || '本方企业';
+  },
+
+  canManageProjectLedger() {
+    const member = getApp().globalData.memberInfo || {};
+    let permissions = member.permissions || [];
+    if (!Array.isArray(permissions)) {
+      try { permissions = JSON.parse(permissions); } catch (e) {
+        permissions = String(permissions).split(',').map(item => item.trim());
+      }
+    }
+    return ['LEGAL', 'ADMIN'].includes(member.roleCode)
+      || permissions.includes('all')
+      || permissions.includes('member_manage')
+      || permissions.includes('auth_manage');
+  },
+
+  projectPromptStorageKey(contractId) {
+    const companyId = getApp().getCurrentCompanyId() || 'unknown';
+    return `tradepass_project_prompt_${companyId}_${contractId}`;
+  },
+
+  async promptProjectLedgerIfNeeded(contract) {
+    if (!contract || contract.status !== 'ACTIVE' || !this.canManageProjectLedger()) return;
+    if (this.projectLedgerPromptChecked) return;
+    const storageKey = this.projectPromptStorageKey(contract.id || this.data.contractId);
+    if (wx.getStorageSync(storageKey)) return;
+    this.projectLedgerPromptChecked = true;
+    const { request } = require('../../utils/request');
+    try {
+      const assignment = await request({
+        url: `/project-ledgers/contracts/${contract.id || this.data.contractId}/assignment`
+      });
+      if (assignment && (assignment.assigned || assignment.dismissed)) {
+        wx.setStorageSync(storageKey, true);
+        return;
+      }
+      const projects = await request({ url: '/project-ledgers' });
+      const hasProjects = Array.isArray(projects) && projects.length > 0;
+      const itemList = hasProjects
+        ? ['加入已有项目账套', '新建项目并加入', '本合同不再提醒']
+        : ['创建项目账套并加入', '本合同不再提醒'];
+      wx.showActionSheet({
+        alertText: hasProjects
+          ? '合同已签署生效，请选择项目账套归属'
+          : '合同已签署生效，当前企业还没有项目账套',
+        itemList,
+        success: result => {
+          if ((!hasProjects && result.tapIndex === 1)
+            || (hasProjects && result.tapIndex === 2)) {
+            this.dismissProjectLedgerPrompt(contract.id || this.data.contractId, storageKey);
+            return;
+          }
+          const action = hasProjects && result.tapIndex === 0 ? 'assign' : 'create';
+          wx.navigateTo({
+            url: `/pages/project-ledger/project-ledger?action=${action}`
+              + `&contractId=${encodeURIComponent(contract.id || this.data.contractId)}`
+              + `&contractName=${encodeURIComponent(contract.name || this.data.contractName || '')}`
+          });
+        }
+      });
+    } catch (error) {
+      // 项目账套是签约后的可选归集动作，失败不影响合同详情和电子签署结果。
+      this.projectLedgerPromptChecked = false;
+    }
+  },
+
+  async dismissProjectLedgerPrompt(contractId, storageKey) {
+    const { request } = require('../../utils/request');
+    try {
+      await request({
+        url: `/project-ledgers/contracts/${contractId}/dismiss`,
+        method: 'POST',
+        data: {}
+      });
+      wx.setStorageSync(storageKey, true);
+      wx.showToast({ title: '本合同不再提醒', icon: 'none' });
+    } catch (error) {
+      wx.showToast({ title: error.message || '设置失败，请重试', icon: 'none' });
+      this.projectLedgerPromptChecked = false;
+    }
   },
 
   openContractPdf() {
@@ -1087,6 +1173,10 @@ Page({
   approveAttachment(e) {
     const attachment = e.currentTarget.dataset.attachment;
     if (!attachment || !attachment.id) return;
+    if (attachment.category === 'PAYMENT_VOUCHER') {
+      this.openPaymentConfirmationSignature(attachment);
+      return;
+    }
     wx.showModal({
       title: `确认${attachment.category === 'INVOICE' ? '发票' : '转款凭证'}`,
       content: '通过后将正式共享给双方，并立即更新客户对账。',
@@ -1095,6 +1185,150 @@ Page({
         if (result.confirm) this.submitAttachmentDecision(attachment, 'APPROVE', '');
       }
     });
+  },
+
+  openPaymentConfirmationSignature(attachment) {
+    const app = getApp();
+    const member = app.globalData.memberInfo || {};
+    const user = app.globalData.userInfo || {};
+    this.paymentSignatureHasInk = false;
+    this.paymentSignatureStrokeLength = 0;
+    this.paymentSignatureLastPoint = null;
+    this.setData({
+      showPaymentConfirmationSignature: true,
+      paymentConfirmationAttachment: attachment,
+      paymentConfirmationSignerName: user.nickname || member.userName || '当前用户'
+    }, () => this.initializePaymentSignatureCanvas());
+  },
+
+  closePaymentConfirmationSignature() {
+    if (this.data.attachmentLoading) return;
+    this.paymentSignatureCanvas = null;
+    this.paymentSignatureContext = null;
+    this.paymentSignatureHasInk = false;
+    this.paymentSignatureLastPoint = null;
+    this.setData({
+      showPaymentConfirmationSignature: false,
+      paymentConfirmationAttachment: null
+    });
+  },
+
+  initializePaymentSignatureCanvas() {
+    wx.createSelectorQuery().select('#contractPaymentSignatureCanvas')
+      .fields({ node: true, size: true })
+      .exec(result => {
+        const target = result && result[0];
+        if (!target || !target.node) {
+          wx.showToast({ title: '签名板加载失败，请重试', icon: 'none' });
+          return;
+        }
+        const canvas = target.node;
+        const ratio = Math.max(1, wx.getSystemInfoSync().pixelRatio || 1);
+        canvas.width = Math.round(target.width * ratio);
+        canvas.height = Math.round(target.height * ratio);
+        const context = canvas.getContext('2d');
+        context.scale(ratio, ratio);
+        context.lineWidth = 3;
+        context.lineCap = 'round';
+        context.lineJoin = 'round';
+        context.strokeStyle = '#172536';
+        this.paymentSignatureCanvas = canvas;
+        this.paymentSignatureContext = context;
+        this.paymentSignatureCanvasWidth = target.width;
+        this.paymentSignatureCanvasHeight = target.height;
+      });
+  },
+
+  paymentSignaturePoint(e) {
+    const touch = e.touches && e.touches[0];
+    if (!touch) return null;
+    return {
+      x: Number(touch.x !== undefined ? touch.x : touch.clientX),
+      y: Number(touch.y !== undefined ? touch.y : touch.clientY)
+    };
+  },
+
+  onPaymentSignatureTouchStart(e) {
+    const point = this.paymentSignaturePoint(e);
+    if (!point || !this.paymentSignatureContext) return;
+    this.paymentSignatureContext.beginPath();
+    this.paymentSignatureContext.moveTo(point.x, point.y);
+    this.paymentSignatureLastPoint = point;
+  },
+
+  onPaymentSignatureTouchMove(e) {
+    const point = this.paymentSignaturePoint(e);
+    if (!point || !this.paymentSignatureContext) return;
+    const last = this.paymentSignatureLastPoint;
+    if (last) {
+      this.paymentSignatureStrokeLength += Math.hypot(point.x - last.x, point.y - last.y);
+      this.paymentSignatureHasInk = this.paymentSignatureStrokeLength >= 12;
+    }
+    this.paymentSignatureContext.lineTo(point.x, point.y);
+    this.paymentSignatureContext.stroke();
+    this.paymentSignatureLastPoint = point;
+  },
+
+  onPaymentSignatureTouchEnd() {
+    if (this.paymentSignatureContext) this.paymentSignatureContext.closePath();
+    this.paymentSignatureLastPoint = null;
+  },
+
+  clearPaymentSignature() {
+    if (!this.paymentSignatureContext) return;
+    this.paymentSignatureContext.clearRect(
+      0, 0, this.paymentSignatureCanvasWidth || 0, this.paymentSignatureCanvasHeight || 0
+    );
+    this.paymentSignatureHasInk = false;
+    this.paymentSignatureStrokeLength = 0;
+    this.paymentSignatureLastPoint = null;
+  },
+
+  paymentSignatureTempFile() {
+    return new Promise((resolve, reject) => {
+      wx.canvasToTempFilePath({
+        canvas: this.paymentSignatureCanvas,
+        fileType: 'png',
+        destWidth: Math.round((this.paymentSignatureCanvasWidth || 320) * 2),
+        destHeight: Math.round((this.paymentSignatureCanvasHeight || 150) * 2),
+        success: result => resolve(result.tempFilePath),
+        fail: error => reject(new Error((error && error.errMsg) || '签名图片生成失败'))
+      });
+    });
+  },
+
+  async confirmPaymentSignature() {
+    const attachment = this.data.paymentConfirmationAttachment;
+    if (!attachment || this.data.attachmentLoading) return;
+    if (!this.paymentSignatureHasInk || !this.paymentSignatureCanvas) {
+      wx.showToast({ title: '请先手写签名', icon: 'none' });
+      return;
+    }
+    try {
+      this.setData({ attachmentLoading: true });
+      wx.showLoading({ title: '正在确认...' });
+      const filePath = await this.paymentSignatureTempFile();
+      await uploadMultipartApiFile(
+        `/contract-attachments/${attachment.id}/decision`,
+        filePath,
+        { decision: 'APPROVE', reason: '' },
+        'signature'
+      );
+      this.paymentSignatureCanvas = null;
+      this.paymentSignatureContext = null;
+      this.paymentSignatureHasInk = false;
+      this.setData({
+        showPaymentConfirmationSignature: false,
+        paymentConfirmationAttachment: null
+      });
+      wx.showToast({ title: '已签字确认并更新对账', icon: 'success' });
+      await this.loadAttachments(attachment.category);
+    } catch (error) {
+      wx.showToast({ title: error.message || '签字确认失败', icon: 'none' });
+    } finally {
+      wx.hideLoading();
+      this.setData({ attachmentLoading: false });
+    }
   },
 
   rejectAttachment(e) {

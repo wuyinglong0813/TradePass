@@ -6,6 +6,14 @@
     <view class="hero-count"><text>{{projects.length}}</text><label>项目总数</label></view>
   </view>
 
+  <view class="pending-contract-tip" wx:if="{{pendingContractId}}">
+    <view class="pending-contract-icon">合</view>
+    <view class="pending-contract-copy">
+      <view>{{pendingAction === 'create' ? '创建项目并加入合同' : '请选择合同所属项目'}}</view>
+      <text>{{pendingContractName || pendingContractId}}</text>
+    </view>
+  </view>
+
   <view class="section-head">
     <view><view class="section-title">项目列表</view><view class="section-sub">没有项目需求时无需创建，不影响原有业务</view></view>
     <button bindtap="openCreate">＋ 创建项目</button>
@@ -15,7 +23,7 @@
     <view class="project-card" wx:for="{{projects}}" wx:key="id" data-id="{{item.id}}" bindtap="openProject">
       <view class="project-top">
         <view class="project-main"><view class="project-name">{{item.name}}</view><view class="project-no">{{item.projectNo}}</view></view>
-        <view class="contract-count">{{item.contractCount}} 份合同 ›</view>
+        <view class="contract-count">{{pendingContractId ? '选择此项目 ›' : item.contractCount + ' 份合同 ›'}}</view>
       </view>
       <view class="project-description" wx:if="{{item.description}}">{{item.description}}</view>
       <view class="amount-grid">
@@ -103,7 +111,7 @@
 
       <view class="create-actions">
         <button class="create-cancel" disabled="{{creating}}" bindtap="closeCreate">取消</button>
-        <button class="create-submit" loading="{{creating}}" disabled="{{creating || !projectName}}" bindtap="createProject">创建项目</button>
+        <button class="create-submit" loading="{{creating || assigning}}" disabled="{{creating || assigning || !projectName}}" bindtap="createProject">{{pendingContractId ? '创建并加入合同' : '创建项目'}}</button>
       </view>
     </view>
   </view>

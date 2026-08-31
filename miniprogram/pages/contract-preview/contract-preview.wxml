@@ -110,17 +110,31 @@
           <view class="pdf-clause-text">{{item.content || '—'}}</view>
         </view>
         <view class="pdf-sign-table">
-          <view><text>供方</text><text>单位名称（章）</text><text>法定代表人</text><text>开户银行及账号</text></view>
-          <view><text>需方</text><text>单位名称（章）</text><text>法定代表人</text><text>开户银行及账号</text></view>
+          <view class="pdf-party-sign">
+            <text class="pdf-party-role">供方</text>
+            <text class="pdf-party-name">{{pdfSupplier || '—'}}</text>
+            <view class="pdf-seal-state {{signedContractArchived ? 'signed' : ''}}">
+              <text>{{signedContractArchived ? '电子签章' : '待签署'}}</text>
+              <text>{{signedContractArchived ? '已完成' : '—'}}</text>
+            </view>
+          </view>
+          <view class="pdf-party-sign">
+            <text class="pdf-party-role">需方</text>
+            <text class="pdf-party-name">{{pdfBuyer || '—'}}</text>
+            <view class="pdf-seal-state {{signedContractArchived ? 'signed' : ''}}">
+              <text>{{signedContractArchived ? '电子签章' : '待签署'}}</text>
+              <text>{{signedContractArchived ? '已完成' : '—'}}</text>
+            </view>
+          </view>
         </view>
-        <view class="pdf-open-hint">点击查看完整 PDF</view>
+        <view class="pdf-open-hint">{{signedContractArchived ? '点击查看带双方电子印章的归档 PDF' : '点击查看完整 PDF'}}</view>
       </view>
 
       <view class="pdf-actions">
         <button class="pdf-button primary" loading="{{pdfLoading}}" disabled="{{pdfLoading}}" bindtap="openContractPdf">查看 PDF</button>
         <button class="pdf-button secondary" loading="{{pdfLoading}}" disabled="{{pdfLoading}}" bindtap="downloadContractPdf">下载 PDF</button>
       </view>
-      <view class="pdf-tip">PDF 按 A4 固定版式生成，手机端会整页等比例缩放；打开后可通过右上角菜单保存或转发。</view>
+      <view class="pdf-tip">电子印章以双方签署完成后的归档 PDF 为准；打开后可通过右上角菜单保存或转发。</view>
 
     </view>
   </block>
@@ -285,6 +299,25 @@
       <view class="payment-amount-field {{invoiceError ? 'error' : ''}}"><text class="payment-currency">¥</text><input class="payment-amount-input" type="digit" maxlength="19" value="{{invoiceAmount}}" placeholder="0.00" bindinput="onInvoiceAmountInput"/><text class="payment-unit">元</text></view>
       <view class="payment-field-message {{invoiceError ? 'error' : ''}}">{{invoiceError || '日期和金额将在确认后计入对账'}}</view>
       <view class="payment-sheet-actions"><button class="payment-cancel" bindtap="closeInvoiceEditor">取消</button><button class="payment-confirm" bindtap="confirmInvoiceUpload">提交对方确认</button></view>
+    </view>
+  </view>
+
+  <view class="payment-signature-mask" wx:if="{{showPaymentConfirmationSignature}}" bindtap="closePaymentConfirmationSignature">
+    <view class="payment-signature-sheet" catchtap="noop">
+      <view class="payment-signature-handle"></view>
+      <view class="payment-signature-head">
+        <view><view class="payment-signature-title">确认转款凭证</view><view class="payment-signature-signer">确认人：{{paymentConfirmationSignerName}}</view></view>
+        <view class="payment-signature-close" bindtap="closePaymentConfirmationSignature">×</view>
+      </view>
+      <view class="payment-signature-copy">查看凭证不需要签名；只有点击“确认通过”时才需要手写签名。</view>
+      <view class="payment-signature-canvas-wrap">
+        <canvas type="2d" id="contractPaymentSignatureCanvas" class="payment-signature-canvas" disable-scroll="true" bindtouchstart="onPaymentSignatureTouchStart" catchtouchmove="onPaymentSignatureTouchMove" bindtouchend="onPaymentSignatureTouchEnd" bindtouchcancel="onPaymentSignatureTouchEnd"></canvas>
+        <view class="payment-signature-placeholder">请在此区域签名</view>
+      </view>
+      <view class="payment-signature-actions">
+        <button class="payment-signature-clear" disabled="{{attachmentLoading}}" bindtap="clearPaymentSignature">清除重签</button>
+        <button class="payment-signature-confirm" loading="{{attachmentLoading}}" disabled="{{attachmentLoading}}" bindtap="confirmPaymentSignature">签字并确认通过</button>
+      </view>
     </view>
   </view>
 

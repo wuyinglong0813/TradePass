@@ -32,6 +32,7 @@ public class ContractAttachmentService {
     private final ObjectStorageService objectStorageService;
     private final StorageProperties storageProperties;
     private final ReconciliationAccountService reconciliationAccountService;
+    private final UserIdentityService userIdentityService;
     private ApprovalService approvalService;
     private BilateralActionService bilateralActionService;
 
@@ -42,7 +43,8 @@ public class ContractAttachmentService {
                                      AuditLogService auditLogService,
                                      ObjectStorageService objectStorageService,
                                      StorageProperties storageProperties,
-                                     ReconciliationAccountService reconciliationAccountService) {
+                                     ReconciliationAccountService reconciliationAccountService,
+                                     UserIdentityService userIdentityService) {
         this.jdbc = jdbc;
         this.contractMapper = contractMapper;
         this.accessControlService = accessControlService;
@@ -50,6 +52,7 @@ public class ContractAttachmentService {
         this.objectStorageService = objectStorageService;
         this.storageProperties = storageProperties;
         this.reconciliationAccountService = reconciliationAccountService;
+        this.userIdentityService = userIdentityService;
     }
 
     @Autowired
@@ -66,7 +69,7 @@ public class ContractAttachmentService {
                               TradeContractMapper contractMapper,
                               AccessControlService accessControlService,
                               AuditLogService auditLogService) {
-        this(jdbc, contractMapper, accessControlService, auditLogService, null, null, null);
+        this(jdbc, contractMapper, accessControlService, auditLogService, null, null, null, null);
     }
 
     ContractAttachmentService(JdbcTemplate jdbc,
@@ -76,7 +79,7 @@ public class ContractAttachmentService {
                               ObjectStorageService objectStorageService,
                               StorageProperties storageProperties) {
         this(jdbc, contractMapper, accessControlService, auditLogService,
-                objectStorageService, storageProperties, null);
+                objectStorageService, storageProperties, null, null);
     }
 
     public List<Map<String, Object>> list(Long contractId, String category) {
@@ -95,6 +98,7 @@ public class ContractAttachmentService {
                                attachment.file_size, attachment.voucher_date, attachment.voucher_amount,
                                attachment.invoice_no, attachment.invoice_date, attachment.invoice_amount,
                                attachment.confirmed_at, attachment.rejected_reason,
+                               attachment.signer_name, attachment.signed_at,
                                attachment.created_by, attachment.created_at,
                                company.name AS uploader_company_name,
                                COALESCE(user.nickname, user.phone, CONCAT('用户', attachment.created_by)) AS uploader_name
@@ -129,6 +133,9 @@ public class ContractAttachmentService {
                     view.put("invoiceAmount", rs.getBigDecimal("invoice_amount"));
                     view.put("confirmedAt", rs.getTimestamp("confirmed_at") == null
                             ? null : rs.getTimestamp("confirmed_at").toLocalDateTime());
+                    view.put("signerName", safe(rs.getString("signer_name")));
+                    view.put("signedAt", rs.getTimestamp("signed_at") == null
+                            ? null : rs.getTimestamp("signed_at").toLocalDateTime());
                     view.put("rejectedReason", safe(rs.getString("rejected_reason")));
                     view.put("canConfirm", canConfirm);
                     view.put("canResubmit", "REJECTED".equals(status)
@@ -232,6 +239,12 @@ public class ContractAttachmentService {
 
     @Transactional
     public Map<String, Object> decide(Long id, String decision, String reason) {
+        return decide(id, decision, reason, null, null);
+    }
+
+    @Transactional
+    public Map<String, Object> decide(Long id, String decision, String reason,
+                                      String signatureName, byte[] signatureData) {
         long companyId = AuthContext.requireCompanyId();
         accessControlService.requireAnyPermission(companyId,
                 "contract_attachment_upload", "contract_sign", "order_create",
@@ -275,11 +288,18 @@ public class ContractAttachmentService {
 
         validateApprovalMetadata(attachment);
         LocalDateTime confirmedAt = LocalDateTime.now();
-        int updated = jdbc.update("""
-                UPDATE contract_attachment
-                SET status = 'APPROVED', confirmed_by = ?, confirmed_at = ?, rejected_reason = NULL
-                WHERE id = ? AND status = 'PENDING_CONFIRMATION'
-                """, AuthContext.userId(), confirmedAt, id);
+        SignatureEvidence signature = null;
+        if (PAYMENT_VOUCHER.equals(attachment.category())) {
+            signature = prepareSignature(companyId, attachment.contractId(), id,
+                    signatureName, signatureData, confirmedAt);
+        }
+        int updated = signature == null
+                ? jdbc.update("""
+                        UPDATE contract_attachment
+                        SET status = 'APPROVED', confirmed_by = ?, confirmed_at = ?, rejected_reason = NULL
+                        WHERE id = ? AND status = 'PENDING_CONFIRMATION'
+                        """, AuthContext.userId(), confirmedAt, id)
+                : updateApprovedWithSignature(id, confirmedAt, signature);
         if (updated == 0) return findView(attachment.contractId(), attachment.category(), id);
         if (reconciliationAccountService != null) {
             boolean invoice = INVOICE.equals(attachment.category());
@@ -296,6 +316,64 @@ public class ContractAttachmentService {
                 "对方已确认" + categoryLabel(attachment.category()) + " " + attachment.originalName(),
                 null);
         return findView(attachment.contractId(), attachment.category(), id);
+    }
+
+    private SignatureEvidence prepareSignature(long companyId, Long contractId, Long attachmentId,
+                                                String originalName, byte[] data,
+                                                LocalDateTime signedAt) {
+        if (data == null || data.length == 0) {
+            throw new BusinessException("确认转款凭证前请先完成手写签名");
+        }
+        if (data.length > 2L * 1024 * 1024) {
+            throw new BusinessException("签名图片不能超过 2MB");
+        }
+        String contentType = FileTypeInspector.inspect(data);
+        if (!"image/png".equals(contentType) && !"image/jpeg".equals(contentType)) {
+            throw new BusinessException("签名仅支持 PNG 或 JPG 图片");
+        }
+        String signerName = userIdentityService == null
+                ? "用户" + AuthContext.userId() : userIdentityService.currentDisplayName();
+        if (signerName == null || signerName.isBlank()) signerName = "用户" + AuthContext.userId();
+        String safeName = FileTypeInspector.sanitizeFileName(originalName, contentType);
+        String sha256 = FileTypeInspector.sha256(data);
+        ObjectStorageService.StoredObject stored = storeSignature(
+                companyId, contractId, attachmentId, contentType, data, sha256);
+        return new SignatureEvidence(signerName, signedAt, safeName, contentType,
+                data.length, data, sha256, stored);
+    }
+
+    private int updateApprovedWithSignature(Long id, LocalDateTime confirmedAt,
+                                            SignatureEvidence signature) {
+        ObjectStorageService.StoredObject stored = signature.stored();
+        if (stored == null) {
+            return jdbc.update("""
+                    UPDATE contract_attachment
+                    SET status = 'APPROVED', confirmed_by = ?, confirmed_at = ?, rejected_reason = NULL,
+                        signer_name = ?, signed_at = ?, signature_original_name = ?,
+                        signature_content_type = ?, signature_file_size = ?, signature_data = ?,
+                        signature_sha256 = ?, signature_storage_provider = NULL,
+                        signature_storage_bucket = NULL, signature_object_key = NULL,
+                        signature_object_version_id = NULL, signature_etag = NULL,
+                        signature_encryption_algorithm = NULL
+                    WHERE id = ? AND status = 'PENDING_CONFIRMATION'
+                    """, AuthContext.userId(), confirmedAt, signature.signerName(), signature.signedAt(),
+                    signature.originalName(), signature.contentType(), signature.fileSize(),
+                    signature.data(), signature.sha256(), id);
+        }
+        return jdbc.update("""
+                UPDATE contract_attachment
+                SET status = 'APPROVED', confirmed_by = ?, confirmed_at = ?, rejected_reason = NULL,
+                    signer_name = ?, signed_at = ?, signature_original_name = ?,
+                    signature_content_type = ?, signature_file_size = ?, signature_data = NULL,
+                    signature_sha256 = ?, signature_storage_provider = ?,
+                    signature_storage_bucket = ?, signature_object_key = ?,
+                    signature_object_version_id = ?, signature_etag = ?,
+                    signature_encryption_algorithm = ?
+                WHERE id = ? AND status = 'PENDING_CONFIRMATION'
+                """, AuthContext.userId(), confirmedAt, signature.signerName(), signature.signedAt(),
+                signature.originalName(), signature.contentType(), signature.fileSize(),
+                signature.sha256(), stored.provider(), stored.bucket(), stored.objectKey(),
+                stored.versionId(), stored.etag(), stored.encryptionAlgorithm(), id);
     }
 
     @Transactional
@@ -403,6 +481,19 @@ public class ContractAttachmentService {
         };
         String key = keyPrefix() + "/file/" + companyId + "/" + contractId + "/"
                 + fileType + "/" + today.getYear() + "/" + String.format("%02d", today.getMonthValue())
+                + "/" + UUID.randomUUID() + "-" + sha256 + "."
+                + FileTypeInspector.extension(contentType);
+        return objectStorageService.putImmutable(key, data, contentType, sha256);
+    }
+
+    private ObjectStorageService.StoredObject storeSignature(long companyId, Long contractId,
+                                                              Long attachmentId, String contentType,
+                                                              byte[] data, String sha256) {
+        if (objectStorageService == null || !objectStorageService.isEnabled()) return null;
+        LocalDate today = LocalDate.now();
+        String key = keyPrefix() + "/file/" + companyId + "/" + contractId
+                + "/payment-voucher-confirmation/" + attachmentId + "/"
+                + today.getYear() + "/" + String.format("%02d", today.getMonthValue())
                 + "/" + UUID.randomUUID() + "-" + sha256 + "."
                 + FileTypeInspector.extension(contentType);
         return objectStorageService.putImmutable(key, data, contentType, sha256);
@@ -575,6 +666,12 @@ public class ContractAttachmentService {
                                     BigDecimal voucherAmount, String invoiceNo,
                                     LocalDate invoiceDate, BigDecimal invoiceAmount,
                                     long createdBy) {
+    }
+
+    private record SignatureEvidence(String signerName, LocalDateTime signedAt,
+                                     String originalName, String contentType, long fileSize,
+                                     byte[] data, String sha256,
+                                     ObjectStorageService.StoredObject stored) {
     }
 
     public record FilePayload(Long id, Long contractId, String originalName, String contentType,

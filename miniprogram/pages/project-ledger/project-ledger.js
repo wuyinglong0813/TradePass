@@ -31,11 +31,25 @@ Page({
     showAssign: false,
     availableContracts: [],
     selectedContractIds: [],
-    assigning: false
+    assigning: false,
+    pendingContractId: '',
+    pendingContractName: '',
+    pendingAction: ''
   },
 
-  onShow() {
-    this.loadProjects();
+  onLoad(options) {
+    const pendingContractId = options.contractId || '';
+    this.pendingFlowStarted = false;
+    this.setData({
+      pendingContractId,
+      pendingContractName: decodeURIComponent(options.contractName || ''),
+      pendingAction: pendingContractId ? (options.action || 'assign') : ''
+    });
+  },
+
+  async onShow() {
+    await this.loadProjects();
+    this.startPendingContractFlow();
   },
 
   onPullDownRefresh() {
@@ -61,7 +75,60 @@ Page({
   },
 
   async openProject(e) {
+    if (this.data.pendingContractId) {
+      const project = this.data.projects.find(
+        item => String(item.id) === String(e.currentTarget.dataset.id)
+      );
+      if (project) this.confirmPendingAssignment(project);
+      return;
+    }
     await this.loadProject(e.currentTarget.dataset.id);
+  },
+
+  startPendingContractFlow() {
+    if (this.pendingFlowStarted || !this.data.pendingContractId) return;
+    this.pendingFlowStarted = true;
+    if (this.data.pendingAction === 'create' || this.data.projects.length === 0) {
+      this.openCreate();
+    }
+  },
+
+  confirmPendingAssignment(project) {
+    if (!project || this.data.assigning) return;
+    wx.showModal({
+      title: '加入已有项目账套',
+      content: `确定将合同“${this.data.pendingContractName || this.data.pendingContractId}”加入“${project.name}”吗？`,
+      confirmText: '确认加入',
+      success: result => {
+        if (result.confirm) this.assignPendingContract(project.id);
+      }
+    });
+  },
+
+  async assignPendingContract(projectId) {
+    if (!projectId || !this.data.pendingContractId || this.data.assigning) return false;
+    try {
+      this.setData({ assigning: true });
+      await request({
+        url: `/project-ledgers/${projectId}/contracts`,
+        method: 'POST',
+        data: { contractIds: [this.data.pendingContractId] }
+      });
+      wx.setStorageSync(this.pendingPromptStorageKey(), true);
+      wx.showToast({ title: '合同已加入项目', icon: 'success' });
+      setTimeout(() => wx.navigateBack({ delta: 1 }), 500);
+      return true;
+    } catch (error) {
+      wx.showToast({ title: error.message || '合同加入项目失败', icon: 'none' });
+      return false;
+    } finally {
+      this.setData({ assigning: false });
+    }
+  },
+
+  pendingPromptStorageKey() {
+    const companyId = getApp().getCurrentCompanyId() || 'unknown';
+    return `tradepass_project_prompt_${companyId}_${this.data.pendingContractId}`;
   },
 
   async loadProject(id) {
@@ -123,6 +190,14 @@ Page({
         }
       });
       this.setData({ showCreate: false });
+      if (this.data.pendingContractId) {
+        const assigned = await this.assignPendingContract(project.id);
+        if (!assigned) {
+          wx.showToast({ title: '项目已创建，请重新选择加入合同', icon: 'none' });
+          await this.loadProjects();
+        }
+        return;
+      }
       wx.showToast({ title: '项目已创建', icon: 'success' });
       await this.loadProjects();
       await this.loadProject(project.id);

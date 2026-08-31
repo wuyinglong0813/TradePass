@@ -133,6 +133,23 @@ class ProjectLedgerServiceTest {
         assertThat(arguments.getValue()).containsExactly(4L, 4L, 4L, 4L, 4L);
     }
 
+    @Test
+    void findsContractAssignmentOnlyWithinTheCurrentCompany() {
+        doReturn(12L).when(jdbc)
+                .query(anyString(), any(ResultSetExtractor.class), any(Object[].class));
+        doReturn(List.of(Map.of(
+                "assigned", true,
+                "projectId", 51L,
+                "projectNo", "XM-51",
+                "projectName", "雄安办公楼一期"
+        ))).when(jdbc).query(anyString(), any(RowMapper.class), any(Object[].class));
+
+        assertThat(service.contractAssignment(12L))
+                .containsEntry("assigned", true)
+                .containsEntry("projectId", 51L);
+        verify(accessControlService).requireManager(4L);
+    }
+
     private Map<String, Object> project(long id, String name) {
         Map<String, Object> project = new LinkedHashMap<>();
         project.put("id", id);

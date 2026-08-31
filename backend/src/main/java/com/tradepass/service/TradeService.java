@@ -757,10 +757,22 @@ public class TradeService {
 
     private ContractPayload toContractPayload(TradeContract contract, long viewerCompanyId) {
         boolean outgoing = contract.getCompanyId() == viewerCompanyId;
+        String initiatorCompanyName = companyName(contract.getCompanyId());
+        String counterpartyCompanyName = companyName(contract.getCounterpartyCompanyId());
+        if ("未知企业".equals(counterpartyCompanyName)
+                && contract.getCounterpartyName() != null
+                && !contract.getCounterpartyName().isBlank()) {
+            counterpartyCompanyName = contract.getCounterpartyName();
+        }
+        boolean initiatorIsSupplier = "SALE".equalsIgnoreCase(contract.getDirection());
+        String supplierCompanyName = initiatorIsSupplier
+                ? initiatorCompanyName : counterpartyCompanyName;
+        String buyerCompanyName = initiatorIsSupplier
+                ? counterpartyCompanyName : initiatorCompanyName;
         Long viewerCounterpartyId = outgoing ? contract.getCounterpartyCompanyId() : contract.getCompanyId();
         String viewerCounterpartyName = outgoing
-                ? contract.getCounterpartyName()
-                : companyName(contract.getCompanyId());
+                ? counterpartyCompanyName
+                : initiatorCompanyName;
         String viewerDirection = outgoing
                 ? normalizeDirection(contract.getDirection())
                 : invertDirection(contract.getDirection());
@@ -783,6 +795,8 @@ public class TradeService {
                 idString(contract.getApprovedBy()),
                 contract.getApprovedAt() == null ? null : contract.getApprovedAt().toString(),
                 contract.getCreatedAt() == null ? LocalDate.now().toString() : contract.getCreatedAt().toString(),
+                supplierCompanyName,
+                buyerCompanyName,
                 String.valueOf(viewerCompanyId),
                 idString(viewerCounterpartyId),
                 viewerCounterpartyName,

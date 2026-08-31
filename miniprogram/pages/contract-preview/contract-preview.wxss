@@ -212,6 +212,22 @@ page { background: #f4f8fd; }
   z-index: 300;
 }
 
+.payment-signature-mask { align-items: flex-end; background: rgba(11,25,43,.52); bottom: 0; display: flex; left: 0; position: fixed; right: 0; top: 0; z-index: 420; }
+.payment-signature-sheet { background: #fff; border-radius: 30rpx 30rpx 0 0; box-sizing: border-box; padding: 15rpx 28rpx calc(28rpx + env(safe-area-inset-bottom)); width: 100%; }
+.payment-signature-handle { background: #dce3eb; border-radius: 4rpx; height: 7rpx; margin: 0 auto 22rpx; width: 74rpx; }
+.payment-signature-head { align-items: flex-start; display: flex; justify-content: space-between; }
+.payment-signature-title { color: #203349; font-size: 31rpx; font-weight: 700; }
+.payment-signature-signer { color: #8c99a8; font-size: 21rpx; margin-top: 6rpx; }
+.payment-signature-close { color: #8d9baa; font-size: 42rpx; line-height: 38rpx; padding: 0 8rpx; }
+.payment-signature-copy { background: #f3f8fd; border-radius: 12rpx; color: #71869b; font-size: 20rpx; line-height: 1.5; margin-top: 18rpx; padding: 13rpx 15rpx; }
+.payment-signature-canvas-wrap { background: #fff; border: 2rpx dashed #b9c9d9; border-radius: 15rpx; height: 300rpx; margin-top: 18rpx; overflow: hidden; position: relative; }
+.payment-signature-canvas { height: 100%; position: relative; width: 100%; z-index: 2; }
+.payment-signature-placeholder { bottom: 13rpx; color: #a5b0bc; font-size: 19rpx; left: 0; pointer-events: none; position: absolute; right: 0; text-align: center; z-index: 1; }
+.payment-signature-actions { display: grid; gap: 14rpx; grid-template-columns: .8fr 1.5fr; margin-top: 20rpx; }
+.payment-signature-actions button { border: 0; border-radius: 13rpx; font-size: 23rpx; height: 72rpx; line-height: 72rpx; margin: 0; }
+.payment-signature-clear { background: #edf4fb; color: #65778a; }
+.payment-signature-confirm { background: #3498ff; color: #fff; }
+
 .payment-amount-sheet {
   animation: slideUp .26s cubic-bezier(.22, 1, .36, 1);
   background: #ffffff;
@@ -872,28 +888,50 @@ page { background: #f4f8fd; }
   margin-top: 18rpx;
 }
 
-.pdf-sign-table > view {
+.pdf-party-sign {
+  align-items: center;
   border-bottom: 1rpx solid #222;
   border-right: 1rpx solid #222;
   display: flex;
   flex-direction: column;
+  min-height: 126rpx;
+  padding: 8rpx 6rpx;
 }
 
-.pdf-sign-table text {
-  border-bottom: 1rpx solid #222;
+.pdf-party-role {
   font-family: serif;
-  font-size: 13rpx;
-  min-height: 22rpx;
-  padding: 2rpx 4rpx;
-}
-
-.pdf-sign-table text:first-child {
   font-size: 22rpx;
   font-weight: 700;
   text-align: center;
 }
 
-.pdf-sign-table text:last-child { border-bottom: 0; }
+.pdf-party-name {
+  color: #333;
+  font-family: serif;
+  font-size: 14rpx;
+  line-height: 1.35;
+  margin-top: 5rpx;
+  min-height: 36rpx;
+  text-align: center;
+}
+
+.pdf-seal-state {
+  align-items: center;
+  border: 2rpx solid #aab1b8;
+  border-radius: 50%;
+  color: #9199a1;
+  display: flex;
+  flex-direction: column;
+  font-size: 11rpx;
+  height: 54rpx;
+  justify-content: center;
+  line-height: 1.2;
+  margin-top: 5rpx;
+  transform: rotate(-7deg);
+  width: 54rpx;
+}
+
+.pdf-seal-state.signed { border-color: #d95757; color: #c94848; }
 
 .pdf-open-hint {
   bottom: 20rpx;

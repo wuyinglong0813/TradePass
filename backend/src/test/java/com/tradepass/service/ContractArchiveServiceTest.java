@@ -75,6 +75,7 @@ class ContractArchiveServiceTest {
         return new ContractPayload("8", "HT-8", "3", "4", "乙方", "SALE",
                 "合同", "模板", BigDecimal.TEN, "2026-07-01", "2026-12-31", "{}",
                 status, 1, "6", "7", "2026-07-31T09:00:00", "2026-07-01T09:00:00",
+                "甲方", "乙方",
                 "3", "4", "乙方", "SALE", "OUTGOING");
     }
 }

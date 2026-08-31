@@ -70,3 +70,18 @@ page { background: #f4f8fd; }
 .empty-hint image { height: 104rpx; opacity: .75; width: 104rpx; }
 .empty-title { color: #7e8b98; font-size: 24rpx; margin-top: 18rpx; }
 .action-reason { background: #fff8e8; border-radius: 10rpx; color: #80601d; font-size: 21rpx; line-height: 1.55; margin: 14rpx 0; padding: 12rpx 15rpx; }
+.signature-mask { align-items: flex-end; background: rgba(11,25,43,.5); bottom: 0; display: flex; left: 0; position: fixed; right: 0; top: 0; z-index: 500; }
+.signature-sheet { background: #fff; border-radius: 30rpx 30rpx 0 0; box-sizing: border-box; padding: 15rpx 28rpx calc(28rpx + env(safe-area-inset-bottom)); width: 100%; }
+.signature-handle { background: #dce3eb; border-radius: 4rpx; height: 7rpx; margin: 0 auto 22rpx; width: 74rpx; }
+.signature-head { align-items: flex-start; display: flex; justify-content: space-between; }
+.signature-title { color: #203349; font-size: 31rpx; font-weight: 700; }
+.signature-signer { color: #8c99a8; font-size: 21rpx; margin-top: 6rpx; }
+.signature-close { color: #8d9baa; font-size: 42rpx; line-height: 38rpx; padding: 0 8rpx; }
+.signature-confirm-copy { background: #f3f8fd; border-radius: 12rpx; color: #71869b; font-size: 20rpx; line-height: 1.5; margin-top: 18rpx; padding: 13rpx 15rpx; }
+.signature-canvas-wrap { background: #fff; border: 2rpx dashed #b9c9d9; border-radius: 15rpx; height: 300rpx; margin-top: 18rpx; overflow: hidden; position: relative; }
+.signature-canvas { height: 100%; position: relative; width: 100%; z-index: 2; }
+.signature-placeholder { bottom: 13rpx; color: #a5b0bc; font-size: 19rpx; left: 0; pointer-events: none; position: absolute; right: 0; text-align: center; z-index: 1; }
+.signature-actions { display: grid; gap: 14rpx; grid-template-columns: .8fr 1.5fr; margin-top: 20rpx; }
+.signature-actions button { border: 0; border-radius: 13rpx; font-size: 23rpx; height: 72rpx; line-height: 72rpx; margin: 0; }
+.signature-clear { background: #edf4fb; color: #65778a; }
+.signature-confirm { background: #3498ff; color: #fff; }

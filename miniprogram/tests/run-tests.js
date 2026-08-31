@@ -309,6 +309,22 @@ test('project ledger formats contract totals and remains an optional enterprise 
   assert.ok(companyView.includes('bindtap="goProjectLedger"'));
 });
 
+test('signed contracts prompt managers to choose or create a project ledger', () => {
+  const previewScript = fs.readFileSync(
+    path.join(__dirname, '..', 'pages', 'contract-preview', 'contract-preview.js'),
+    'utf8'
+  );
+  const projectScript = fs.readFileSync(
+    path.join(__dirname, '..', 'pages', 'project-ledger', 'project-ledger.js'),
+    'utf8'
+  );
+  assert.ok(previewScript.includes('/project-ledgers/contracts/${contract.id || this.data.contractId}/assignment'));
+  assert.ok(previewScript.includes('加入已有项目账套'));
+  assert.ok(previewScript.includes('新建项目并加入'));
+  assert.ok(previewScript.includes('/dismiss'));
+  assert.ok(projectScript.includes('assignPendingContract(project.id)'));
+});
+
 const app = {
   globalData: {
     baseUrl: 'https://api.example.test',
@@ -431,6 +447,16 @@ test('payment voucher requires a manually entered amount before upload', () => {
     metadata: { voucherAmount: '1288.50', voucherDate: context.data.paymentDate }
   });
   assert.strictEqual(context.data.showPaymentAmountEditor, false);
+});
+
+test('payment voucher viewing is separate from handwritten confirmation', () => {
+  const approvalDir = path.join(__dirname, '..', 'pages', 'contract-approval');
+  const approvalScript = fs.readFileSync(path.join(approvalDir, 'contract-approval.js'), 'utf8');
+  const approvalTemplate = fs.readFileSync(path.join(approvalDir, 'contract-approval.wxml'), 'utf8');
+  assert.ok(approvalScript.includes("if (item.approvalType === 'PAYMENT_VOUCHER')"));
+  assert.ok(approvalScript.includes("'signature'"));
+  assert.ok(approvalTemplate.includes('查看资料时不会要求签名'));
+  assert.ok(approvalTemplate.includes('签字并确认通过'));
 });
 
 test('invoice requires date and amount while the server generates its number', () => {

@@ -162,7 +162,7 @@ public class LegacyBlobMigrationRunner implements ApplicationRunner {
                 string(rs.getDate("end_date")), rs.getString("terms"), rs.getString("status"),
                 rs.getInt("version_no"), String.valueOf(rs.getLong("initiated_by")),
                 nullableLong(rs, "approved_by"), string(rs.getTimestamp("approved_at")),
-                string(rs.getTimestamp("created_at")), String.valueOf(companyId),
+                string(rs.getTimestamp("created_at")), null, null, String.valueOf(companyId),
                 String.valueOf(counterpartyId), rs.getString("counterparty_name"),
                 rs.getString("direction"), "OUTGOING");
         return new HistoricalContract(id, approvedBy, payload);

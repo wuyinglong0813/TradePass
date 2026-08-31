@@ -1,5 +1,5 @@
 const { request } = require('../../utils/request');
-const { downloadApiFile } = require('../../utils/fileTransfer');
+const { downloadApiFile, uploadMultipartApiFile } = require('../../utils/fileTransfer');
 
 const app = getApp();
 
@@ -49,7 +49,11 @@ Page({
     companyOptions: [{ id: '', name: '全部往来公司' }],
     companyIndex: 0,
     selectedCompanyId: '',
-    loading: false
+    loading: false,
+    showAttachmentSignature: false,
+    attachmentSignatureItem: null,
+    attachmentSignatureSignerName: '',
+    attachmentDecisionLoading: false
   },
 
   onShow() {
@@ -383,6 +387,10 @@ Page({
   approveAttachment(e) {
     const item = e.currentTarget.dataset.item;
     if (!item || !item.id) return;
+    if (item.approvalType === 'PAYMENT_VOUCHER') {
+      this.openAttachmentSignature(item);
+      return;
+    }
     wx.showModal({
       title: `确认${item.typeText}`,
       content: '通过后将计入双方对账。',
@@ -391,6 +399,145 @@ Page({
         if (result.confirm) this.submitAttachmentDecision(item, 'APPROVE', '');
       }
     });
+  },
+
+  openAttachmentSignature(item) {
+    const member = app.globalData.memberInfo || {};
+    const user = app.globalData.userInfo || {};
+    this.attachmentSignatureHasInk = false;
+    this.attachmentSignatureStrokeLength = 0;
+    this.attachmentSignatureLastPoint = null;
+    this.setData({
+      showAttachmentSignature: true,
+      attachmentSignatureItem: item,
+      attachmentSignatureSignerName: user.nickname || member.userName || '当前用户'
+    }, () => this.initializeAttachmentSignatureCanvas());
+  },
+
+  closeAttachmentSignature() {
+    if (this.data.attachmentDecisionLoading) return;
+    this.attachmentSignatureCanvas = null;
+    this.attachmentSignatureContext = null;
+    this.attachmentSignatureHasInk = false;
+    this.attachmentSignatureLastPoint = null;
+    this.setData({ showAttachmentSignature: false, attachmentSignatureItem: null });
+  },
+
+  initializeAttachmentSignatureCanvas() {
+    wx.createSelectorQuery().select('#paymentVoucherSignatureCanvas')
+      .fields({ node: true, size: true })
+      .exec(result => {
+        const target = result && result[0];
+        if (!target || !target.node) {
+          wx.showToast({ title: '签名板加载失败，请重试', icon: 'none' });
+          return;
+        }
+        const canvas = target.node;
+        const ratio = Math.max(1, wx.getSystemInfoSync().pixelRatio || 1);
+        canvas.width = Math.round(target.width * ratio);
+        canvas.height = Math.round(target.height * ratio);
+        const context = canvas.getContext('2d');
+        context.scale(ratio, ratio);
+        context.lineWidth = 3;
+        context.lineCap = 'round';
+        context.lineJoin = 'round';
+        context.strokeStyle = '#172536';
+        this.attachmentSignatureCanvas = canvas;
+        this.attachmentSignatureContext = context;
+        this.attachmentSignatureCanvasWidth = target.width;
+        this.attachmentSignatureCanvasHeight = target.height;
+      });
+  },
+
+  attachmentSignaturePoint(e) {
+    const touch = e.touches && e.touches[0];
+    if (!touch) return null;
+    return {
+      x: Number(touch.x !== undefined ? touch.x : touch.clientX),
+      y: Number(touch.y !== undefined ? touch.y : touch.clientY)
+    };
+  },
+
+  onAttachmentSignatureTouchStart(e) {
+    const point = this.attachmentSignaturePoint(e);
+    if (!point || !this.attachmentSignatureContext) return;
+    this.attachmentSignatureContext.beginPath();
+    this.attachmentSignatureContext.moveTo(point.x, point.y);
+    this.attachmentSignatureLastPoint = point;
+  },
+
+  onAttachmentSignatureTouchMove(e) {
+    const point = this.attachmentSignaturePoint(e);
+    if (!point || !this.attachmentSignatureContext) return;
+    const last = this.attachmentSignatureLastPoint;
+    if (last) {
+      this.attachmentSignatureStrokeLength += Math.hypot(point.x - last.x, point.y - last.y);
+      this.attachmentSignatureHasInk = this.attachmentSignatureStrokeLength >= 12;
+    }
+    this.attachmentSignatureContext.lineTo(point.x, point.y);
+    this.attachmentSignatureContext.stroke();
+    this.attachmentSignatureLastPoint = point;
+  },
+
+  onAttachmentSignatureTouchEnd() {
+    if (this.attachmentSignatureContext) this.attachmentSignatureContext.closePath();
+    this.attachmentSignatureLastPoint = null;
+  },
+
+  clearAttachmentSignature() {
+    if (!this.attachmentSignatureContext) return;
+    this.attachmentSignatureContext.clearRect(
+      0, 0,
+      this.attachmentSignatureCanvasWidth || 0,
+      this.attachmentSignatureCanvasHeight || 0
+    );
+    this.attachmentSignatureHasInk = false;
+    this.attachmentSignatureStrokeLength = 0;
+    this.attachmentSignatureLastPoint = null;
+  },
+
+  attachmentSignatureTempFile() {
+    return new Promise((resolve, reject) => {
+      wx.canvasToTempFilePath({
+        canvas: this.attachmentSignatureCanvas,
+        fileType: 'png',
+        destWidth: Math.round((this.attachmentSignatureCanvasWidth || 320) * 2),
+        destHeight: Math.round((this.attachmentSignatureCanvasHeight || 150) * 2),
+        success: result => resolve(result.tempFilePath),
+        fail: error => reject(new Error((error && error.errMsg) || '签名图片生成失败'))
+      });
+    });
+  },
+
+  async confirmAttachmentSignature() {
+    const item = this.data.attachmentSignatureItem;
+    if (!item || this.data.attachmentDecisionLoading) return;
+    if (!this.attachmentSignatureHasInk || !this.attachmentSignatureCanvas) {
+      wx.showToast({ title: '请先手写签名', icon: 'none' });
+      return;
+    }
+    try {
+      this.setData({ attachmentDecisionLoading: true });
+      wx.showLoading({ title: '正在确认...' });
+      const filePath = await this.attachmentSignatureTempFile();
+      await uploadMultipartApiFile(
+        `/contract-attachments/${item.id}/decision`,
+        filePath,
+        { decision: 'APPROVE', reason: '' },
+        'signature'
+      );
+      this.attachmentSignatureCanvas = null;
+      this.attachmentSignatureContext = null;
+      this.attachmentSignatureHasInk = false;
+      this.setData({ showAttachmentSignature: false, attachmentSignatureItem: null });
+      wx.showToast({ title: '已签字确认并更新对账', icon: 'success' });
+      await this.loadPending();
+    } catch (error) {
+      wx.showToast({ title: error.message || '签字确认失败', icon: 'none' });
+    } finally {
+      wx.hideLoading();
+      this.setData({ attachmentDecisionLoading: false });
+    }
   },
 
   rejectAttachment(e) {
@@ -428,5 +575,7 @@ Page({
     } finally {
       wx.hideLoading();
     }
-  }
+  },
+
+  noop() {}
 });

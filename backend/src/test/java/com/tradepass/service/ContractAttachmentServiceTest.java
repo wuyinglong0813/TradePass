@@ -14,6 +14,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 
 import java.io.ByteArrayOutputStream;
+import java.math.BigDecimal;
+import java.sql.ResultSet;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.zip.ZipEntry;
@@ -26,6 +29,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verify;
@@ -147,6 +151,31 @@ class ContractAttachmentServiceTest {
         assertThatThrownBy(() -> service.getFile(88L))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("附件不存在");
+    }
+
+    @Test
+    void requiresHandwrittenSignatureOnlyWhenApprovingPaymentVoucher() throws Exception {
+        AuthContext.set(8L, 4L);
+        doAnswer(invocation -> {
+            RowMapper<?> mapper = invocation.getArgument(1);
+            ResultSet rs = mock(ResultSet.class);
+            when(rs.getLong("id")).thenReturn(8L);
+            when(rs.getLong("contract_id")).thenReturn(12L);
+            when(rs.getLong("uploader_company_id")).thenReturn(3L);
+            when(rs.getObject("recipient_company_id", Long.class)).thenReturn(4L);
+            when(rs.getString("category")).thenReturn("PAYMENT_VOUCHER");
+            when(rs.getString("status")).thenReturn("PENDING_CONFIRMATION");
+            when(rs.getString("original_name")).thenReturn("转款凭证.pdf");
+            when(rs.getObject("voucher_date", LocalDate.class))
+                    .thenReturn(LocalDate.of(2026, 8, 30));
+            when(rs.getBigDecimal("voucher_amount")).thenReturn(new BigDecimal("100.00"));
+            when(rs.getLong("created_by")).thenReturn(7L);
+            return List.of(mapper.mapRow(rs, 0));
+        }).when(jdbc).query(anyString(), any(RowMapper.class), any(Object[].class));
+
+        assertThatThrownBy(() -> service.decide(8L, "APPROVE", ""))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("确认转款凭证前请先完成手写签名");
     }
 
     @Test

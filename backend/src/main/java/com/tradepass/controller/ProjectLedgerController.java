@@ -27,6 +27,16 @@ public class ProjectLedgerController {
         return ApiResponse.ok(projectLedgerService.listProjects());
     }
 
+    @GetMapping("/contracts/{contractId:\\d+}/assignment")
+    public ApiResponse<Map<String, Object>> contractAssignment(@PathVariable Long contractId) {
+        return ApiResponse.ok(projectLedgerService.contractAssignment(contractId));
+    }
+
+    @PostMapping("/contracts/{contractId:\\d+}/dismiss")
+    public ApiResponse<Map<String, Object>> dismissContractPrompt(@PathVariable Long contractId) {
+        return ApiResponse.ok(projectLedgerService.dismissContractPrompt(contractId));
+    }
+
     @PostMapping
     public ApiResponse<Map<String, Object>> create(@RequestBody Map<String, Object> body) {
         return ApiResponse.ok(projectLedgerService.createProject(

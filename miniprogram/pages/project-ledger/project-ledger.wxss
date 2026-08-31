@@ -6,6 +6,10 @@ page { background: #f4f8fd; }
 .hero-sub { color: rgba(255,255,255,.78); font-size: 22rpx; line-height: 1.6; margin-top: 7rpx; }
 .hero-count { background: rgba(255,255,255,.15); border-radius: 14rpx; margin-top: 24rpx; padding: 17rpx 20rpx; width: 190rpx; }
 .hero-count text { font-size: 34rpx; font-weight: 700; }.hero-count label { color: rgba(255,255,255,.72); font-size: 21rpx; margin-left: 10rpx; }
+.pending-contract-tip { align-items: center; background: #fff; border: 1rpx solid #cfe3f7; border-radius: 17rpx; display: flex; margin: 20rpx 24rpx 0; padding: 18rpx; }
+.pending-contract-icon { align-items: center; background: #e9f5ff; border-radius: 12rpx; color: #2887df; display: flex; flex: 0 0 54rpx; font-size: 24rpx; font-weight: 700; height: 54rpx; justify-content: center; margin-right: 14rpx; }
+.pending-contract-copy { color: #29415a; font-size: 24rpx; font-weight: 700; min-width: 0; }
+.pending-contract-copy text { color: #7f8f9f; display: block; font-size: 20rpx; font-weight: 400; margin-top: 4rpx; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .section-head { align-items: center; display: flex; justify-content: space-between; padding: 26rpx 24rpx 15rpx; }
 .section-title { color: #203248; font-size: 29rpx; font-weight: 700; }.section-sub { color: #94a0ad; font-size: 20rpx; margin-top: 4rpx; }
 .section-head button,.contract-head button { background: #eaf4ff; border: 0; border-radius: 13rpx; color: #2787e3; font-size: 22rpx; height: 62rpx; line-height: 62rpx; margin: 0; padding: 0 16rpx; }

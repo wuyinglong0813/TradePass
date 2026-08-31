@@ -96,9 +96,10 @@
             <view class="type-icon {{document.typeClass}}">{{document.iconText}}</view>
             <view class="card-copy">
               <view class="card-title">{{document.typeText}} · {{document.documentNo}}</view>
-              <view class="card-meta">关联合同：{{document.contractName || document.contractNo}}</view>
+              <view class="card-meta">合同编号：{{document.contractNo || '—'}}</view>
+              <view class="card-meta">合同名称：{{document.contractName || '—'}}</view>
               <view class="card-meta"><text wx:if="{{document.dateText}}">{{document.dateText}}</text><text wx:if="{{document.amountText}}"> · ¥{{document.amountText}}</text></view>
-              <view class="signature-hint" wx:if="{{document.approvalType === 'SALES_ORDER' || document.approvalType === 'RETURN_ORDER'}}">确认时需要手写签名</view>
+              <view class="signature-hint" wx:if="{{document.approvalType === 'SALES_ORDER' || document.approvalType === 'RETURN_ORDER' || document.approvalType === 'PAYMENT_VOUCHER'}}">确认时需要手写签名</view>
             </view>
             <view class="pending-badge">待确认</view>
           </view>
@@ -118,6 +119,37 @@
           </view>
         </view>
       </block>
+    </view>
+  </view>
+
+  <view class="signature-mask" wx:if="{{showAttachmentSignature}}" bindtap="closeAttachmentSignature">
+    <view class="signature-sheet" catchtap="noop">
+      <view class="signature-handle"></view>
+      <view class="signature-head">
+        <view>
+          <view class="signature-title">确认转款凭证</view>
+          <view class="signature-signer">确认人：{{attachmentSignatureSignerName}}</view>
+        </view>
+        <view class="signature-close" bindtap="closeAttachmentSignature">×</view>
+      </view>
+      <view class="signature-confirm-copy">请核对凭证内容后手写签名。查看资料时不会要求签名。</view>
+      <view class="signature-canvas-wrap">
+        <canvas
+          type="2d"
+          id="paymentVoucherSignatureCanvas"
+          class="signature-canvas"
+          disable-scroll="true"
+          bindtouchstart="onAttachmentSignatureTouchStart"
+          catchtouchmove="onAttachmentSignatureTouchMove"
+          bindtouchend="onAttachmentSignatureTouchEnd"
+          bindtouchcancel="onAttachmentSignatureTouchEnd"
+        ></canvas>
+        <view class="signature-placeholder">请在此区域签名</view>
+      </view>
+      <view class="signature-actions">
+        <button class="signature-clear" disabled="{{attachmentDecisionLoading}}" bindtap="clearAttachmentSignature">清除重签</button>
+        <button class="signature-confirm" loading="{{attachmentDecisionLoading}}" disabled="{{attachmentDecisionLoading}}" bindtap="confirmAttachmentSignature">签字并确认通过</button>
+      </view>
     </view>
   </view>
 </view>
