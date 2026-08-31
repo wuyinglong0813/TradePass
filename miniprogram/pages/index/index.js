@@ -1,5 +1,11 @@
 const { request } = require('../../utils/request');
 const { setTabBarHidden, syncTabBar } = require('../../utils/tabBar');
+const {
+  USER_ID_KEY,
+  readHomeSnapshot,
+  snapshotKey,
+  writeHomeSnapshot
+} = require('../../utils/homeSnapshot');
 const app = getApp();
 
 Page({
@@ -38,6 +44,13 @@ Page({
     counterpartyInviteCode: '',
     counterpartyEmptyBtn: '',
     isLoggedIn: false,
+    sessionRestoring: false,
+    sessionRestoreError: '',
+    homeHasSnapshot: false,
+    homeUsingSnapshot: false,
+    homeRefreshing: false,
+    homeRefreshError: '',
+    homeSnapshotTimeText: '',
     userName: '',
     approvalHasMessage: false,
 
@@ -64,11 +77,33 @@ Page({
 
   async onShow() {
     syncTabBar(this, 0);
+    app.restoreStoredSession();
+    const locallyLoggedIn = !!app.globalData.token;
+    if (locallyLoggedIn) {
+      this.setData({
+        isLoggedIn: true,
+        currentCompanyId: String(app.getCurrentCompanyId() || '')
+      });
+      this.restoreHomeSnapshot();
+    }
     await app.ensureSessionReady();
     const loggedIn = !!app.globalData.token;
     const user = app.globalData.userInfo;
+    if (loggedIn && !user) {
+      this.setData({
+        isLoggedIn: true,
+        sessionRestoring: true,
+        sessionRestoreError: '',
+        showJoinForm: false
+      });
+      this.scheduleSessionRestore();
+      return;
+    }
+    this.clearSessionRestoreTimer();
     this.setData({
       isLoggedIn: loggedIn,
+      sessionRestoring: false,
+      sessionRestoreError: '',
       companies: app.globalData.companies || [],
       currentCompanyId: String(app.getCurrentCompanyId() || ''),
       userName: (user && user.nickname) || ''
@@ -76,6 +111,7 @@ Page({
     if (!loggedIn) return;
     this.checkMemberStatus();
     this.initRoleFromMember();
+    this.restoreHomeSnapshot({ resetWhenMissing: true });
     this.setData({
       showHomeGuide: !this.data.showJoinForm && !wx.getStorageSync('tradepass_home_guide_done')
     });
@@ -99,10 +135,175 @@ Page({
     }
 
     if (!this.data.showJoinForm) {
-      this.loadHome();
-      this.loadCounterparties();
-      this.loadApprovalIndicator();
+      this.refreshHomeData();
     }
+  },
+
+  homeSnapshotContext(overrides = {}) {
+    const user = app.globalData.userInfo || {};
+    const userId = String(overrides.userId || user.id || wx.getStorageSync(USER_ID_KEY) || '');
+    const companyId = String(overrides.companyId || app.getCurrentCompanyId()
+      || wx.getStorageSync('tradepass_company_id') || '');
+    const storedRole = companyId ? wx.getStorageSync(`tradepass_role_${companyId}`) : '';
+    const role = overrides.role
+      || (storedRole === 'supplier' || storedRole === 'buyer' ? storedRole : this.data.role);
+    const periodKey = `tradepass_home_period_${userId}_${companyId}_${role}`;
+    const storedPeriod = wx.getStorageSync(periodKey);
+    const period = overrides.period
+      || (['year', 'month', 'last12'].includes(storedPeriod) ? storedPeriod : this.data.period);
+    return { userId, companyId, role, period };
+  },
+
+  periodLabel(period) {
+    return { year: '今年', month: '本月', last12: '近12个月' }[period] || '今年';
+  },
+
+  snapshotTimeText(updatedAt) {
+    const value = new Date(Number(updatedAt));
+    if (Number.isNaN(value.getTime())) return '';
+    const pad = number => String(number).padStart(2, '0');
+    const now = new Date();
+    const time = `${pad(value.getHours())}:${pad(value.getMinutes())}`;
+    return value.toDateString() === now.toDateString()
+      ? `今天 ${time}` : `${pad(value.getMonth() + 1)}-${pad(value.getDate())} ${time}`;
+  },
+
+  restoreHomeSnapshot(options = {}) {
+    const context = this.homeSnapshotContext(options);
+    const snapshot = readHomeSnapshot(context);
+    if (!snapshot) {
+      if (options.resetWhenMissing) {
+        this.homeSnapshotIdentity = null;
+        this.setData({
+          role: context.role,
+          period: context.period,
+          periodText: this.periodLabel(context.period),
+          companyName: '',
+          ranking: [],
+          counterparties: [],
+          relationCounterparties: [],
+          partnerCompanies: [],
+          stats: { totalAmount: 0, totalOrders: 0, counterpartyCount: 0 },
+          approvalHasMessage: false,
+          homeHasSnapshot: false,
+          homeUsingSnapshot: false,
+          homeSnapshotTimeText: ''
+        });
+      }
+      return false;
+    }
+    const payload = snapshot.payload || {};
+    this.homeSnapshotIdentity = snapshotKey(context);
+    this.setData({
+      role: context.role,
+      period: context.period,
+      periodText: this.periodLabel(context.period),
+      companyName: payload.companyName || '',
+      companyDisplayName: payload.companyDisplayName || this.data.companyDisplayName,
+      ranking: Array.isArray(payload.ranking) ? payload.ranking : [],
+      rankingTitle: payload.rankingTitle
+        || (context.role === 'supplier' ? '客户销售业绩排名' : '采购业绩排名'),
+      stats: payload.stats || { totalAmount: 0, totalOrders: 0, counterpartyCount: 0 },
+      counterparties: Array.isArray(payload.counterparties) ? payload.counterparties : [],
+      relationCounterparties: Array.isArray(payload.relationCounterparties)
+        ? payload.relationCounterparties : [],
+      partnerCompanies: Array.isArray(payload.partnerCompanies) ? payload.partnerCompanies : [],
+      approvalHasMessage: !!payload.approvalHasMessage,
+      loading: false,
+      showJoinForm: false,
+      homeHasSnapshot: true,
+      homeUsingSnapshot: true,
+      homeRefreshError: '',
+      homeSnapshotTimeText: this.snapshotTimeText(snapshot.updatedAt)
+    });
+    return true;
+  },
+
+  saveHomeSnapshot() {
+    const context = this.homeSnapshotContext();
+    const snapshot = writeHomeSnapshot(context, {
+      companyName: this.data.companyName,
+      companyDisplayName: this.data.companyDisplayName,
+      ranking: this.data.ranking || [],
+      rankingTitle: this.data.rankingTitle,
+      stats: this.data.stats,
+      counterparties: this.data.counterparties || [],
+      relationCounterparties: this.data.relationCounterparties || [],
+      partnerCompanies: this.data.partnerCompanies || [],
+      approvalHasMessage: !!this.data.approvalHasMessage
+    });
+    if (!snapshot) return;
+    this.homeSnapshotIdentity = snapshotKey(context);
+    this.setData({
+      homeHasSnapshot: true,
+      homeSnapshotTimeText: this.snapshotTimeText(snapshot.updatedAt)
+    });
+  },
+
+  async refreshHomeData() {
+    const identity = snapshotKey(this.homeSnapshotContext());
+    if (!identity) return;
+    this.setData({ homeRefreshing: true, homeRefreshError: '' });
+    const results = await Promise.all([
+      this.loadHome(),
+      this.loadCounterparties(),
+      this.loadApprovalIndicator()
+    ]);
+    if (identity !== snapshotKey(this.homeSnapshotContext())) return;
+    const coreUpdated = results[0] === true;
+    const fullyUpdated = results.every(result => result === true);
+    if (coreUpdated) this.saveHomeSnapshot();
+    this.setData({
+      homeRefreshing: false,
+      homeUsingSnapshot: !fullyUpdated && this.data.homeHasSnapshot,
+      homeRefreshError: fullyUpdated ? '' : (this.data.homeHasSnapshot
+        ? '部分数据暂未更新，当前显示上次成功数据'
+        : '首页数据加载失败，请点击重试')
+    });
+  },
+
+  retryHomeRefresh() {
+    if (!this.data.homeRefreshing) this.refreshHomeData();
+  },
+
+  scheduleSessionRestore() {
+    if (this.sessionRestoreTimer || this.sessionRestoreInFlight) return;
+    this.sessionRestoreTimer = setTimeout(() => {
+      this.sessionRestoreTimer = null;
+      this.retrySessionRestore();
+    }, 1200);
+  },
+
+  clearSessionRestoreTimer() {
+    if (!this.sessionRestoreTimer) return;
+    clearTimeout(this.sessionRestoreTimer);
+    this.sessionRestoreTimer = null;
+  },
+
+  async retrySessionRestore() {
+    if (this.sessionRestoreInFlight || !app.globalData.token) return;
+    this.sessionRestoreInFlight = true;
+    this.setData({ sessionRestoring: true, sessionRestoreError: '' });
+    const payload = await app.refreshSession();
+    this.sessionRestoreInFlight = false;
+    if (payload && app.globalData.userInfo) {
+      await this.onShow();
+      return;
+    }
+    this.setData({
+      sessionRestoring: true,
+      sessionRestoreError: '企业信息恢复失败，请检查网络后重新加载',
+      homeUsingSnapshot: this.data.homeHasSnapshot,
+      homeRefreshError: this.data.homeHasSnapshot ? '网络暂不可用，当前显示上次成功数据' : ''
+    });
+  },
+
+  onHide() {
+    this.clearSessionRestoreTimer();
+  },
+
+  onUnload() {
+    this.clearSessionRestoreTimer();
   },
 
   /* 下拉刷新 */
@@ -112,9 +313,7 @@ Page({
       return;
     }
     if (!this.data.showJoinForm) {
-      Promise.all([this.loadHome(), this.loadCounterparties(), this.loadApprovalIndicator()]).finally(() => {
-        wx.stopPullDownRefresh();
-      });
+      this.refreshHomeData().finally(() => wx.stopPullDownRefresh());
     } else {
       wx.stopPullDownRefresh();
     }
@@ -188,7 +387,8 @@ Page({
       });
       setTabBarHidden(this, false);
       this.initRoleFromMember();
-      await Promise.all([this.loadHome(), this.loadCounterparties(), this.loadApprovalIndicator()]);
+      this.restoreHomeSnapshot({ resetWhenMissing: true });
+      await this.refreshHomeData();
       wx.showToast({ title: '企业已切换', icon: 'success' });
     } catch (e) {
       this.setData({ switchingCompanyId: '' });
@@ -203,8 +403,13 @@ Page({
     this.setData({ role, period: 'year', periodText: '今年' });
     const companyId = app.getCurrentCompanyId() || 'unbound';
     wx.setStorageSync(`tradepass_role_${companyId}`, role);
-    this.loadHome();
-    this.loadCounterparties();
+    const context = this.homeSnapshotContext({ role, period: 'year' });
+    wx.setStorageSync(
+      `tradepass_home_period_${context.userId}_${context.companyId}_${context.role}`,
+      'year'
+    );
+    this.restoreHomeSnapshot({ role, period: 'year', resetWhenMissing: true });
+    this.refreshHomeData();
   },
 
   /* 时期切换 */
@@ -213,7 +418,13 @@ Page({
     if (period === this.data.period) return;
     const periodTextMap = { year: '今年', month: '本月', last12: '近12个月' };
     this.setData({ period, periodText: periodTextMap[period] || '' });
-    this.loadHome();
+    const context = this.homeSnapshotContext({ period });
+    wx.setStorageSync(
+      `tradepass_home_period_${context.userId}_${context.companyId}_${context.role}`,
+      period
+    );
+    this.restoreHomeSnapshot({ period, resetWhenMissing: true });
+    this.refreshHomeData();
   },
 
   checkMemberStatus() {
@@ -276,7 +487,7 @@ Page({
     const role = this.data.role;
     const period = this.data.period;
     const currentCompanyId = app.getCurrentCompanyId();
-    if (!currentCompanyId) return;
+    if (!currentCompanyId) return false;
     this.homeRequestSeq = (this.homeRequestSeq || 0) + 1;
     const requestSeq = this.homeRequestSeq;
     this.setData({ loading: true });
@@ -285,7 +496,8 @@ Page({
         url: `/home/${role}?period=${period}&companyId=${currentCompanyId}`
       });
       if (requestSeq !== this.homeRequestSeq || role !== this.data.role
-        || period !== this.data.period || String(currentCompanyId) !== String(app.getCurrentCompanyId())) return;
+        || period !== this.data.period
+        || String(currentCompanyId) !== String(app.getCurrentCompanyId())) return false;
       const ranking = payload.ranking || [];
       // 计算统计数据
       const totalAmount = ranking.reduce((sum, item) => sum + (item.amount || 0), 0);
@@ -302,10 +514,14 @@ Page({
         }
       });
       this.refreshPartnerCompanies();
+      return true;
     } catch (error) {
       if (requestSeq !== this.homeRequestSeq || role !== this.data.role
-        || period !== this.data.period) return;
-      wx.showToast({ title: error.message, icon: 'none' });
+        || period !== this.data.period) return false;
+      if (!this.data.homeHasSnapshot) {
+        wx.showToast({ title: error.message, icon: 'none' });
+      }
+      return false;
     } finally {
       if (requestSeq === this.homeRequestSeq) this.setData({ loading: false });
     }
@@ -314,33 +530,44 @@ Page({
   async loadCounterparties() {
     const role = this.data.role;
     const companyId = app.getCurrentCompanyId();
-    if (!companyId) return;
+    if (!companyId) return false;
     this.counterpartyRequestSeq = (this.counterpartyRequestSeq || 0) + 1;
     const requestSeq = this.counterpartyRequestSeq;
     try {
       const list = await request({ url: `/counterparties?companyId=${companyId}&role=${role}` });
       if (requestSeq !== this.counterpartyRequestSeq || role !== this.data.role
-        || String(companyId) !== String(app.getCurrentCompanyId())) return;
+        || String(companyId) !== String(app.getCurrentCompanyId())) return false;
       this.setData({ counterparties: list || [], relationCounterparties: list || [] });
       this.refreshPartnerCompanies();
+      return true;
     } catch (error) {
-      if (requestSeq !== this.counterpartyRequestSeq || role !== this.data.role) return;
-      this.setData({ counterparties: [], relationCounterparties: [] });
-      this.refreshPartnerCompanies();
+      if (requestSeq !== this.counterpartyRequestSeq || role !== this.data.role) return false;
+      if (!this.data.homeHasSnapshot) {
+        this.setData({ counterparties: [], relationCounterparties: [] });
+        this.refreshPartnerCompanies();
+      }
+      return false;
     }
   },
 
   async loadApprovalIndicator() {
-    try {
-      const companyId = app.getCurrentCompanyId();
-      if (!companyId) {
-        this.setData({ approvalHasMessage: false });
-        return;
-      }
-      const summary = await request({ url: '/approvals/summary' });
-      this.setData({ approvalHasMessage: !!(summary && summary.hasMessage) });
-    } catch (error) {
+    const companyId = app.getCurrentCompanyId();
+    if (!companyId) {
       this.setData({ approvalHasMessage: false });
+      return false;
+    }
+    this.approvalRequestSeq = (this.approvalRequestSeq || 0) + 1;
+    const requestSeq = this.approvalRequestSeq;
+    try {
+      const summary = await request({ url: '/approvals/summary' });
+      if (requestSeq !== this.approvalRequestSeq
+        || String(companyId) !== String(app.getCurrentCompanyId())) return false;
+      this.setData({ approvalHasMessage: !!(summary && summary.hasMessage) });
+      return true;
+    } catch (error) {
+      if (requestSeq !== this.approvalRequestSeq) return false;
+      if (!this.data.homeHasSnapshot) this.setData({ approvalHasMessage: false });
+      return false;
     }
   },
 

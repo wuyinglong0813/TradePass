@@ -93,6 +93,20 @@ public class FadadaContractSigningService {
         return payload(contractMapper.selectById(contractId), sync(task, contract));
     }
 
+    public SignedPreview signedPreview(Long contractId) {
+        requireReady();
+        long companyId = AuthContext.requireCompanyId();
+        accessControl.requireAnyPermission(companyId, "contract_view", "contract_sign");
+        TradeContract contract = requireParty(contractId, companyId);
+        FadadaContractSignTask task = find(contract);
+        if (task == null || !hasText(task.getSignTaskId()) || task.getArchivedAt() == null) {
+            throw new BusinessException("合同真实签章页尚未归档");
+        }
+        FadadaCorpIdentity owner = companyService.requireVerified(contract.getCompanyId());
+        byte[] image = gateway.downloadSignedPreviewPage(task.getSignTaskId(), owner.getOpenCorpId());
+        return new SignedPreview("合同签章页.png", image);
+    }
+
     @Transactional
     public void syncBySignTaskId(String signTaskId) {
         FadadaContractSignTask task = taskMapper.selectOne(new LambdaQueryWrapper<FadadaContractSignTask>()
@@ -326,6 +340,9 @@ public class FadadaContractSigningService {
             case "revoked" -> "已作废";
             default -> "待完成企业认证和印章设置";
         };
+    }
+
+    public record SignedPreview(String fileName, byte[] data) {
     }
 
     private void requireReady() {

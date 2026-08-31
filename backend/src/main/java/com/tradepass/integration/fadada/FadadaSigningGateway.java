@@ -7,6 +7,7 @@ public interface FadadaSigningGateway {
     String actorUrl(String signTaskId, String actorId, String clientUserId, String redirectMiniAppUrl);
     TaskStatus status(String signTaskId);
     byte[] downloadSignedPdf(String signTaskId, String ownerOpenCorpId, String fileName);
+    byte[] downloadSignedPreviewPage(String signTaskId, String ownerOpenCorpId);
     void cancel(String signTaskId, String reason);
     String abolish(String signTaskId, String reason, String callbackUrl);
 

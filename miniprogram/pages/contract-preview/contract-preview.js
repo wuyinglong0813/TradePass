@@ -1,4 +1,8 @@
-const { downloadApiFile, uploadMultipartApiFile } = require('../../utils/fileTransfer');
+const {
+  downloadApiFile,
+  downloadBinaryApiFile,
+  uploadMultipartApiFile
+} = require('../../utils/fileTransfer');
 const { normalizeContractTable } = require('../../utils/chineseCurrency');
 
 function today() {
@@ -74,6 +78,10 @@ Page({
     contractActionLoading: false,
     signing: null,
     signedContractArchived: false,
+    signedPreviewLoading: false,
+    signedPreviewReady: false,
+    signedPreviewFilePath: '',
+    signedPreviewError: '',
     canSignContract: false,
     signButtonText: '签署合同',
     electronicAbolishing: false,
@@ -88,6 +96,13 @@ Page({
     memoUpdatedAt: '',
     memoSaving: false,
     showMemoEditor: false,
+    showProjectLedgerPrompt: false,
+    projectLedgerHasProjects: false,
+    projectLedgerProjectCount: 0,
+    projectLedgerContractId: '',
+    projectLedgerContractName: '',
+    projectLedgerPromptStorageKey: '',
+    projectLedgerPromptLoading: false,
     // 详情面板
     showDetail: false,
     detailTitle: '',
@@ -279,6 +294,15 @@ Page({
         pdfBuyer: pdfBuyer || '—',
         pdfDate: pdfDate || '—'
       }, () => {
+        if (this.data.signedContractArchived) {
+          this.loadSignedContractPreview();
+        } else if (this.data.signedPreviewFilePath || this.data.signedPreviewError) {
+          this.setData({
+            signedPreviewReady: false,
+            signedPreviewFilePath: '',
+            signedPreviewError: ''
+          });
+        }
         this.loadContractMemo();
         this.loadBusinessDocuments('SALES_ORDER');
         this.loadBusinessDocuments('RETURN_ORDER');
@@ -561,27 +585,14 @@ Page({
       }
       const projects = await request({ url: '/project-ledgers' });
       const hasProjects = Array.isArray(projects) && projects.length > 0;
-      const itemList = hasProjects
-        ? ['加入已有项目账套', '新建项目并加入', '本合同不再提醒']
-        : ['创建项目账套并加入', '本合同不再提醒'];
-      wx.showActionSheet({
-        alertText: hasProjects
-          ? '合同已签署生效，请选择项目账套归属'
-          : '合同已签署生效，当前企业还没有项目账套',
-        itemList,
-        success: result => {
-          if ((!hasProjects && result.tapIndex === 1)
-            || (hasProjects && result.tapIndex === 2)) {
-            this.dismissProjectLedgerPrompt(contract.id || this.data.contractId, storageKey);
-            return;
-          }
-          const action = hasProjects && result.tapIndex === 0 ? 'assign' : 'create';
-          wx.navigateTo({
-            url: `/pages/project-ledger/project-ledger?action=${action}`
-              + `&contractId=${encodeURIComponent(contract.id || this.data.contractId)}`
-              + `&contractName=${encodeURIComponent(contract.name || this.data.contractName || '')}`
-          });
-        }
+      this.setData({
+        showProjectLedgerPrompt: true,
+        projectLedgerHasProjects: hasProjects,
+        projectLedgerProjectCount: hasProjects ? projects.length : 0,
+        projectLedgerContractId: String(contract.id || this.data.contractId),
+        projectLedgerContractName: contract.name || this.data.contractName || '当前合同',
+        projectLedgerPromptStorageKey: storageKey,
+        projectLedgerPromptLoading: false
       });
     } catch (error) {
       // 项目账套是签约后的可选归集动作，失败不影响合同详情和电子签署结果。
@@ -591,6 +602,7 @@ Page({
 
   async dismissProjectLedgerPrompt(contractId, storageKey) {
     const { request } = require('../../utils/request');
+    this.setData({ projectLedgerPromptLoading: true });
     try {
       await request({
         url: `/project-ledgers/contracts/${contractId}/dismiss`,
@@ -598,11 +610,81 @@ Page({
         data: {}
       });
       wx.setStorageSync(storageKey, true);
+      this.setData({ showProjectLedgerPrompt: false, projectLedgerPromptLoading: false });
       wx.showToast({ title: '本合同不再提醒', icon: 'none' });
     } catch (error) {
       wx.showToast({ title: error.message || '设置失败，请重试', icon: 'none' });
       this.projectLedgerPromptChecked = false;
+      this.setData({ projectLedgerPromptLoading: false });
     }
+  },
+
+  closeProjectLedgerPrompt() {
+    if (this.data.projectLedgerPromptLoading) return;
+    this.setData({ showProjectLedgerPrompt: false });
+  },
+
+  chooseProjectLedgerAction(e) {
+    if (this.data.projectLedgerPromptLoading) return;
+    const action = e.currentTarget.dataset.action;
+    const contractId = this.data.projectLedgerContractId;
+    if (action === 'dismiss') {
+      this.dismissProjectLedgerPrompt(contractId, this.data.projectLedgerPromptStorageKey);
+      return;
+    }
+    if (action !== 'assign' && action !== 'create') return;
+    this.setData({ showProjectLedgerPrompt: false });
+    wx.navigateTo({
+      url: `/pages/project-ledger/project-ledger?action=${action}`
+        + `&contractId=${encodeURIComponent(contractId)}`
+        + `&contractName=${encodeURIComponent(this.data.projectLedgerContractName || '')}`
+    });
+  },
+
+  async loadSignedContractPreview(force) {
+    if (!this.data.signedContractArchived || this.data.signedPreviewLoading) return;
+    if (this.data.signedPreviewReady && this.data.signedPreviewFilePath && !force) return;
+    const filePath = `${wx.env.USER_DATA_PATH}/contract-${this.data.contractId}-signed-preview.png`;
+    try {
+      wx.getFileSystemManager().unlinkSync(filePath);
+    } catch (error) {
+      // 首次加载签章页时文件不存在。
+    }
+    this.setData({
+      signedPreviewLoading: true,
+      signedPreviewReady: false,
+      signedPreviewError: ''
+    });
+    try {
+      const result = await downloadBinaryApiFile(
+        `/contracts/${this.data.contractId}/signed-preview`, filePath
+      );
+      this.setData({
+        signedPreviewLoading: false,
+        signedPreviewReady: true,
+        signedPreviewFilePath: result.filePath,
+        signedPreviewError: ''
+      });
+    } catch (error) {
+      this.setData({
+        signedPreviewLoading: false,
+        signedPreviewReady: false,
+        signedPreviewFilePath: '',
+        signedPreviewError: error.message || '真实签章页加载失败'
+      });
+    }
+  },
+
+  retrySignedContractPreview() {
+    this.loadSignedContractPreview(true);
+  },
+
+  onSignedPreviewError() {
+    this.setData({
+      signedPreviewReady: false,
+      signedPreviewFilePath: '',
+      signedPreviewError: '真实签章页显示失败，请重新加载或查看归档 PDF'
+    });
   },
 
   openContractPdf() {
@@ -1505,8 +1587,8 @@ Page({
     }
     wx.showLoading({ title: download ? '下载中...' : '打开中...' });
     try {
-      const result = await downloadApiFile(
-        `/contract-attachments/${attachment.id}/content-data`, localFilePath
+      const result = await downloadBinaryApiFile(
+        `/contract-attachments/${attachment.id}/content?download=${download}`, localFilePath
       );
       const path = result.filePath;
       if (attachment.isImage) {

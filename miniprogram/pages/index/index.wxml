@@ -75,6 +75,15 @@
       <view class="page-end">商签通 · 安全连接每一次企业交易</view>
     </view>
 
+    <view class="session-restore-page" wx:elif="{{sessionRestoring && !homeHasSnapshot}}">
+      <view class="session-restore-card">
+        <view class="session-restore-icon"><view class="session-restore-spinner" wx:if="{{!sessionRestoreError}}"></view><text wx:else>!</text></view>
+        <view class="session-restore-title">{{sessionRestoreError ? '首页暂未恢复' : '正在恢复企业首页'}}</view>
+        <view class="session-restore-desc">{{sessionRestoreError || '正在同步企业身份和业务数据，请稍候…'}}</view>
+        <button wx:if="{{sessionRestoreError}}" bindtap="retrySessionRestore">重新加载</button>
+      </view>
+    </view>
+
     <view class="onboarding-page" wx:elif="{{showJoinForm}}">
       <view class="onboarding-hero">
         <image class="onboarding-logo" src="/images/logo.png" mode="aspectFit"/>
@@ -116,6 +125,15 @@
           <view class="company-switch-name">{{companyDisplayName}}</view>
           <view class="chevron">⌄</view>
         </view>
+      </view>
+
+      <view class="home-snapshot-notice" wx:if="{{homeHasSnapshot && (homeRefreshing || homeUsingSnapshot || homeRefreshError)}}" bindtap="retryHomeRefresh">
+        <view class="home-snapshot-status {{homeRefreshing ? 'refreshing' : ''}}"></view>
+        <view class="home-snapshot-copy">
+          <view class="home-snapshot-title">{{homeRefreshing ? '正在同步最新数据' : (homeRefreshError || '当前显示上次成功数据')}}</view>
+          <view class="home-snapshot-time" wx:if="{{homeSnapshotTimeText}}">上次更新：{{homeSnapshotTimeText}}{{homeRefreshing ? '' : ' · 点击刷新'}}</view>
+        </view>
+        <view class="home-snapshot-arrow" wx:if="{{!homeRefreshing}}">↻</view>
       </view>
 
       <view class="company-switch-mask" wx:if="{{showCompanySwitcher}}" bindtap="closeCompanySwitcher">

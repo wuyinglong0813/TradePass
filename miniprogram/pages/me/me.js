@@ -67,6 +67,7 @@ Page({
   async loadMe() {
     try {
       const payload = await request({ url: '/me' });
+      app.applyMePayload(payload);
       const personalIdentity = await request({ url: '/fadada/users/me/identity', withCompany: false }).catch(() => null);
       const company = payload.company || {};
       const member = payload.member || {};

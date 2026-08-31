@@ -1,5 +1,9 @@
 const { request } = require('../../utils/request');
-const { downloadApiFile, uploadMultipartApiFile } = require('../../utils/fileTransfer');
+const {
+  downloadApiFile,
+  downloadBinaryApiFile,
+  uploadMultipartApiFile
+} = require('../../utils/fileTransfer');
 
 const app = getApp();
 
@@ -26,7 +30,7 @@ function resultIcon(type) {
 
 function formatResultTime(value) {
   const text = String(value || '').replace('T', ' ');
-  return text ? text.substring(0, 16) : '';
+  return text ? text.substring(0, 19) : '';
 }
 
 Page({
@@ -366,8 +370,13 @@ Page({
     const safeName = (matched ? originalName.slice(0, -matched[0].length) : originalName)
       .replace(/[\\/:*?"<>|\r\n]/g, '_').replace(/^\.+/, '').trim().slice(0, 80) || '履约资料';
     const filePath = `${wx.env.USER_DATA_PATH}/${safeName}-${item.id}.${extension}`;
+    try {
+      wx.getFileSystemManager().unlinkSync(filePath);
+    } catch (error) {
+      // 首次查看资料时本地文件不存在。
+    }
     wx.showLoading({ title: '打开中...' });
-    downloadApiFile(`/contract-attachments/${item.id}/content-data`, filePath)
+    downloadBinaryApiFile(`/contract-attachments/${item.id}/content?download=false`, filePath)
       .then(result => {
         if (item.isImage) {
           wx.previewImage({ current: result.filePath, urls: [result.filePath] });

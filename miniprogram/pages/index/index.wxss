@@ -97,6 +97,39 @@ page {
   font-size: 26rpx;
 }
 
+.home-snapshot-notice {
+  align-items: center;
+  background: #eef7ff;
+  border: 1rpx solid #d6e9fb;
+  border-radius: 18rpx;
+  display: flex;
+  margin: 16rpx 28rpx 0;
+  padding: 15rpx 18rpx;
+}
+
+.home-snapshot-status {
+  background: #e3a52f;
+  border-radius: 50%;
+  flex-shrink: 0;
+  height: 14rpx;
+  width: 14rpx;
+}
+
+.home-snapshot-status.refreshing {
+  animation: home-snapshot-pulse 1s ease-in-out infinite;
+  background: #2d91ea;
+}
+
+@keyframes home-snapshot-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(45, 145, 234, .25); }
+  50% { box-shadow: 0 0 0 9rpx rgba(45, 145, 234, 0); }
+}
+
+.home-snapshot-copy { flex: 1; margin-left: 16rpx; min-width: 0; }
+.home-snapshot-title { color: #31516f; font-size: 21rpx; font-weight: 650; }
+.home-snapshot-time { color: #8295a8; font-size: 18rpx; margin-top: 3rpx; }
+.home-snapshot-arrow { color: #348ee1; font-size: 32rpx; margin-left: 16rpx; }
+
 .business-notice {
   align-items: center;
   background: linear-gradient(135deg, #fff9ea, #fffdf7);
@@ -790,6 +823,68 @@ page {
   min-height: 100vh;
   padding-bottom: 60rpx;
 }
+
+.session-restore-page {
+  align-items: center;
+  background: #f4f8fd;
+  box-sizing: border-box;
+  display: flex;
+  justify-content: center;
+  min-height: calc(100vh - 120rpx);
+  padding: 70rpx 44rpx 180rpx;
+}
+
+.session-restore-card {
+  align-items: center;
+  background: #fff;
+  border: 1rpx solid #e3edf7;
+  border-radius: 30rpx;
+  box-shadow: 0 18rpx 54rpx rgba(30, 91, 151, .1);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  padding: 58rpx 42rpx 48rpx;
+  text-align: center;
+  width: 100%;
+}
+
+.session-restore-icon {
+  align-items: center;
+  background: #eaf5ff;
+  border-radius: 24rpx;
+  color: #268be8;
+  display: flex;
+  font-size: 38rpx;
+  font-weight: 800;
+  height: 88rpx;
+  justify-content: center;
+  width: 88rpx;
+}
+
+.session-restore-spinner {
+  animation: session-restore-spin .85s linear infinite;
+  border: 5rpx solid #bfddf8;
+  border-radius: 50%;
+  border-top-color: #268be8;
+  height: 42rpx;
+  width: 42rpx;
+}
+
+@keyframes session-restore-spin { to { transform: rotate(360deg); } }
+
+.session-restore-title { color: #20364f; font-size: 32rpx; font-weight: 800; margin-top: 28rpx; }
+.session-restore-desc { color: #8292a3; font-size: 23rpx; line-height: 1.65; margin-top: 14rpx; }
+.session-restore-card button {
+  background: #2f91eb;
+  border: 0;
+  border-radius: 16rpx;
+  color: #fff;
+  font-size: 25rpx;
+  line-height: 76rpx;
+  margin-top: 30rpx;
+  width: 260rpx;
+}
+.session-restore-card button::after { border: 0; }
 
 .onboarding-hero {
   align-items: center;

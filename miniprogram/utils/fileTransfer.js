@@ -26,6 +26,32 @@ async function downloadApiFile(url, filePath) {
   };
 }
 
+function downloadBinaryApiFile(url, filePath) {
+  return new Promise((resolve, reject) => {
+    const app = getApp();
+    const token = app.globalData.token || wx.getStorageSync('tradepass_token') || '';
+    const companyId = app.globalData.currentCompanyId || '';
+    const header = {};
+    if (token) header.Authorization = token;
+    if (companyId) header['X-Company-Id'] = String(companyId);
+    wx.downloadFile({
+      url: `${app.globalData.baseUrl}${url}`,
+      filePath,
+      header,
+      timeout: 60000,
+      success: result => {
+        if (result.statusCode >= 200 && result.statusCode < 300) {
+          resolve({ filePath: result.filePath || result.tempFilePath || filePath });
+          return;
+        }
+        reject(new Error(result.statusCode === 401
+          ? '登录已失效' : `文件下载失败（${result.statusCode || '未知状态'}）`));
+      },
+      fail: error => reject(new Error((error && error.errMsg) || '文件下载失败'))
+    });
+  });
+}
+
 function uploadMultipartApiFile(url, filePath, data = {}, fileFieldName = 'file') {
   return new Promise((resolve, reject) => {
     const app = getApp();
@@ -71,6 +97,7 @@ function uploadMultipartApiFile(url, filePath, data = {}, fileFieldName = 'file'
 
 module.exports = {
   downloadApiFile,
+  downloadBinaryApiFile,
   uploadMultipartApiFile,
   writeBase64File
 };

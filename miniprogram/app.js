@@ -1,4 +1,5 @@
 const { request, clearSession } = require('./utils/request');
+const { USER_ID_KEY } = require('./utils/homeSnapshot');
 
 // 本地后端地址（开发者工具模拟器用）
 const LOCAL_API = 'http://127.0.0.1:9999/api';
@@ -49,15 +50,43 @@ App({
     if (!localDevelopment && wx.cloud) {
       wx.cloud.init({ env: CLOUD_ENV, traceUser: true });
     }
+    this.restoreStoredSession();
+    this._sessionReady = this.globalData.token
+      ? this.refreshSession() : Promise.resolve(null);
+  },
+
+  onShow() {
+    this.restoreStoredSession();
+    if (this.globalData.token) this._sessionReady = this.refreshSession();
+  },
+
+  restoreStoredSession() {
     const token = wx.getStorageSync('tradepass_token');
     const companyId = wx.getStorageSync('tradepass_company_id');
     if (companyId) this.globalData.currentCompanyId = String(companyId);
     if (token) this.globalData.token = token;
-    this._sessionReady = token ? this.loadMe().catch(() => null) : Promise.resolve(null);
   },
 
   ensureSessionReady() {
-    return this._sessionReady || Promise.resolve(null);
+    this.restoreStoredSession();
+    if (!this.globalData.token) return Promise.resolve(null);
+    if (this._sessionRefresh) return this._sessionRefresh;
+    if (this.globalData.userInfo) return Promise.resolve(this.globalData.userInfo);
+    return this.refreshSession();
+  },
+
+  refreshSession() {
+    if (!this.globalData.token) return Promise.resolve(null);
+    if (this._sessionRefresh) return this._sessionRefresh;
+    const refresh = Promise.resolve()
+      .then(() => this.loadMe())
+      .catch(() => null)
+      .finally(() => {
+        if (this._sessionRefresh === refresh) this._sessionRefresh = null;
+      });
+    this._sessionRefresh = refresh;
+    this._sessionReady = refresh;
+    return refresh;
   },
 
   getCurrentCompanyId() {
@@ -79,6 +108,8 @@ App({
     this.globalData.memberInfo = payload.member || null;
     this.globalData.companies = payload.companies || [];
     const cid = payload.user && payload.user.currentCompanyId;
+    const userId = payload.user && payload.user.id;
+    if (userId) wx.setStorageSync(USER_ID_KEY, String(userId));
     this.setCurrentCompany(cid || '');
     return payload;
   },
@@ -88,6 +119,8 @@ App({
     this.globalData.token = session.token;
     wx.setStorageSync('tradepass_token', session.token);
     const cid = session.user && session.user.currentCompanyId;
+    const userId = session.user && session.user.id;
+    if (userId) wx.setStorageSync(USER_ID_KEY, String(userId));
     if (cid) this.setCurrentCompany(cid);
     this._sessionReady = this.loadMe();
     await this._sessionReady;
@@ -105,6 +138,7 @@ App({
     } finally {
       clearSession(this);
       this._sessionReady = Promise.resolve(null);
+      this._sessionRefresh = null;
       wx.reLaunch({ url: '/pages/index/index' });
     }
   },

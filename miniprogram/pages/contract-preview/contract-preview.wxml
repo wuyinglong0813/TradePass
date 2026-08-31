@@ -68,11 +68,38 @@
 
     <view class="pdf-viewer" wx:else>
       <view class="pdf-state">
-        <view class="pdf-state-dot {{pdfReady ? 'ready' : ''}}"></view>
-        <text>{{pdfLoading ? '正在生成标准 PDF...' : (pdfReady ? 'PDF 已就绪' : 'A4 标准 PDF')}}</text>
+        <view class="pdf-state-dot {{(signedContractArchived && signedPreviewReady) || pdfReady ? 'ready' : ''}}"></view>
+        <text wx:if="{{signedContractArchived}}">{{signedPreviewLoading ? '正在读取真实签章页...' : (signedPreviewReady ? '真实签署归档' : '带电子印章的归档 PDF')}}</text>
+        <text wx:else>{{pdfLoading ? '正在生成标准 PDF...' : (pdfReady ? 'PDF 已就绪' : 'A4 标准 PDF')}}</text>
       </view>
 
-      <view class="pdf-paper" bindtap="openContractPdf">
+      <view class="signed-preview-card" wx:if="{{signedContractArchived}}">
+        <view class="signed-preview-loading" wx:if="{{signedPreviewLoading}}">
+          <view class="signed-preview-spinner"></view>
+          <view class="signed-preview-loading-title">正在加载归档合同签章页</view>
+          <view class="signed-preview-loading-desc">展示内容与法大大签署完成后的 PDF 一致</view>
+        </view>
+        <image
+          class="signed-preview-image"
+          wx:elif="{{signedPreviewReady && signedPreviewFilePath}}"
+          src="{{signedPreviewFilePath}}"
+          mode="widthFix"
+          bindtap="openContractPdf"
+          binderror="onSignedPreviewError"
+        />
+        <view class="signed-preview-error" wx:else>
+          <view class="signed-preview-error-icon">章</view>
+          <view class="signed-preview-error-title">真实签章页暂未显示</view>
+          <view class="signed-preview-error-desc">{{signedPreviewError || '可重新加载，或直接打开归档 PDF 查看双方电子印章'}}</view>
+          <button bindtap="retrySignedContractPreview">重新加载签章页</button>
+        </view>
+        <view class="signed-preview-caption" wx:if="{{signedPreviewReady}}">
+          <view class="signed-preview-verified">✓ 真实签署文件</view>
+          <view>当前展示归档 PDF 的签章页，点击可打开完整合同</view>
+        </view>
+      </view>
+
+      <view class="pdf-paper" wx:else bindtap="openContractPdf">
         <view class="pdf-paper-title">{{pdfTitle}}</view>
         <view class="pdf-paper-head">
           <view>
@@ -113,28 +140,28 @@
           <view class="pdf-party-sign">
             <text class="pdf-party-role">供方</text>
             <text class="pdf-party-name">{{pdfSupplier || '—'}}</text>
-            <view class="pdf-seal-state {{signedContractArchived ? 'signed' : ''}}">
-              <text>{{signedContractArchived ? '电子签章' : '待签署'}}</text>
-              <text>{{signedContractArchived ? '已完成' : '—'}}</text>
+            <view class="pdf-seal-state">
+              <text>待签署</text>
+              <text>—</text>
             </view>
           </view>
           <view class="pdf-party-sign">
             <text class="pdf-party-role">需方</text>
             <text class="pdf-party-name">{{pdfBuyer || '—'}}</text>
-            <view class="pdf-seal-state {{signedContractArchived ? 'signed' : ''}}">
-              <text>{{signedContractArchived ? '电子签章' : '待签署'}}</text>
-              <text>{{signedContractArchived ? '已完成' : '—'}}</text>
+            <view class="pdf-seal-state">
+              <text>待签署</text>
+              <text>—</text>
             </view>
           </view>
         </view>
-        <view class="pdf-open-hint">{{signedContractArchived ? '点击查看带双方电子印章的归档 PDF' : '点击查看完整 PDF'}}</view>
+        <view class="pdf-open-hint">点击查看完整 PDF</view>
       </view>
 
       <view class="pdf-actions">
         <button class="pdf-button primary" loading="{{pdfLoading}}" disabled="{{pdfLoading}}" bindtap="openContractPdf">查看 PDF</button>
         <button class="pdf-button secondary" loading="{{pdfLoading}}" disabled="{{pdfLoading}}" bindtap="downloadContractPdf">下载 PDF</button>
       </view>
-      <view class="pdf-tip">电子印章以双方签署完成后的归档 PDF 为准；打开后可通过右上角菜单保存或转发。</view>
+      <view class="pdf-tip">{{signedContractArchived ? '页面直接展示真实归档合同的签章页；打开 PDF 后可查看全部页面并保存或转发。' : '双方完成电子签署后，这里将展示归档合同中的真实电子印章。'}}</view>
 
     </view>
   </block>
@@ -436,6 +463,49 @@
 
     <view class="document-editor-actions" wx:if="{{documentEditorReady}}">
       <button class="document-editor-button submit" loading="{{documentEditorSubmitting}}" disabled="{{documentEditorSubmitting}}" bindtap="submitBusinessDocument">{{createAsDraft ? '保存草稿' : '创建并发布'}}</button>
+    </view>
+  </view>
+
+  <!-- 合同生效后的项目账套归集引导 -->
+  <view class="project-ledger-prompt-mask" wx:if="{{showProjectLedgerPrompt}}" bindtap="closeProjectLedgerPrompt">
+    <view class="project-ledger-prompt" catchtap="noop">
+      <view class="project-ledger-prompt-accent"></view>
+      <view class="project-ledger-prompt-close" bindtap="closeProjectLedgerPrompt">×</view>
+      <view class="project-ledger-prompt-icon">
+        <view class="project-ledger-prompt-check">✓</view>
+      </view>
+      <view class="project-ledger-prompt-kicker">合同已签署生效</view>
+      <view class="project-ledger-prompt-title">归入项目账套</view>
+      <view class="project-ledger-prompt-contract">{{projectLedgerContractName}}</view>
+      <view class="project-ledger-prompt-desc" wx:if="{{projectLedgerHasProjects}}">选择归属后，合同金额和后续履约数据会自动汇总到项目中。</view>
+      <view class="project-ledger-prompt-desc" wx:else>创建项目账套后，可统一查看合同金额、成本、收入和预计利润。</view>
+
+      <view class="project-ledger-choice primary" wx:if="{{projectLedgerHasProjects}}" data-action="assign" bindtap="chooseProjectLedgerAction">
+        <view class="project-ledger-choice-icon folder"><view></view></view>
+        <view class="project-ledger-choice-copy">
+          <view class="project-ledger-choice-title">加入已有项目账套</view>
+          <view class="project-ledger-choice-desc">从 {{projectLedgerProjectCount}} 个项目账套中选择</view>
+        </view>
+        <view class="project-ledger-choice-arrow">›</view>
+      </view>
+
+      <view class="project-ledger-choice {{projectLedgerHasProjects ? '' : 'primary'}}" data-action="create" bindtap="chooseProjectLedgerAction">
+        <view class="project-ledger-choice-icon add">＋</view>
+        <view class="project-ledger-choice-copy">
+          <view class="project-ledger-choice-title">新建账套并加入</view>
+          <view class="project-ledger-choice-desc">创建新项目并自动关联本合同</view>
+        </view>
+        <view class="project-ledger-choice-arrow">›</view>
+      </view>
+
+      <button
+        class="project-ledger-dismiss"
+        data-action="dismiss"
+        loading="{{projectLedgerPromptLoading}}"
+        disabled="{{projectLedgerPromptLoading}}"
+        bindtap="chooseProjectLedgerAction"
+      >本合同不再提示</button>
+      <view class="project-ledger-prompt-note">稍后也可以在“企业中心 → 项目账套”中操作</view>
     </view>
   </view>
 

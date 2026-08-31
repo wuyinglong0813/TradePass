@@ -210,6 +210,28 @@ public class TradeController {
         return ApiResponse.ok(signingService.current(id));
     }
 
+    @GetMapping("/contracts/{id}/signed-preview-data")
+    public ApiResponse<FileDataPayload> signedContractPreview(@PathVariable Long id) {
+        FadadaContractSigningService.SignedPreview preview = signingService.signedPreview(id);
+        return ApiResponse.ok(FileDataPayload.of(
+                preview.fileName(), MediaType.IMAGE_PNG_VALUE, preview.data()));
+    }
+
+    @GetMapping(value = "/contracts/{id}/signed-preview", produces = MediaType.IMAGE_PNG_VALUE)
+    public ResponseEntity<byte[]> signedContractPreviewFile(@PathVariable Long id) {
+        FadadaContractSigningService.SignedPreview preview = signingService.signedPreview(id);
+        ContentDisposition disposition = ContentDisposition.inline()
+                .filename(preview.fileName(), StandardCharsets.UTF_8)
+                .build();
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+                .header(HttpHeaders.CACHE_CONTROL, "private, no-store")
+                .header("X-Content-Type-Options", "nosniff")
+                .contentLength(preview.data().length)
+                .contentType(MediaType.IMAGE_PNG)
+                .body(preview.data());
+    }
+
     @PostMapping("/contracts/{id}/signing/sync")
     public ApiResponse<ContractSigningPayload> syncContractSigning(@PathVariable Long id) {
         return ApiResponse.ok(signingService.syncCurrent(id));

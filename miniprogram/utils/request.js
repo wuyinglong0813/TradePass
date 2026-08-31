@@ -1,10 +1,12 @@
 let redirecting = false;
+const { USER_ID_KEY, clearHomeSnapshots } = require('./homeSnapshot');
 
 function currentApp() {
   return getApp();
 }
 
 function clearSession(app) {
+  clearHomeSnapshots();
   app.globalData.token = '';
   app.globalData.currentCompanyId = '';
   app.globalData.userInfo = null;
@@ -12,6 +14,7 @@ function clearSession(app) {
   app.globalData.companies = [];
   wx.removeStorageSync('tradepass_token');
   wx.removeStorageSync('tradepass_company_id');
+  wx.removeStorageSync(USER_ID_KEY);
 }
 
 function request(options) {

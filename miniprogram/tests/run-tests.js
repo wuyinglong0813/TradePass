@@ -217,6 +217,7 @@ test('home exposes the ordered approval center with a message indicator', () => 
   assert.ok(approvalScript.includes('sales-order-detail'));
   assert.ok(approvalScript.includes("label: '合同'"));
   assert.ok(approvalScript.includes("label: '履约资料'"));
+  assert.ok(approvalScript.includes('substring(0, 19)'));
   assert.ok(approvalTemplate.includes('result-reason'));
   assert.ok(!approvalTemplate.includes('approval-hero'));
   const approvalStyles = fs.readFileSync(
@@ -314,15 +315,32 @@ test('signed contracts prompt managers to choose or create a project ledger', ()
     path.join(__dirname, '..', 'pages', 'contract-preview', 'contract-preview.js'),
     'utf8'
   );
+  const previewTemplate = fs.readFileSync(
+    path.join(__dirname, '..', 'pages', 'contract-preview', 'contract-preview.wxml'),
+    'utf8'
+  );
   const projectScript = fs.readFileSync(
     path.join(__dirname, '..', 'pages', 'project-ledger', 'project-ledger.js'),
     'utf8'
   );
   assert.ok(previewScript.includes('/project-ledgers/contracts/${contract.id || this.data.contractId}/assignment'));
-  assert.ok(previewScript.includes('加入已有项目账套'));
-  assert.ok(previewScript.includes('新建项目并加入'));
+  assert.ok(previewTemplate.includes('project-ledger-prompt'));
+  assert.ok(previewTemplate.includes('加入已有项目账套'));
+  assert.ok(previewTemplate.includes('新建账套并加入'));
+  assert.ok(previewTemplate.includes('本合同不再提示'));
   assert.ok(previewScript.includes('/dismiss'));
   assert.ok(projectScript.includes('assignPendingContract(project.id)'));
+});
+
+test('signed contract detail renders the provider archive page instead of a fake completed seal', () => {
+  const previewDir = path.join(__dirname, '..', 'pages', 'contract-preview');
+  const previewScript = fs.readFileSync(path.join(previewDir, 'contract-preview.js'), 'utf8');
+  const previewTemplate = fs.readFileSync(path.join(previewDir, 'contract-preview.wxml'), 'utf8');
+  assert.ok(previewScript.includes('/signed-preview'));
+  assert.ok(previewTemplate.includes('src="{{signedPreviewFilePath}}"'));
+  assert.ok(previewTemplate.includes('真实签署文件'));
+  assert.ok(!previewTemplate.includes('电子签章'));
+  assert.ok(!previewTemplate.includes('已完成'));
 });
 
 const app = {
@@ -336,7 +354,13 @@ const app = {
 global.getApp = () => app;
 global.wx = {};
 const { request } = require('../utils/request');
-const { uploadMultipartApiFile } = require('../utils/fileTransfer');
+const { downloadBinaryApiFile, uploadMultipartApiFile } = require('../utils/fileTransfer');
+const {
+  clearHomeSnapshots,
+  readHomeSnapshot,
+  snapshotKey,
+  writeHomeSnapshot
+} = require('../utils/homeSnapshot');
 const { setTabBarHidden, syncTabBar, tabIndicatorTransform } = require('../utils/tabBar');
 
 test('multipart upload sends auth, tenant and form fields without base64 packaging', async () => {
@@ -362,6 +386,53 @@ test('multipart upload sends auth, tenant and form fields without base64 packagi
   });
   assert.deepStrictEqual(captured.formData, { category: 'INVOICE', invoiceAmount: '88.5' });
   assert.ok(!Object.prototype.hasOwnProperty.call(captured.formData, 'contentBase64'));
+});
+
+test('large contract files download as binary without callContainer base64 expansion', async () => {
+  let captured;
+  wx.getStorageSync = () => '';
+  wx.downloadFile = options => {
+    captured = options;
+    options.success({ statusCode: 200, filePath: '/user-data/资料-19.pdf' });
+  };
+
+  const result = await downloadBinaryApiFile(
+    '/contract-attachments/19/content?download=false', '/user-data/资料-19.pdf'
+  );
+
+  assert.deepStrictEqual(result, { filePath: '/user-data/资料-19.pdf' });
+  assert.strictEqual(captured.url,
+    'https://api.example.test/contract-attachments/19/content?download=false');
+  assert.strictEqual(captured.filePath, '/user-data/资料-19.pdf');
+  assert.deepStrictEqual(captured.header, {
+    Authorization: 'token-1',
+    'X-Company-Id': 'company-3'
+  });
+});
+
+test('home snapshots are isolated by user, company, role and period and expire safely', () => {
+  const storage = {};
+  wx.getStorageSync = key => storage[key] || '';
+  wx.setStorageSync = (key, value) => { storage[key] = value; };
+  wx.removeStorageSync = key => { delete storage[key]; };
+  const now = 2_000_000_000_000;
+  const context = { userId: '7', companyId: '8', role: 'supplier', period: 'year' };
+  const snapshot = writeHomeSnapshot(context, {
+    companyDisplayName: '测试企业',
+    stats: { totalAmount: '99', totalOrders: 2, counterpartyCount: 1 }
+  }, now);
+
+  assert.ok(snapshotKey(context).includes('_7_8_supplier_year'));
+  assert.strictEqual(readHomeSnapshot(context, now + 1000).payload.companyDisplayName, '测试企业');
+  assert.strictEqual(readHomeSnapshot({ ...context, userId: '9' }, now + 1000), null);
+  assert.strictEqual(readHomeSnapshot({ ...context, companyId: '10' }, now + 1000), null);
+  assert.strictEqual(readHomeSnapshot({ ...context, role: 'buyer' }, now + 1000), null);
+  assert.strictEqual(readHomeSnapshot({ ...context, period: 'month' }, now + 1000), null);
+  assert.strictEqual(readHomeSnapshot(context, now + 31 * 24 * 60 * 60 * 1000), null);
+
+  writeHomeSnapshot(context, { companyDisplayName: '测试企业' }, now);
+  clearHomeSnapshots();
+  assert.strictEqual(storage[snapshotKey(context)], undefined);
 });
 
 test('custom tab bar moves its indicator by one slot per navigation item', () => {
@@ -510,8 +581,8 @@ test('contract attachments download to a safe persistent path for every category
     'utf8'
   );
   assert.ok(!script.includes("download && attachment.category === 'INVOICE'"));
-  assert.ok(script.includes('/contract-attachments/${attachment.id}/content-data'));
-  assert.ok(script.includes('downloadApiFile'));
+  assert.ok(script.includes('/contract-attachments/${attachment.id}/content?download=${download}'));
+  assert.ok(script.includes('downloadBinaryApiFile'));
 });
 
 test('request injects auth and tenant headers and unwraps API data', async () => {
@@ -608,6 +679,47 @@ test('app restores, switches and clears tenant-aware session state', async () =>
   assert.strictEqual(instance.globalData.userInfo, null);
   assert.deepStrictEqual(instance.globalData.companies, []);
   assert.ok(removed.includes('tradepass_token'));
+});
+
+test('app retries a failed cold-start profile restore before home decides company state', async () => {
+  const instance = appInstance(loadAppDefinition());
+  const storage = {
+    tradepass_token: 'stored-token',
+    tradepass_company_id: '8'
+  };
+  wx.getStorageSync = key => storage[key] || '';
+  wx.setStorageSync = (key, value) => { storage[key] = value; };
+  wx.removeStorageSync = key => { delete storage[key]; };
+  let attempts = 0;
+  instance.loadMe = () => {
+    attempts += 1;
+    if (attempts === 1) return Promise.reject(new Error('container cold start'));
+    return Promise.resolve(instance.applyMePayload.call(instance, {
+      user: { id: '7', currentCompanyId: '8' },
+      member: { roleCode: 'ADMIN', memberStatus: 'ACTIVE' },
+      companies: [{ companyId: '8', companyName: '测试企业' }]
+    }));
+  };
+
+  instance.onLaunch.call(instance);
+  assert.strictEqual(await instance.ensureSessionReady.call(instance), null);
+  await instance.refreshSession.call(instance);
+  assert.strictEqual(attempts, 2);
+  assert.strictEqual(instance.globalData.userInfo.currentCompanyId, '8');
+  assert.strictEqual(instance.globalData.memberInfo.roleCode, 'ADMIN');
+
+  const indexScript = fs.readFileSync(
+    path.join(__dirname, '..', 'pages', 'index', 'index.js'), 'utf8'
+  );
+  const indexTemplate = fs.readFileSync(
+    path.join(__dirname, '..', 'pages', 'index', 'index.wxml'), 'utf8'
+  );
+  assert.ok(indexScript.includes('loggedIn && !user'));
+  assert.ok(indexScript.includes('scheduleSessionRestore()'));
+  assert.ok(indexTemplate.includes('wx:elif="{{sessionRestoring && !homeHasSnapshot}}"'));
+  assert.ok(indexTemplate.includes('home-snapshot-notice'));
+  assert.ok(indexScript.indexOf('this.restoreHomeSnapshot()')
+    < indexScript.indexOf('await app.ensureSessionReady()'));
 });
 
 test('app switchCompany sends target tenant header and updates global profile', async () => {

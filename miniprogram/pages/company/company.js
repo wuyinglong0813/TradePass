@@ -69,6 +69,7 @@ Page({
   async loadData() {
     try {
       const payload = await request({ url: '/me' });
+      app.applyMePayload(payload);
       const certificationApplications = await request({ url: '/me/company-certification-applications' }).catch(() => []);
       const company = payload.company || {};
       const member = payload.member || {};

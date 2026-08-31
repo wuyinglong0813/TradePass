@@ -20,6 +20,7 @@ import com.fasc.open.api.v5_1.req.signtask.AddSignFieldInfo;
 import com.fasc.open.api.v5_1.req.signtask.CancelSignTaskCreateReq;
 import com.fasc.open.api.v5_1.req.signtask.CreateSignTaskReq;
 import com.fasc.open.api.v5_1.req.signtask.GetOwnerDownloadUrlReq;
+import com.fasc.open.api.v5_1.req.signtask.GetSignTaskImgDownloadUrlReq;
 import com.fasc.open.api.v5_1.req.signtask.ListSignTaskActorReq;
 import com.fasc.open.api.v5_1.req.signtask.SignTaskActorGetUrlReq;
 import com.fasc.open.api.v5_1.req.signtask.SignTaskBaseReq;
@@ -31,6 +32,7 @@ import com.fasc.open.api.v5_1.res.signtask.CancelSignTaskCreateRes;
 import com.fasc.open.api.v5_1.res.signtask.CreateSignTaskRes;
 import com.fasc.open.api.v5_1.res.signtask.ListSignTaskActorRes;
 import com.fasc.open.api.v5_1.res.signtask.OwnerDownloadUrlRes;
+import com.fasc.open.api.v5_1.res.signtask.GetSigntaskImgDownloadUrlRes;
 import com.fasc.open.api.v5_1.res.signtask.SignTaskActorGetUrlRes;
 import com.fasc.open.api.v5_1.res.signtask.SignTaskDetailRes;
 import com.tradepass.common.BusinessException;
@@ -44,12 +46,19 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.util.List;
+import java.util.Locale;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 
 @Component
 public class SdkFadadaSigningGateway implements FadadaSigningGateway {
     private static final Logger log = LoggerFactory.getLogger(SdkFadadaSigningGateway.class);
     private static final int MAX_SIGNED_FILE_SIZE = 60 * 1024 * 1024;
+    private static final int MAX_PREVIEW_PAGE_SIZE = 8 * 1024 * 1024;
+    private static final int MAX_PREVIEW_PAGE_COUNT = 100;
     private final DocClient docClient;
     private final SignTaskClient signTaskClient;
     private final FadadaAccessTokenProvider tokenProvider;
@@ -138,6 +147,18 @@ public class SdkFadadaSigningGateway implements FadadaSigningGateway {
         request.setCustomName(fileName);
         OwnerDownloadUrlRes response = invoke(() -> signTaskClient.getOwnerDownloadUrl(request), "获取签署文件");
         return download(response.getDownloadUrl());
+    }
+
+    @Override
+    public byte[] downloadSignedPreviewPage(String signTaskId, String ownerOpenCorpId) {
+        GetSignTaskImgDownloadUrlReq request = new GetSignTaskImgDownloadUrlReq();
+        request.setAccessToken(tokenProvider.get());
+        request.setOwnerId(OpenId.getInstance("corp", ownerOpenCorpId));
+        request.setSignTaskId(signTaskId);
+        GetSigntaskImgDownloadUrlRes response = invoke(
+                () -> signTaskClient.getSignTaskOwnerSlicingTicketId(request),
+                "获取签署合同预览");
+        return lastPngFromZip(download(response.getSignTaskImgUrl()));
     }
 
     @Override
@@ -280,6 +301,83 @@ public class SdkFadadaSigningGateway implements FadadaSigningGateway {
         } catch (RuntimeException exception) {
             throw new BusinessException("电子签文件地址无效");
         }
+    }
+
+    static byte[] lastPngFromZip(byte[] zipData) {
+        if (zipData == null || zipData.length == 0) {
+            throw new BusinessException("签署合同预览内容为空");
+        }
+        byte[] selected = null;
+        int selectedPage = Integer.MIN_VALUE;
+        int fallbackOrder = 0;
+        try (ZipInputStream input = new ZipInputStream(new ByteArrayInputStream(zipData))) {
+            ZipEntry entry;
+            int pageCount = 0;
+            while ((entry = input.getNextEntry()) != null) {
+                if (entry.isDirectory() || !entry.getName().toLowerCase(Locale.ROOT).endsWith(".png")) {
+                    input.closeEntry();
+                    continue;
+                }
+                if (++pageCount > MAX_PREVIEW_PAGE_COUNT) {
+                    throw new BusinessException("签署合同预览页数过多");
+                }
+                ByteArrayOutputStream page = new ByteArrayOutputStream();
+                byte[] buffer = new byte[8192];
+                int total = 0;
+                int length;
+                while ((length = input.read(buffer)) != -1) {
+                    total += length;
+                    if (total > MAX_PREVIEW_PAGE_SIZE) {
+                        throw new BusinessException("签署合同预览页过大");
+                    }
+                    page.write(buffer, 0, length);
+                }
+                byte[] data = page.toByteArray();
+                if (!isPng(data)) {
+                    throw new BusinessException("签署合同预览格式不正确");
+                }
+                int pageNumber = pageNumber(entry.getName(), fallbackOrder++);
+                if (selected == null || pageNumber >= selectedPage) {
+                    selected = data;
+                    selectedPage = pageNumber;
+                }
+                input.closeEntry();
+            }
+        } catch (BusinessException exception) {
+            throw exception;
+        } catch (java.io.IOException exception) {
+            throw new BusinessException("签署合同预览读取失败，请打开归档 PDF 查看");
+        }
+        if (selected == null) {
+            throw new BusinessException("签署合同预览尚未生成，请打开归档 PDF 查看");
+        }
+        return selected;
+    }
+
+    private static int pageNumber(String name, int fallback) {
+        String baseName = name == null ? "" : name.replace('\\', '/');
+        int slash = baseName.lastIndexOf('/');
+        if (slash >= 0) baseName = baseName.substring(slash + 1);
+        int dot = baseName.lastIndexOf('.');
+        if (dot > 0) baseName = baseName.substring(0, dot);
+        for (int end = baseName.length(); end > 0; end--) {
+            if (!Character.isDigit(baseName.charAt(end - 1))) continue;
+            int start = end - 1;
+            while (start > 0 && Character.isDigit(baseName.charAt(start - 1))) start--;
+            try {
+                return Integer.parseInt(baseName.substring(start, end));
+            } catch (NumberFormatException ignored) {
+                break;
+            }
+        }
+        return fallback;
+    }
+
+    private static boolean isPng(byte[] data) {
+        return data != null && data.length >= 8
+                && (data[0] & 0xff) == 0x89 && data[1] == 'P' && data[2] == 'N' && data[3] == 'G'
+                && (data[4] & 0xff) == 0x0d && (data[5] & 0xff) == 0x0a
+                && (data[6] & 0xff) == 0x1a && (data[7] & 0xff) == 0x0a;
     }
 
     private Long parseSealId(String value) {
