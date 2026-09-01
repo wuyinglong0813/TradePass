@@ -189,7 +189,7 @@ public class ApprovalService {
                         SELECT attachment.id, attachment.contract_id, attachment.category,
                                attachment.original_name, attachment.content_type, attachment.voucher_date,
                                attachment.voucher_amount, attachment.invoice_date,
-                               attachment.invoice_amount, attachment.created_at,
+                               attachment.invoice_amount, attachment.file_size, attachment.created_at,
                                attachment.uploader_company_id AS source_company_id,
                                company.name AS source_company_name,
                                contract.contract_no, contract.name AS contract_name
@@ -216,6 +216,7 @@ public class ApprovalService {
                             businessDate, amount, rs.getTimestamp("created_at"));
                     String contentType = rs.getString("content_type");
                     view.put("contentType", contentType == null ? "" : contentType);
+                    view.put("fileSize", rs.getLong("file_size"));
                     view.put("isImage", contentType != null && contentType.startsWith("image/"));
                     return view;
                 }, companyId);

@@ -1,6 +1,6 @@
 const {
   downloadApiFile,
-  downloadBinaryApiFile,
+  downloadChunkedApiFile,
   uploadMultipartApiFile
 } = require('../../utils/fileTransfer');
 const { normalizeContractTable } = require('../../utils/chineseCurrency');
@@ -656,8 +656,8 @@ Page({
       signedPreviewError: ''
     });
     try {
-      const result = await downloadBinaryApiFile(
-        `/contracts/${this.data.contractId}/signed-preview`, filePath
+      const result = await downloadChunkedApiFile(
+        `/contracts/${this.data.contractId}/signed-preview-chunk-data`, filePath
       );
       this.setData({
         signedPreviewLoading: false,
@@ -1587,8 +1587,11 @@ Page({
     }
     wx.showLoading({ title: download ? '下载中...' : '打开中...' });
     try {
-      const result = await downloadBinaryApiFile(
-        `/contract-attachments/${attachment.id}/content?download=${download}`, localFilePath
+      const fileSize = Number(attachment.fileSize || 0);
+      const result = await downloadChunkedApiFile(
+        `/contract-attachments/${attachment.id}/content-chunk-data`,
+        localFilePath,
+        fileSize > 0 ? fileSize : undefined
       );
       const path = result.filePath;
       if (attachment.isImage) {

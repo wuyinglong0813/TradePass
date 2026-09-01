@@ -336,7 +336,7 @@ test('signed contract detail renders the provider archive page instead of a fake
   const previewDir = path.join(__dirname, '..', 'pages', 'contract-preview');
   const previewScript = fs.readFileSync(path.join(previewDir, 'contract-preview.js'), 'utf8');
   const previewTemplate = fs.readFileSync(path.join(previewDir, 'contract-preview.wxml'), 'utf8');
-  assert.ok(previewScript.includes('/signed-preview'));
+  assert.ok(previewScript.includes('/signed-preview-chunk-data'));
   assert.ok(previewTemplate.includes('src="{{signedPreviewFilePath}}"'));
   assert.ok(previewTemplate.includes('真实签署文件'));
   assert.ok(!previewTemplate.includes('电子签章'));
@@ -354,7 +354,7 @@ const app = {
 global.getApp = () => app;
 global.wx = {};
 const { request } = require('../utils/request');
-const { downloadBinaryApiFile, uploadMultipartApiFile } = require('../utils/fileTransfer');
+const { downloadChunkedApiFile, uploadMultipartApiFile } = require('../utils/fileTransfer');
 const {
   clearHomeSnapshots,
   readHomeSnapshot,
@@ -388,26 +388,47 @@ test('multipart upload sends auth, tenant and form fields without base64 packagi
   assert.ok(!Object.prototype.hasOwnProperty.call(captured.formData, 'contentBase64'));
 });
 
-test('large contract files download as binary without callContainer base64 expansion', async () => {
-  let captured;
+test('large contract files download in bounded cloud-container chunks', async () => {
+  const requestedUrls = [];
+  const savedChunks = [];
+  const source = Buffer.from('abcde');
   wx.getStorageSync = () => '';
-  wx.downloadFile = options => {
-    captured = options;
-    options.success({ statusCode: 200, filePath: '/user-data/资料-19.pdf' });
+  wx.getFileSystemManager = () => ({
+    writeFile: options => {
+      savedChunks.length = 0;
+      savedChunks.push(Buffer.from(options.data, 'base64'));
+      options.success();
+    },
+    appendFile: options => {
+      savedChunks.push(Buffer.from(options.data, 'base64'));
+      options.success();
+    }
+  });
+  wx.request = options => {
+    requestedUrls.push(options.url);
+    const offset = Number(options.url.match(/[?&]offset=(\d+)/)[1]);
+    const size = Number(options.url.match(/[?&]size=(\d+)/)[1]);
+    const chunk = source.subarray(offset, Math.min(source.length, offset + size));
+    options.success({ statusCode: 200, data: { code: 0, message: 'ok', data: {
+      offset,
+      length: chunk.length,
+      totalSize: source.length,
+      eof: offset + chunk.length === source.length,
+      contentBase64: chunk.toString('base64')
+    } } });
   };
 
-  const result = await downloadBinaryApiFile(
-    '/contract-attachments/19/content?download=false', '/user-data/资料-19.pdf'
+  const result = await downloadChunkedApiFile(
+    '/contract-attachments/19/content-chunk-data', '/user-data/资料-19.pdf', 5, 3
   );
 
-  assert.deepStrictEqual(result, { filePath: '/user-data/资料-19.pdf' });
-  assert.strictEqual(captured.url,
-    'https://api.example.test/contract-attachments/19/content?download=false');
-  assert.strictEqual(captured.filePath, '/user-data/资料-19.pdf');
-  assert.deepStrictEqual(captured.header, {
-    Authorization: 'token-1',
-    'X-Company-Id': 'company-3'
-  });
+  assert.strictEqual(result.filePath, '/user-data/资料-19.pdf');
+  assert.strictEqual(result.fileSize, 5);
+  assert.strictEqual(Buffer.concat(savedChunks).toString(), 'abcde');
+  assert.ok(requestedUrls[0].endsWith(
+    '/contract-attachments/19/content-chunk-data?offset=0&size=3'));
+  assert.ok(requestedUrls[1].endsWith(
+    '/contract-attachments/19/content-chunk-data?offset=3&size=3'));
 });
 
 test('home snapshots are isolated by user, company, role and period and expire safely', () => {
@@ -581,8 +602,9 @@ test('contract attachments download to a safe persistent path for every category
     'utf8'
   );
   assert.ok(!script.includes("download && attachment.category === 'INVOICE'"));
-  assert.ok(script.includes('/contract-attachments/${attachment.id}/content?download=${download}'));
-  assert.ok(script.includes('downloadBinaryApiFile'));
+  assert.ok(script.includes('/contract-attachments/${attachment.id}/content-chunk-data'));
+  assert.ok(script.includes('downloadChunkedApiFile'));
+  assert.ok(!script.includes('downloadBinaryApiFile'));
 });
 
 test('request injects auth and tenant headers and unwraps API data', async () => {
@@ -717,7 +739,7 @@ test('app retries a failed cold-start profile restore before home decides compan
   assert.ok(indexScript.includes('loggedIn && !user'));
   assert.ok(indexScript.includes('scheduleSessionRestore()'));
   assert.ok(indexTemplate.includes('wx:elif="{{sessionRestoring && !homeHasSnapshot}}"'));
-  assert.ok(indexTemplate.includes('home-snapshot-notice'));
+  assert.ok(!indexTemplate.includes('home-snapshot-notice'));
   assert.ok(indexScript.indexOf('this.restoreHomeSnapshot()')
     < indexScript.indexOf('await app.ensureSessionReady()'));
 });

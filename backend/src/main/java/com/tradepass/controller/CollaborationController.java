@@ -2,6 +2,7 @@ package com.tradepass.controller;
 
 import com.tradepass.common.ApiResponse;
 import com.tradepass.common.BusinessException;
+import com.tradepass.dto.response.FileChunkDataPayload;
 import com.tradepass.dto.response.FileDataPayload;
 import com.tradepass.service.ContractAttachmentService;
 import com.tradepass.service.PersonalMemoService;
@@ -21,6 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Base64;
@@ -137,6 +139,27 @@ public class CollaborationController {
     public ApiResponse<FileDataPayload> attachmentContentData(@PathVariable Long id) {
         ContractAttachmentService.FilePayload file = attachmentService.getFile(id);
         return ApiResponse.ok(FileDataPayload.of(file.originalName(), file.contentType(), file.data()));
+    }
+
+    @GetMapping("/contract-attachments/{id}/content-chunk-data")
+    public ApiResponse<FileChunkDataPayload> attachmentContentChunkData(
+            @PathVariable Long id,
+            @RequestParam(defaultValue = "0") long offset,
+            @RequestParam(defaultValue = "524288") int size) {
+        if (offset < 0 || size <= 0 || size > 512 * 1024) {
+            throw new BusinessException("文件分片参数不正确");
+        }
+        ContractAttachmentService.FilePayload file = attachmentService.getFile(id);
+        int totalSize = file.data().length;
+        if (offset >= totalSize) {
+            throw new BusinessException("文件分片位置超出范围");
+        }
+        int start = (int) offset;
+        int end = Math.min(totalSize, start + size);
+        byte[] chunk = Arrays.copyOfRange(file.data(), start, end);
+        return ApiResponse.ok(FileChunkDataPayload.of(
+                file.originalName(), file.contentType(), chunk,
+                offset, totalSize, end == totalSize));
     }
 
     @GetMapping("/contracts/{id}/memo")

@@ -262,10 +262,6 @@ Page({
     });
   },
 
-  retryHomeRefresh() {
-    if (!this.data.homeRefreshing) this.refreshHomeData();
-  },
-
   scheduleSessionRestore() {
     if (this.sessionRestoreTimer || this.sessionRestoreInFlight) return;
     this.sessionRestoreTimer = setTimeout(() => {

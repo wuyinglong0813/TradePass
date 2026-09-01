@@ -1,6 +1,7 @@
 package com.tradepass.controller;
 
 import com.tradepass.common.ApiResponse;
+import com.tradepass.common.BusinessException;
 import com.tradepass.common.TradePassDtos.CounterpartyRelation;
 import com.tradepass.dto.request.AddCounterpartyRequest;
 import com.tradepass.dto.request.CreateContractRequest;
@@ -9,6 +10,7 @@ import com.tradepass.dto.response.ContractPayload;
 import com.tradepass.dto.response.ContractSigningPayload;
 import com.tradepass.dto.response.ServiceUrlPayload;
 import com.tradepass.dto.response.FileDataPayload;
+import com.tradepass.dto.response.FileChunkDataPayload;
 import com.tradepass.dto.response.PagePayload;
 import com.tradepass.dto.response.TradeOrderPayload;
 import com.tradepass.service.ContractPdfService;
@@ -31,6 +33,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -217,19 +220,25 @@ public class TradeController {
                 preview.fileName(), MediaType.IMAGE_PNG_VALUE, preview.data()));
     }
 
-    @GetMapping(value = "/contracts/{id}/signed-preview", produces = MediaType.IMAGE_PNG_VALUE)
-    public ResponseEntity<byte[]> signedContractPreviewFile(@PathVariable Long id) {
+    @GetMapping("/contracts/{id}/signed-preview-chunk-data")
+    public ApiResponse<FileChunkDataPayload> signedContractPreviewChunk(
+            @PathVariable Long id,
+            @RequestParam(defaultValue = "0") long offset,
+            @RequestParam(defaultValue = "524288") int size) {
+        if (offset < 0 || size <= 0 || size > 512 * 1024) {
+            throw new BusinessException("文件分片参数不正确");
+        }
         FadadaContractSigningService.SignedPreview preview = signingService.signedPreview(id);
-        ContentDisposition disposition = ContentDisposition.inline()
-                .filename(preview.fileName(), StandardCharsets.UTF_8)
-                .build();
-        return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
-                .header(HttpHeaders.CACHE_CONTROL, "private, no-store")
-                .header("X-Content-Type-Options", "nosniff")
-                .contentLength(preview.data().length)
-                .contentType(MediaType.IMAGE_PNG)
-                .body(preview.data());
+        int totalSize = preview.data().length;
+        if (offset >= totalSize) {
+            throw new BusinessException("文件分片位置超出范围");
+        }
+        int start = (int) offset;
+        int end = Math.min(totalSize, start + size);
+        return ApiResponse.ok(FileChunkDataPayload.of(
+                preview.fileName(), MediaType.IMAGE_PNG_VALUE,
+                Arrays.copyOfRange(preview.data(), start, end),
+                offset, totalSize, end == totalSize));
     }
 
     @PostMapping("/contracts/{id}/signing/sync")

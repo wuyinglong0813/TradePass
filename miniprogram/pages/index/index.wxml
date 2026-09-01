@@ -127,15 +127,6 @@
         </view>
       </view>
 
-      <view class="home-snapshot-notice" wx:if="{{homeHasSnapshot && (homeRefreshing || homeUsingSnapshot || homeRefreshError)}}" bindtap="retryHomeRefresh">
-        <view class="home-snapshot-status {{homeRefreshing ? 'refreshing' : ''}}"></view>
-        <view class="home-snapshot-copy">
-          <view class="home-snapshot-title">{{homeRefreshing ? '正在同步最新数据' : (homeRefreshError || '当前显示上次成功数据')}}</view>
-          <view class="home-snapshot-time" wx:if="{{homeSnapshotTimeText}}">上次更新：{{homeSnapshotTimeText}}{{homeRefreshing ? '' : ' · 点击刷新'}}</view>
-        </view>
-        <view class="home-snapshot-arrow" wx:if="{{!homeRefreshing}}">↻</view>
-      </view>
-
       <view class="company-switch-mask" wx:if="{{showCompanySwitcher}}" bindtap="closeCompanySwitcher">
         <view class="company-switch-sheet" catchtap="noop">
           <view class="company-switch-head">

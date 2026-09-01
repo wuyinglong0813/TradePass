@@ -1,7 +1,6 @@
 const { request } = require('../../utils/request');
 const {
-  downloadApiFile,
-  downloadBinaryApiFile,
+  downloadChunkedApiFile,
   uploadMultipartApiFile
 } = require('../../utils/fileTransfer');
 
@@ -376,7 +375,13 @@ Page({
       // 首次查看资料时本地文件不存在。
     }
     wx.showLoading({ title: '打开中...' });
-    downloadBinaryApiFile(`/contract-attachments/${item.id}/content?download=false`, filePath)
+    const fileSize = Number(item.fileSize || 0);
+    const downloadPromise = downloadChunkedApiFile(
+      `/contract-attachments/${item.id}/content-chunk-data`,
+      filePath,
+      fileSize > 0 ? fileSize : undefined
+    );
+    downloadPromise
       .then(result => {
         if (item.isImage) {
           wx.previewImage({ current: result.filePath, urls: [result.filePath] });

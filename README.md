@@ -160,7 +160,7 @@ Redis 默认关闭且不是运行必需项：登录会话与排行榜直接查�
 4. 开启开放接口服务后必须重新构建并发布服务版本；开关不会补充到已经存在的旧版本。
 5. 生产镜像已经启用 `prod` profile；Bucket、Region、`prod` 前缀和“必须启用对象存储”均有生产默认值。应用通过开放接口获取临时凭证，不需要配置永久 SecretId/SecretKey。
 6. 如需把数据库中的历史 BLOB 转入对象存储，可临时设置 `TRADEPASS_STORAGE_MIGRATE_LEGACY_BLOBS=true` 发布一次，确认日志成功后立即恢复为 `false`；此开关与阿里 OSS 无关。
-7. 在微信公众平台“开发管理 → 开发设置 → 服务器域名”中，将 `https://tradepass-274155-4-1446724178.sh.run.tcloudbase.com` 加入 `downloadFile` 合法域名。大文件通过后端鉴权后的二进制接口下载，避免 Base64 响应超过 `cloud.callContainer` 上限。
+
 
 新签署合同会在状态变为 `ACTIVE` 的同一业务操作中生成一次 PDF 并归档；对象 key 包含合同版本和 SHA-256，不允许不同内容覆盖。后续下载会重新校验文件长度和 SHA-256，不再重新生成。历史生效合同会在迁移步骤中补做冻结归档。
 

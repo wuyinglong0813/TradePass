@@ -97,39 +97,6 @@ page {
   font-size: 26rpx;
 }
 
-.home-snapshot-notice {
-  align-items: center;
-  background: #eef7ff;
-  border: 1rpx solid #d6e9fb;
-  border-radius: 18rpx;
-  display: flex;
-  margin: 16rpx 28rpx 0;
-  padding: 15rpx 18rpx;
-}
-
-.home-snapshot-status {
-  background: #e3a52f;
-  border-radius: 50%;
-  flex-shrink: 0;
-  height: 14rpx;
-  width: 14rpx;
-}
-
-.home-snapshot-status.refreshing {
-  animation: home-snapshot-pulse 1s ease-in-out infinite;
-  background: #2d91ea;
-}
-
-@keyframes home-snapshot-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(45, 145, 234, .25); }
-  50% { box-shadow: 0 0 0 9rpx rgba(45, 145, 234, 0); }
-}
-
-.home-snapshot-copy { flex: 1; margin-left: 16rpx; min-width: 0; }
-.home-snapshot-title { color: #31516f; font-size: 21rpx; font-weight: 650; }
-.home-snapshot-time { color: #8295a8; font-size: 18rpx; margin-top: 3rpx; }
-.home-snapshot-arrow { color: #348ee1; font-size: 32rpx; margin-left: 16rpx; }
-
 .business-notice {
   align-items: center;
   background: linear-gradient(135deg, #fff9ea, #fffdf7);

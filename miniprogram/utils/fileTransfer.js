@@ -26,30 +26,62 @@ async function downloadApiFile(url, filePath) {
   };
 }
 
-function downloadBinaryApiFile(url, filePath) {
+function appendBase64File(filePath, contentBase64, overwrite) {
   return new Promise((resolve, reject) => {
-    const app = getApp();
-    const token = app.globalData.token || wx.getStorageSync('tradepass_token') || '';
-    const companyId = app.globalData.currentCompanyId || '';
-    const header = {};
-    if (token) header.Authorization = token;
-    if (companyId) header['X-Company-Id'] = String(companyId);
-    wx.downloadFile({
-      url: `${app.globalData.baseUrl}${url}`,
+    if (!filePath || !contentBase64) {
+      reject(new Error('文件内容为空'));
+      return;
+    }
+    const options = {
       filePath,
-      header,
-      timeout: 60000,
-      success: result => {
-        if (result.statusCode >= 200 && result.statusCode < 300) {
-          resolve({ filePath: result.filePath || result.tempFilePath || filePath });
-          return;
-        }
-        reject(new Error(result.statusCode === 401
-          ? '登录已失效' : `文件下载失败（${result.statusCode || '未知状态'}）`));
-      },
-      fail: error => reject(new Error((error && error.errMsg) || '文件下载失败'))
-    });
+      data: contentBase64,
+      encoding: 'base64',
+      success: () => resolve(filePath),
+      fail: error => reject(new Error((error && error.errMsg) || '文件保存失败'))
+    };
+    const fileSystem = wx.getFileSystemManager();
+    if (overwrite) fileSystem.writeFile(options);
+    else fileSystem.appendFile(options);
   });
+}
+
+async function downloadChunkedApiFile(url, filePath, expectedSize, chunkSize = 512 * 1024) {
+  const safeChunkSize = Math.max(1, Math.min(Number(chunkSize) || 0, 512 * 1024));
+  const declaredSize = Number(expectedSize || 0);
+  let offset = 0;
+  let totalSize = declaredSize;
+  let firstChunk = true;
+
+  while (firstChunk || offset < totalSize) {
+    const separator = url.includes('?') ? '&' : '?';
+    const payload = await request({
+      url: `${url}${separator}offset=${offset}&size=${safeChunkSize}`,
+      timeout: 60000
+    });
+    const chunkOffset = Number(payload && payload.offset);
+    const chunkLength = Number(payload && payload.length);
+    const responseTotalSize = Number(payload && payload.totalSize);
+    if (!payload || chunkOffset !== offset || !Number.isFinite(chunkLength)
+      || chunkLength <= 0 || !Number.isFinite(responseTotalSize)
+      || responseTotalSize <= 0 || offset + chunkLength > responseTotalSize) {
+      throw new Error('文件分片数据异常，请重试');
+    }
+    await appendBase64File(filePath, payload.contentBase64, firstChunk);
+    offset += chunkLength;
+    totalSize = responseTotalSize;
+    firstChunk = false;
+    if (payload.eof === true) break;
+  }
+
+  if (offset !== totalSize || (declaredSize > 0 && declaredSize !== totalSize)) {
+    throw new Error('文件下载不完整，请重试');
+  }
+  return {
+    filePath,
+    fileName: '',
+    contentType: '',
+    fileSize: totalSize
+  };
 }
 
 function uploadMultipartApiFile(url, filePath, data = {}, fileFieldName = 'file') {
@@ -97,7 +129,7 @@ function uploadMultipartApiFile(url, filePath, data = {}, fileFieldName = 'file'
 
 module.exports = {
   downloadApiFile,
-  downloadBinaryApiFile,
+  downloadChunkedApiFile,
   uploadMultipartApiFile,
   writeBase64File
 };
