@@ -69,7 +69,7 @@ page { background: #f4f8fd; }
 .section-link { color: #728198; font-size: 21rpx; }
 .count-pill,.state-pill { background: #e8f3ff; border-radius: 18rpx; color: #3498ff; font-size: 20rpx; padding: 5rpx 11rpx; white-space: nowrap; }
 .state-pill.muted { background: #f0f3f8; color: #7d8a9b; }
-.state-pill.pending,.state-pill.attention { background: #fff3d6; color: #9a6511; }
+.state-pill.pending { background: #fff3d6; color: #9a6511; }
 
 .brand-list {
   background: linear-gradient(145deg,#fff 0%,#fff 54%,#f5f9ff 100%); border: 1rpx solid #dfeaf6;

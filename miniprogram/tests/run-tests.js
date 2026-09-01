@@ -673,14 +673,20 @@ test('profile exposes legal, help, about and safe account cancellation without a
   assert.ok(meTemplate.includes('账号与身份'));
   assert.ok(meTemplate.includes('个人信息收集清单'));
   assert.ok(meTemplate.includes('第三方信息共享清单'));
-  assert.ok(meTemplate.includes('系统权限管理'));
+  assert.ok(!meTemplate.includes('系统权限管理'));
   assert.ok(meTemplate.includes('帮助与反馈'));
   assert.ok(meTemplate.includes('账号注销'));
   assert.ok(meTemplate.includes('/images/icons/info-collection.svg'));
   assert.ok(meTemplate.includes('/images/icons/info-sharing.svg'));
-  assert.ok(meTemplate.includes('/images/icons/permissions.svg'));
   assert.ok(meTemplate.includes('/images/icons/account-cancel.svg'));
   assert.ok(!meTemplate.includes('setting-symbol'));
+
+  const companyTemplate = fs.readFileSync(
+    path.join(__dirname, '..', 'pages', 'company', 'company.wxml'), 'utf8'
+  );
+  assert.ok(!companyTemplate.includes('<view class="count-pill">{{todos.length}}</view>'));
+  assert.ok(!companyTemplate.includes('state-pill attention'));
+  assert.ok(companyTemplate.includes('<view class="state-pill" wx:if="{{item.count}}">'));
 
   const legalTemplate = fs.readFileSync(
     path.join(__dirname, '..', 'templates', 'legal-content.wxml'), 'utf8'

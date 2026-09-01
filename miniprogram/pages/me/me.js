@@ -109,11 +109,6 @@ Page({
     const type = e.currentTarget.dataset.type || 'user';
     wx.navigateTo({ url: `/pages/legal-document/legal-document?type=${type}` });
   },
-  openPermissions() {
-    wx.openSetting({
-      fail: () => wx.showToast({ title: '暂时无法打开微信权限设置', icon: 'none' })
-    });
-  },
   openHelp() {
     wx.navigateTo({ url: '/pages/help-center/help-center' });
   },

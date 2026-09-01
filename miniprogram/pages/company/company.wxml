@@ -104,13 +104,12 @@
         <block wx:if="{{todos.length > 0}}">
           <view class="section-head">
             <view><view class="section-title">企业待办</view><view class="section-sub">需要你处理的组织与合同事项</view></view>
-            <view class="count-pill">{{todos.length}}</view>
           </view>
           <view class="brand-list">
             <view class="list-row" wx:for="{{todos}}" wx:key="type" data-target="{{item.target}}" bindtap="goTodo">
               <view class="row-icon"><image src="{{item.iconPath}}" mode="aspectFit"/></view>
               <view class="row-copy"><view class="row-title">{{item.title}}</view><view class="row-desc">{{item.desc}}</view></view>
-              <view class="state-pill attention" wx:if="{{item.count}}">{{item.count}}</view>
+              <view class="state-pill" wx:if="{{item.count}}">{{item.count}}</view>
               <view class="row-arrow">›</view>
             </view>
           </view>

@@ -25,7 +25,6 @@
       <view class="setting-row" bindtap="openLegalDocument" data-type="collection"><image src="/images/icons/info-collection.svg" mode="aspectFit"/><view class="setting-copy"><view class="setting-title">个人信息收集清单</view><view class="setting-desc">查看收集内容、用途和场景</view></view><view class="row-arrow">›</view></view>
       <view class="setting-row" bindtap="openLegalDocument" data-type="sharing"><image src="/images/icons/info-sharing.svg" mode="aspectFit"/><view class="setting-copy"><view class="setting-title">第三方信息共享清单</view><view class="setting-desc">查看受托服务与必要数据范围</view></view><view class="row-arrow">›</view></view>
       <view class="setting-row" bindtap="openLegalDocument" data-type="user"><image src="/images/icons/agreement.svg" mode="aspectFit"/><view class="setting-copy"><view class="setting-title">用户服务协议</view><view class="setting-desc">服务条款与使用规则</view></view><view class="row-arrow">›</view></view>
-      <view class="setting-row" bindtap="openPermissions"><image src="/images/icons/permissions.svg" mode="aspectFit"/><view class="setting-copy"><view class="setting-title">系统权限管理</view><view class="setting-desc">前往微信管理已授权权限</view></view><view class="row-arrow">›</view></view>
     </view>
 
     <view class="section-head service-head"><view><view class="section-title">服务与支持</view><view class="section-sub">产品帮助、反馈与版本信息</view></view></view>
@@ -73,7 +72,6 @@
         <view class="setting-row" bindtap="openLegalDocument" data-type="collection"><image src="/images/icons/info-collection.svg" mode="aspectFit"/><view class="setting-copy"><view class="setting-title">个人信息收集清单</view><view class="setting-desc">查看收集内容、用途和场景</view></view><view class="row-arrow">›</view></view>
         <view class="setting-row" bindtap="openLegalDocument" data-type="sharing"><image src="/images/icons/info-sharing.svg" mode="aspectFit"/><view class="setting-copy"><view class="setting-title">第三方信息共享清单</view><view class="setting-desc">查看受托服务与必要数据范围</view></view><view class="row-arrow">›</view></view>
         <view class="setting-row" bindtap="openLegalDocument" data-type="user"><image src="/images/icons/agreement.svg" mode="aspectFit"/><view class="setting-copy"><view class="setting-title">用户服务协议</view><view class="setting-desc">服务条款与使用规则</view></view><view class="row-arrow">›</view></view>
-        <view class="setting-row" bindtap="openPermissions"><image src="/images/icons/permissions.svg" mode="aspectFit"/><view class="setting-copy"><view class="setting-title">系统权限管理</view><view class="setting-desc">前往微信管理已授权权限</view></view><view class="row-arrow">›</view></view>
       </view>
 
       <view class="section-head service-head"><view><view class="section-title">服务与支持</view><view class="section-sub">产品帮助、反馈与版本信息</view></view></view>
