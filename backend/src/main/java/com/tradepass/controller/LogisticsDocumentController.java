@@ -3,6 +3,7 @@ package com.tradepass.controller;
 import com.tradepass.common.ApiResponse;
 import com.tradepass.common.BusinessException;
 import com.tradepass.entity.LogisticsDocument;
+import com.tradepass.dto.response.FileChunkDataPayload;
 import com.tradepass.dto.response.FileDataPayload;
 import com.tradepass.service.LogisticsDocumentService;
 import org.springframework.http.ContentDisposition;
@@ -23,6 +24,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.Base64;
+import java.util.Arrays;
 
 @RestController
 @RequestMapping("/api")
@@ -85,6 +87,27 @@ public class LogisticsDocumentController {
         LogisticsDocument document = logisticsDocumentService.getImage(id);
         return ApiResponse.ok(FileDataPayload.of(
                 document.getOriginalName(), document.getContentType(), document.getImageData()));
+    }
+
+    @GetMapping("/logistics-documents/{id}/image-chunk-data")
+    public ApiResponse<FileChunkDataPayload> imageChunkData(
+            @PathVariable Long id,
+            @RequestParam(defaultValue = "0") long offset,
+            @RequestParam(defaultValue = "655360") int size) {
+        if (offset < 0 || size <= 0 || size > 640 * 1024) {
+            throw new BusinessException("文件分片参数不正确");
+        }
+        LogisticsDocument document = logisticsDocumentService.getImage(id);
+        byte[] data = document.getImageData();
+        if (offset >= data.length) {
+            throw new BusinessException("文件分片位置超出范围");
+        }
+        int start = (int) offset;
+        int end = Math.min(data.length, start + size);
+        return ApiResponse.ok(FileChunkDataPayload.of(
+                document.getOriginalName(), document.getContentType(),
+                Arrays.copyOfRange(data, start, end),
+                offset, data.length, end == data.length));
     }
 
     @PostMapping("/logistics-documents/{id}/delete")

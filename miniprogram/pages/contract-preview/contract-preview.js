@@ -1,6 +1,7 @@
 const {
   downloadApiFile,
   downloadChunkedApiFile,
+  localFileReady,
   uploadMultipartApiFile
 } = require('../../utils/fileTransfer');
 const { normalizeContractTable } = require('../../utils/chineseCurrency');
@@ -138,15 +139,21 @@ Page({
   },
 
   onShow() {
-    if (this.hasLoadedContract) this.loadContractDetail(true);
+    if (!this.hasLoadedContract) return;
+    this.loadContractDetail();
+    this.syncContractSigningInBackground();
   },
 
   onPullDownRefresh() {
-    Promise.all([
-      this.loadContractDetail(),
-      this.loadBusinessDocuments('SALES_ORDER'),
-      this.loadBusinessDocuments('RETURN_ORDER')
-    ]).finally(() => wx.stopPullDownRefresh());
+    const tasks = [this.loadContractDetail()];
+    if (this.data.activeTab === 'fulfillment') {
+      tasks.push(
+        this.loadBusinessDocuments('SALES_ORDER'),
+        this.loadBusinessDocuments('RETURN_ORDER'),
+        this.loadFulfillmentData()
+      );
+    }
+    Promise.all(tasks).finally(() => wx.stopPullDownRefresh());
   },
 
   switchTab(e) {
@@ -161,7 +168,7 @@ Page({
   },
 
   /* 加载合同详情 */
-  async loadContractDetail(syncSigning) {
+  async loadContractDetail() {
     const { request } = require('../../utils/request');
     try {
       const [contract, activeContractAction, signing] = await Promise.all([
@@ -170,8 +177,7 @@ Page({
           url: `/bilateral-actions/active?bizType=CONTRACT&bizId=${this.data.contractId}`
         }).catch(() => ({})),
         request({
-          url: `/contracts/${this.data.contractId}/signing${syncSigning ? '/sync' : ''}`,
-          method: syncSigning ? 'POST' : 'GET'
+          url: `/contracts/${this.data.contractId}/signing`
         }).catch(() => null)
       ]);
       const statusMap = {
@@ -304,15 +310,34 @@ Page({
           });
         }
         this.loadContractMemo();
-        this.loadBusinessDocuments('SALES_ORDER');
-        this.loadBusinessDocuments('RETURN_ORDER');
-        this.loadFulfillmentData();
+        if (this.data.activeTab === 'fulfillment') {
+          this.loadBusinessDocuments('SALES_ORDER');
+          this.loadBusinessDocuments('RETURN_ORDER');
+          this.loadFulfillmentData();
+        }
         this.promptProjectLedgerIfNeeded(contract);
       });
       this.hasLoadedContract = true;
       wx.setNavigationBarTitle({ title: '合同详情' });
     } catch (e) {
       wx.showToast({ title: '加载合同失败', icon: 'none' });
+    }
+  },
+
+  async syncContractSigningInBackground() {
+    if (this.signingSyncInFlight || !this.data.contractId) return;
+    this.signingSyncInFlight = true;
+    const { request } = require('../../utils/request');
+    try {
+      await request({
+        url: `/contracts/${this.data.contractId}/signing/sync`,
+        method: 'POST'
+      });
+      await this.loadContractDetail();
+    } catch (error) {
+      // 页面先使用本地签署状态，远程同步失败不阻塞合同详情展示。
+    } finally {
+      this.signingSyncInFlight = false;
     }
   },
 
@@ -645,6 +670,15 @@ Page({
     if (!this.data.signedContractArchived || this.data.signedPreviewLoading) return;
     if (this.data.signedPreviewReady && this.data.signedPreviewFilePath && !force) return;
     const filePath = `${wx.env.USER_DATA_PATH}/contract-${this.data.contractId}-signed-preview.png`;
+    if (!force && localFileReady(filePath)) {
+      this.setData({
+        signedPreviewLoading: false,
+        signedPreviewReady: true,
+        signedPreviewFilePath: filePath,
+        signedPreviewError: ''
+      });
+      return;
+    }
     try {
       wx.getFileSystemManager().unlinkSync(filePath);
     } catch (error) {
@@ -832,17 +866,24 @@ Page({
     };
     const extension = extensionMap[document.contentType] || 'jpg';
     const filePath = `${wx.env.USER_DATA_PATH}/logistics-${document.id}.${extension}`;
-    try {
-      wx.getFileSystemManager().unlinkSync(filePath);
-    } catch (error) {
-      // 首次查看时文件不存在。
+    const fileSize = Number(document.fileSize || 0);
+    const cached = localFileReady(filePath, fileSize);
+    if (!cached) {
+      try {
+        wx.getFileSystemManager().unlinkSync(filePath);
+      } catch (error) {
+        // 首次查看时文件不存在。
+      }
+      wx.showLoading({ title: '加载图片中...' });
     }
-
-    wx.showLoading({ title: '加载图片中...' });
     try {
-      const result = await downloadApiFile(
-        `/logistics-documents/${document.id}/image-data`, filePath
-      );
+      const result = cached
+        ? { filePath }
+        : await downloadChunkedApiFile(
+          `/logistics-documents/${document.id}/image-chunk-data`,
+          filePath,
+          fileSize > 0 ? fileSize : undefined
+        );
       wx.previewImage({
         current: result.filePath,
         urls: [result.filePath],
@@ -851,7 +892,7 @@ Page({
     } catch (error) {
       wx.showToast({ title: error.message || '图片加载失败', icon: 'none' });
     } finally {
-      wx.hideLoading();
+      if (!cached) wx.hideLoading();
     }
   },
 
@@ -1580,19 +1621,24 @@ Page({
   async downloadAttachmentFile(attachment, download) {
     if (!attachment || !attachment.id) return;
     const localFilePath = this.attachmentDownloadPath(attachment);
-    try {
-      wx.getFileSystemManager().unlinkSync(localFilePath);
-    } catch (error) {
-      // 首次下载时目标文件不存在。
+    const fileSize = Number(attachment.fileSize || 0);
+    const cached = localFileReady(localFilePath, fileSize);
+    if (!cached) {
+      try {
+        wx.getFileSystemManager().unlinkSync(localFilePath);
+      } catch (error) {
+        // 首次下载时目标文件不存在。
+      }
+      wx.showLoading({ title: download ? '下载中...' : '打开中...' });
     }
-    wx.showLoading({ title: download ? '下载中...' : '打开中...' });
     try {
-      const fileSize = Number(attachment.fileSize || 0);
-      const result = await downloadChunkedApiFile(
-        `/contract-attachments/${attachment.id}/content-chunk-data`,
-        localFilePath,
-        fileSize > 0 ? fileSize : undefined
-      );
+      const result = cached
+        ? { filePath: localFilePath }
+        : await downloadChunkedApiFile(
+          `/contract-attachments/${attachment.id}/content-chunk-data`,
+          localFilePath,
+          fileSize > 0 ? fileSize : undefined
+        );
       const path = result.filePath;
       if (attachment.isImage) {
         if (download) {
@@ -1619,7 +1665,7 @@ Page({
     } catch (error) {
       wx.showToast({ title: error.message || '文件获取失败', icon: 'none' });
     } finally {
-      wx.hideLoading();
+      if (!cached) wx.hideLoading();
     }
   },
 

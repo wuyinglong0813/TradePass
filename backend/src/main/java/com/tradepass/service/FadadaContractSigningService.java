@@ -21,6 +21,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.dao.DuplicateKeyException;
 
 import java.time.LocalDateTime;
+import java.time.Duration;
 import java.util.List;
 
 @Service
@@ -36,6 +37,8 @@ public class FadadaContractSigningService {
     private final TradeService tradeService;
     private final FadadaProperties properties;
     private final JdbcTemplate jdbc;
+    private final BoundedBinaryCache signedPreviewCache =
+            new BoundedBinaryCache(Duration.ofMinutes(30), 64L * 1024 * 1024);
 
     public FadadaContractSigningService(FadadaContractSignTaskMapper taskMapper,
                                         TradeContractMapper contractMapper, CompanyMapper companyMapper,
@@ -103,7 +106,9 @@ public class FadadaContractSigningService {
             throw new BusinessException("合同真实签章页尚未归档");
         }
         FadadaCorpIdentity owner = companyService.requireVerified(contract.getCompanyId());
-        byte[] image = gateway.downloadSignedPreviewPage(task.getSignTaskId(), owner.getOpenCorpId());
+        byte[] image = signedPreviewCache.get(
+                "signed-preview:" + task.getSignTaskId(),
+                () -> gateway.downloadSignedPreviewPage(task.getSignTaskId(), owner.getOpenCorpId()));
         return new SignedPreview("合同签章页.png", image);
     }
 

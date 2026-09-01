@@ -1,5 +1,8 @@
 const { request } = require('./request');
 
+const CLOUD_CHUNK_SIZE = 640 * 1024;
+const CLOUD_CHUNK_CONCURRENCY = 4;
+
 function writeBase64File(filePath, contentBase64) {
   return new Promise((resolve, reject) => {
     if (!filePath || !contentBase64) {
@@ -45,35 +48,69 @@ function appendBase64File(filePath, contentBase64, overwrite) {
   });
 }
 
-async function downloadChunkedApiFile(url, filePath, expectedSize, chunkSize = 512 * 1024) {
-  const safeChunkSize = Math.max(1, Math.min(Number(chunkSize) || 0, 512 * 1024));
-  const declaredSize = Number(expectedSize || 0);
-  let offset = 0;
-  let totalSize = declaredSize;
-  let firstChunk = true;
+function localFileReady(filePath, expectedSize) {
+  if (!filePath) return false;
+  try {
+    const stat = wx.getFileSystemManager().statSync(filePath);
+    const actualSize = Number(stat && stat.size);
+    const declaredSize = Number(expectedSize || 0);
+    return Number.isFinite(actualSize) && actualSize > 0
+      && (declaredSize <= 0 || actualSize === declaredSize);
+  } catch (error) {
+    return false;
+  }
+}
 
-  while (firstChunk || offset < totalSize) {
-    const separator = url.includes('?') ? '&' : '?';
-    const payload = await request({
-      url: `${url}${separator}offset=${offset}&size=${safeChunkSize}`,
-      timeout: 60000
-    });
-    const chunkOffset = Number(payload && payload.offset);
-    const chunkLength = Number(payload && payload.length);
-    const responseTotalSize = Number(payload && payload.totalSize);
-    if (!payload || chunkOffset !== offset || !Number.isFinite(chunkLength)
-      || chunkLength <= 0 || !Number.isFinite(responseTotalSize)
-      || responseTotalSize <= 0 || offset + chunkLength > responseTotalSize) {
-      throw new Error('文件分片数据异常，请重试');
+function fetchFileChunk(url, offset, chunkSize) {
+  const separator = url.includes('?') ? '&' : '?';
+  return request({
+    url: `${url}${separator}offset=${offset}&size=${chunkSize}`,
+    timeout: 60000
+  });
+}
+
+function validateFileChunk(payload, expectedOffset, totalSize) {
+  const chunkOffset = Number(payload && payload.offset);
+  const chunkLength = Number(payload && payload.length);
+  const responseTotalSize = Number(payload && payload.totalSize);
+  if (!payload || chunkOffset !== expectedOffset || !Number.isFinite(chunkLength)
+    || chunkLength <= 0 || !Number.isFinite(responseTotalSize)
+    || responseTotalSize <= 0 || expectedOffset + chunkLength > responseTotalSize
+    || (totalSize > 0 && responseTotalSize !== totalSize)) {
+    throw new Error('文件分片数据异常，请重试');
+  }
+  return { chunkLength, totalSize: responseTotalSize };
+}
+
+async function downloadChunkedApiFileUnchecked(url, filePath, expectedSize,
+  chunkSize = CLOUD_CHUNK_SIZE) {
+  const safeChunkSize = Math.max(1, Math.min(Number(chunkSize) || 0, CLOUD_CHUNK_SIZE));
+  const declaredSize = Number(expectedSize || 0);
+  const firstPayload = await fetchFileChunk(url, 0, safeChunkSize);
+  const first = validateFileChunk(firstPayload, 0, declaredSize);
+  let totalSize = first.totalSize;
+  let offset = first.chunkLength;
+  let writtenSize = first.chunkLength;
+  await appendBase64File(filePath, firstPayload.contentBase64, true);
+
+  while (offset < totalSize) {
+    const offsets = [];
+    for (let index = 0; index < CLOUD_CHUNK_CONCURRENCY && offset < totalSize; index += 1) {
+      offsets.push(offset);
+      offset += Math.min(safeChunkSize, totalSize - offset);
     }
-    await appendBase64File(filePath, payload.contentBase64, firstChunk);
-    offset += chunkLength;
-    totalSize = responseTotalSize;
-    firstChunk = false;
-    if (payload.eof === true) break;
+    const payloads = await Promise.all(
+      offsets.map(chunkOffset => fetchFileChunk(url, chunkOffset, safeChunkSize))
+    );
+    for (let index = 0; index < payloads.length; index += 1) {
+      const payload = payloads[index];
+      const chunk = validateFileChunk(payload, offsets[index], totalSize);
+      await appendBase64File(filePath, payload.contentBase64, false);
+      writtenSize += chunk.chunkLength;
+    }
   }
 
-  if (offset !== totalSize || (declaredSize > 0 && declaredSize !== totalSize)) {
+  if (writtenSize !== totalSize || (declaredSize > 0 && declaredSize !== totalSize)) {
     throw new Error('文件下载不完整，请重试');
   }
   return {
@@ -82,6 +119,15 @@ async function downloadChunkedApiFile(url, filePath, expectedSize, chunkSize = 5
     contentType: '',
     fileSize: totalSize
   };
+}
+
+async function downloadChunkedApiFile(url, filePath, expectedSize, chunkSize = CLOUD_CHUNK_SIZE) {
+  try {
+    return await downloadChunkedApiFileUnchecked(url, filePath, expectedSize, chunkSize);
+  } catch (error) {
+    try { wx.getFileSystemManager().unlinkSync(filePath); } catch (unlinkError) {}
+    throw error;
+  }
 }
 
 function uploadMultipartApiFile(url, filePath, data = {}, fileFieldName = 'file') {
@@ -130,6 +176,7 @@ function uploadMultipartApiFile(url, filePath, data = {}, fileFieldName = 'file'
 module.exports = {
   downloadApiFile,
   downloadChunkedApiFile,
+  localFileReady,
   uploadMultipartApiFile,
   writeBase64File
 };

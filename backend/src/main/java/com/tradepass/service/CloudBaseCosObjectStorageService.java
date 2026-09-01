@@ -22,6 +22,7 @@ import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.time.Duration;
 
 @Service
 public class CloudBaseCosObjectStorageService implements ObjectStorageService {
@@ -33,6 +34,7 @@ public class CloudBaseCosObjectStorageService implements ObjectStorageService {
     private final StorageProperties properties;
     private final CloudBaseOpenApiClient openApiClient;
     private final COSClient cosClient;
+    private final BoundedBinaryCache downloadCache;
 
     @Autowired
     public CloudBaseCosObjectStorageService(StorageProperties properties, ObjectMapper objectMapper) {
@@ -43,6 +45,7 @@ public class CloudBaseCosObjectStorageService implements ObjectStorageService {
         if (!properties.isEnabled()) {
             this.openApiClient = null;
             this.cosClient = null;
+            this.downloadCache = new BoundedBinaryCache(Duration.ofMinutes(5), 64L * 1024 * 1024);
             log.warn("微信云托管对象存储未启用，文件将继续使用仅限开发环境的 MySQL BLOB 兼容路径");
             return;
         }
@@ -51,6 +54,7 @@ public class CloudBaseCosObjectStorageService implements ObjectStorageService {
         COSCredentialsProvider credentialsProvider = new CloudBaseCosCredentialsProvider(
                 openApiClient, properties.getCredentialRefreshSkewSeconds());
         this.cosClient = createClient(properties, credentialsProvider);
+        this.downloadCache = new BoundedBinaryCache(Duration.ofMinutes(5), 64L * 1024 * 1024);
     }
 
     CloudBaseCosObjectStorageService(StorageProperties properties, COSClient cosClient,
@@ -59,6 +63,7 @@ public class CloudBaseCosObjectStorageService implements ObjectStorageService {
         validateConfiguration(properties);
         this.cosClient = cosClient;
         this.openApiClient = openApiClient;
+        this.downloadCache = new BoundedBinaryCache(Duration.ofMinutes(5), 64L * 1024 * 1024);
     }
 
     @Override
@@ -116,6 +121,13 @@ public class CloudBaseCosObjectStorageService implements ObjectStorageService {
             throw new BusinessException("文件存储位置不正确");
         }
         validateObjectKey(reference.objectKey());
+        String cacheKey = String.join("\n",
+                safe(reference.bucket()), safe(reference.objectKey()), safe(reference.versionId()),
+                String.valueOf(reference.fileSize()), safe(reference.sha256()));
+        return downloadCache.get(cacheKey, () -> downloadAndVerify(reference));
+    }
+
+    private byte[] downloadAndVerify(ObjectReference reference) {
         GetObjectRequest request = hasText(reference.versionId())
                 ? new GetObjectRequest(reference.bucket(), reference.objectKey(), reference.versionId())
                 : new GetObjectRequest(reference.bucket(), reference.objectKey());
@@ -229,5 +241,9 @@ public class CloudBaseCosObjectStorageService implements ObjectStorageService {
 
     private String blankToNull(String value) {
         return hasText(value) ? value : null;
+    }
+
+    private String safe(String value) {
+        return value == null ? "" : value;
     }
 }

@@ -23,6 +23,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.times;
 
 class CloudBaseCosObjectStorageServiceTest {
 
@@ -77,6 +78,9 @@ class CloudBaseCosObjectStorageServiceTest {
 
         assertThat(service.get(new ObjectStorageService.ObjectReference(
                 "cloudbase-private-bucket", key, null, 3L, sha256))).containsExactly(data);
+        assertThat(service.get(new ObjectStorageService.ObjectReference(
+                "cloudbase-private-bucket", key, null, 3L, sha256))).containsExactly(data);
+        verify(cosClient, times(1)).getObject(any(GetObjectRequest.class));
         assertThatThrownBy(() -> service.get(new ObjectStorageService.ObjectReference(
                 "foreign", key, null, 3L, sha256)))
                 .isInstanceOf(BusinessException.class)

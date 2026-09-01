@@ -354,7 +354,11 @@ const app = {
 global.getApp = () => app;
 global.wx = {};
 const { request } = require('../utils/request');
-const { downloadChunkedApiFile, uploadMultipartApiFile } = require('../utils/fileTransfer');
+const {
+  downloadChunkedApiFile,
+  localFileReady,
+  uploadMultipartApiFile
+} = require('../utils/fileTransfer');
 const {
   clearHomeSnapshots,
   readHomeSnapshot,
@@ -391,7 +395,9 @@ test('multipart upload sends auth, tenant and form fields without base64 packagi
 test('large contract files download in bounded cloud-container chunks', async () => {
   const requestedUrls = [];
   const savedChunks = [];
-  const source = Buffer.from('abcde');
+  const source = Buffer.from('abcdefghij');
+  let inFlight = 0;
+  let maxInFlight = 0;
   wx.getStorageSync = () => '';
   wx.getFileSystemManager = () => ({
     writeFile: options => {
@@ -409,26 +415,44 @@ test('large contract files download in bounded cloud-container chunks', async ()
     const offset = Number(options.url.match(/[?&]offset=(\d+)/)[1]);
     const size = Number(options.url.match(/[?&]size=(\d+)/)[1]);
     const chunk = source.subarray(offset, Math.min(source.length, offset + size));
-    options.success({ statusCode: 200, data: { code: 0, message: 'ok', data: {
-      offset,
-      length: chunk.length,
-      totalSize: source.length,
-      eof: offset + chunk.length === source.length,
-      contentBase64: chunk.toString('base64')
-    } } });
+    inFlight += 1;
+    maxInFlight = Math.max(maxInFlight, inFlight);
+    setTimeout(() => {
+      inFlight -= 1;
+      options.success({ statusCode: 200, data: { code: 0, message: 'ok', data: {
+        offset,
+        length: chunk.length,
+        totalSize: source.length,
+        eof: offset + chunk.length === source.length,
+        contentBase64: chunk.toString('base64')
+      } } });
+    }, offset === 3 ? 8 : 1);
   };
 
   const result = await downloadChunkedApiFile(
-    '/contract-attachments/19/content-chunk-data', '/user-data/资料-19.pdf', 5, 3
+    '/contract-attachments/19/content-chunk-data', '/user-data/资料-19.pdf', 10, 3
   );
 
   assert.strictEqual(result.filePath, '/user-data/资料-19.pdf');
-  assert.strictEqual(result.fileSize, 5);
-  assert.strictEqual(Buffer.concat(savedChunks).toString(), 'abcde');
+  assert.strictEqual(result.fileSize, 10);
+  assert.strictEqual(Buffer.concat(savedChunks).toString(), 'abcdefghij');
+  assert.strictEqual(maxInFlight, 3);
   assert.ok(requestedUrls[0].endsWith(
     '/contract-attachments/19/content-chunk-data?offset=0&size=3'));
   assert.ok(requestedUrls[1].endsWith(
     '/contract-attachments/19/content-chunk-data?offset=3&size=3'));
+  assert.ok(requestedUrls[2].endsWith(
+    '/contract-attachments/19/content-chunk-data?offset=6&size=3'));
+  assert.ok(requestedUrls[3].endsWith(
+    '/contract-attachments/19/content-chunk-data?offset=9&size=3'));
+});
+
+test('downloaded immutable files are reused only when their local size matches', () => {
+  wx.getFileSystemManager = () => ({ statSync: () => ({ size: 8192 }) });
+  assert.strictEqual(localFileReady('/user-data/file.pdf', 8192), true);
+  assert.strictEqual(localFileReady('/user-data/file.pdf', 4096), false);
+  wx.getFileSystemManager = () => ({ statSync: () => { throw new Error('missing'); } });
+  assert.strictEqual(localFileReady('/user-data/missing.pdf', 8192), false);
 });
 
 test('home snapshots are isolated by user, company, role and period and expire safely', () => {
@@ -604,7 +628,19 @@ test('contract attachments download to a safe persistent path for every category
   assert.ok(!script.includes("download && attachment.category === 'INVOICE'"));
   assert.ok(script.includes('/contract-attachments/${attachment.id}/content-chunk-data'));
   assert.ok(script.includes('downloadChunkedApiFile'));
+  assert.ok(script.includes('localFileReady(localFilePath, fileSize)'));
   assert.ok(!script.includes('downloadBinaryApiFile'));
+});
+
+test('contract detail renders first and defers fulfillment plus remote signing refresh', () => {
+  const script = fs.readFileSync(
+    path.join(__dirname, '..', 'pages', 'contract-preview', 'contract-preview.js'),
+    'utf8'
+  );
+  assert.ok(script.includes("if (this.data.activeTab === 'fulfillment')"));
+  assert.ok(script.includes('syncContractSigningInBackground()'));
+  assert.ok(script.includes('页面先使用本地签署状态'));
+  assert.ok(!script.includes("signing${syncSigning ? '/sync' : ''}"));
 });
 
 test('request injects auth and tenant headers and unwraps API data', async () => {

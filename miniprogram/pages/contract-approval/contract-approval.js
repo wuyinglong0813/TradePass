@@ -1,6 +1,7 @@
 const { request } = require('../../utils/request');
 const {
   downloadChunkedApiFile,
+  localFileReady,
   uploadMultipartApiFile
 } = require('../../utils/fileTransfer');
 
@@ -369,18 +370,23 @@ Page({
     const safeName = (matched ? originalName.slice(0, -matched[0].length) : originalName)
       .replace(/[\\/:*?"<>|\r\n]/g, '_').replace(/^\.+/, '').trim().slice(0, 80) || '履约资料';
     const filePath = `${wx.env.USER_DATA_PATH}/${safeName}-${item.id}.${extension}`;
-    try {
-      wx.getFileSystemManager().unlinkSync(filePath);
-    } catch (error) {
-      // 首次查看资料时本地文件不存在。
-    }
-    wx.showLoading({ title: '打开中...' });
     const fileSize = Number(item.fileSize || 0);
-    const downloadPromise = downloadChunkedApiFile(
-      `/contract-attachments/${item.id}/content-chunk-data`,
-      filePath,
-      fileSize > 0 ? fileSize : undefined
-    );
+    const cached = localFileReady(filePath, fileSize);
+    if (!cached) {
+      try {
+        wx.getFileSystemManager().unlinkSync(filePath);
+      } catch (error) {
+        // 首次查看资料时本地文件不存在。
+      }
+      wx.showLoading({ title: '打开中...' });
+    }
+    const downloadPromise = cached
+      ? Promise.resolve({ filePath })
+      : downloadChunkedApiFile(
+        `/contract-attachments/${item.id}/content-chunk-data`,
+        filePath,
+        fileSize > 0 ? fileSize : undefined
+      );
     downloadPromise
       .then(result => {
         if (item.isImage) {
@@ -395,7 +401,9 @@ Page({
         });
       })
       .catch(error => wx.showToast({ title: error.message || '文件获取失败', icon: 'none' }))
-      .finally(() => wx.hideLoading());
+      .finally(() => {
+        if (!cached) wx.hideLoading();
+      });
   },
 
   approveAttachment(e) {

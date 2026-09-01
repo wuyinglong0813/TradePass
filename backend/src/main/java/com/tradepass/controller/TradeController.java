@@ -224,8 +224,8 @@ public class TradeController {
     public ApiResponse<FileChunkDataPayload> signedContractPreviewChunk(
             @PathVariable Long id,
             @RequestParam(defaultValue = "0") long offset,
-            @RequestParam(defaultValue = "524288") int size) {
-        if (offset < 0 || size <= 0 || size > 512 * 1024) {
+            @RequestParam(defaultValue = "655360") int size) {
+        if (offset < 0 || size <= 0 || size > 640 * 1024) {
             throw new BusinessException("文件分片参数不正确");
         }
         FadadaContractSigningService.SignedPreview preview = signingService.signedPreview(id);
