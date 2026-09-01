@@ -3,24 +3,7 @@
     <view class="logo-shell"><image src="/images/logo.png" mode="aspectFit"/></view>
     <view class="brand-name">商签通</view>
     <view class="brand-en">TRADEPASS</view>
-    <view class="brand-desc">连接交易双方，让合同、履约资料与对账凭证可信流转。</view>
-    <view class="version-pill">{{versionText}}</view>
+    <view class="version-label">当前版本</view>
+    <view class="version-value">{{versionText}}</view>
   </view>
-
-  <view class="capability-title">核心能力</view>
-  <view class="capability-grid">
-    <view class="capability-item"><view class="capability-icon blue">企</view><view>企业认证</view></view>
-    <view class="capability-item"><view class="capability-icon purple">签</view><view>合同签署</view></view>
-    <view class="capability-item"><view class="capability-icon green">履</view><view>履约协作</view></view>
-    <view class="capability-item"><view class="capability-icon orange">账</view><view>对账管理</view></view>
-  </view>
-
-  <view class="about-card">
-    <view class="about-row" bindtap="openLegal" data-type="user"><view><view class="row-title">用户服务协议</view><view class="row-desc">服务条款与使用规则</view></view><view class="row-arrow">›</view></view>
-    <view class="about-row" bindtap="openLegal" data-type="privacy"><view><view class="row-title">隐私保护指引</view><view class="row-desc">个人信息处理和保护规则</view></view><view class="row-arrow">›</view></view>
-    <view class="about-row" bindtap="openHelp"><view><view class="row-title">帮助与反馈</view><view class="row-desc">常见问题与平台支持</view></view><view class="row-arrow">›</view></view>
-  </view>
-
-  <view class="about-note">产品版本随小程序发布更新。运营主体及开发者信息以微信小程序公示内容为准。</view>
-  <view class="copyright">© 2026 商签通</view>
 </view>

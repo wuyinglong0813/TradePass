@@ -17,15 +17,6 @@ Page({
 
   onLoad() {
     this.setData({ versionText: resolveVersion() });
-  },
-
-  openLegal(e) {
-    const type = e.currentTarget.dataset.type;
-    wx.navigateTo({ url: `/pages/legal-document/legal-document?type=${type}` });
-  },
-
-  openHelp() {
-    wx.navigateTo({ url: '/pages/help-center/help-center' });
   }
 });
 

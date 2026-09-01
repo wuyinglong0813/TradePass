@@ -712,6 +712,18 @@ test('profile exposes legal, help, about and safe account cancellation without a
   assert.ok(cancelTemplate.includes('不提供一键删除'));
   assert.ok(!cancelScript.includes("method: 'DELETE'"));
   assert.ok(!cancelScript.includes('/account/cancel'));
+
+  const aboutScript = fs.readFileSync(
+    path.join(__dirname, '..', 'pages', 'about', 'about.js'), 'utf8'
+  );
+  const aboutTemplate = fs.readFileSync(
+    path.join(__dirname, '..', 'pages', 'about', 'about.wxml'), 'utf8'
+  );
+  assert.ok(aboutScript.includes('wx.getAccountInfoSync()'));
+  assert.ok(aboutTemplate.includes('当前版本'));
+  assert.ok(!aboutTemplate.includes('核心能力'));
+  assert.ok(!aboutTemplate.includes('用户服务协议'));
+  assert.ok(!aboutTemplate.includes('帮助与反馈'));
 });
 
 test('login agreement links reuse the dedicated document reader', () => {
