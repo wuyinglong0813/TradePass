@@ -1,0 +1,24 @@
+page { background: #f6f8fb; }
+.about-page { box-sizing: border-box; min-height: 100vh; padding: 28rpx 28rpx calc(46rpx + env(safe-area-inset-bottom)); }
+.brand-card { background: linear-gradient(145deg, #fff 0%, #f4f9ff 100%); border: 1rpx solid #e1eaf3; border-radius: 34rpx; box-shadow: 0 14rpx 38rpx rgba(25, 53, 86, .055); padding: 38rpx 34rpx; text-align: center; }
+.logo-shell { background: #fff; border: 1rpx solid #e2ebf4; border-radius: 30rpx; box-shadow: 0 12rpx 28rpx rgba(36, 120, 223, .12); height: 130rpx; margin: 0 auto; overflow: hidden; width: 130rpx; }
+.logo-shell image { height: 100%; width: 100%; }
+.brand-name { color: #17283c; font-size: 39rpx; font-weight: 700; margin-top: 22rpx; }
+.brand-en { color: #6ca5d8; font-size: 17rpx; letter-spacing: 7rpx; margin-top: 4rpx; }
+.brand-desc { color: #738295; font-size: 23rpx; line-height: 1.7; margin: 18rpx auto 0; max-width: 520rpx; }
+.version-pill { background: #eaf5ff; border-radius: 20rpx; color: #2889e7; display: inline-block; font-size: 20rpx; margin-top: 18rpx; padding: 7rpx 15rpx; }
+.capability-title { color: #8793a2; font-size: 23rpx; margin: 30rpx 7rpx 13rpx; }
+.capability-grid { display: grid; gap: 13rpx; grid-template-columns: repeat(4, 1fr); }
+.capability-item { align-items: center; background: #fff; border: 1rpx solid #e6ecf3; border-radius: 21rpx; color: #526277; display: flex; flex-direction: column; font-size: 20rpx; padding: 17rpx 6rpx; }
+.capability-icon { align-items: center; background: #eaf5ff; border-radius: 15rpx; color: #2889e7; display: flex; font-size: 22rpx; font-weight: 700; height: 51rpx; justify-content: center; margin-bottom: 9rpx; width: 51rpx; }
+.capability-icon.purple { background: #f1edff; color: #7457d9; }
+.capability-icon.green { background: #eaf8f3; color: #299875; }
+.capability-icon.orange { background: #fff4e6; color: #cb8031; }
+.about-card { background: #fff; border: 1rpx solid #e5ebf2; border-radius: 27rpx; margin-top: 26rpx; overflow: hidden; }
+.about-row { align-items: center; border-bottom: 1rpx solid #edf1f5; display: flex; justify-content: space-between; min-height: 101rpx; padding: 8rpx 25rpx; }
+.about-row:last-child { border-bottom: 0; }
+.row-title { color: #25364a; font-size: 26rpx; font-weight: 600; }
+.row-desc { color: #98a2ae; font-size: 20rpx; margin-top: 6rpx; }
+.row-arrow { color: #b0bac4; font-size: 34rpx; }
+.about-note { color: #909ba8; font-size: 21rpx; line-height: 1.65; margin: 27rpx auto 0; max-width: 580rpx; text-align: center; }
+.copyright { color: #b3bac2; font-size: 19rpx; margin-top: 14rpx; text-align: center; }

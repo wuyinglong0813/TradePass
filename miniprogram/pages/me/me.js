@@ -52,14 +52,6 @@ Page({
     wx.navigateTo({ url: '/pages/login/login' });
   },
 
-  logout() {
-    wx.showModal({
-      title: '退出登录',
-      content: '确定要退出当前账号吗？',
-      success: (res) => { if (res.confirm) app.logout(); }
-    });
-  },
-
   toggleDev() {
     this.setData({ devOpen: !this.data.devOpen });
   },
@@ -106,39 +98,43 @@ Page({
     } catch (e) {}
   },
 
-  /* 设置菜单 */
-  openPrivacy() {
-    wx.navigateTo({ url: '/pages/privacy/privacy' });
-  },
-  openAccountSecurity() {
+  openPersonalInfo() {
     if (!this.data.isLoggedIn) {
       this.goLogin();
       return;
     }
     wx.navigateTo({ url: '/pages/personal-cert/personal-cert' });
   },
-  openAgreement() {
-    wx.showModal({
-      title: '用户许可使用协议',
-      content: '欢迎使用商签通！本协议是您与商签通之间关于使用商签通微信小程序服务的法律协议。',
-      showCancel: false,
-      confirmText: '我知道了'
-    });
+  openLegalDocument(e) {
+    const type = e.currentTarget.dataset.type || 'user';
+    wx.navigateTo({ url: `/pages/legal-document/legal-document?type=${type}` });
   },
-  openAbout() {
-    wx.showModal({
-      title: '关于商签通',
-      content: '商签通 v1.0\n连接交易双方，让合同凭证可信流转。\n\n提供企业认证、组织授权、合同协同与履约对账等服务。',
-      showCancel: false,
-      confirmText: '我知道了'
+  openPermissions() {
+    wx.openSetting({
+      fail: () => wx.showToast({ title: '暂时无法打开微信权限设置', icon: 'none' })
     });
   },
   openHelp() {
+    wx.navigateTo({ url: '/pages/help-center/help-center' });
+  },
+  openAbout() {
+    wx.navigateTo({ url: '/pages/about/about' });
+  },
+  openAccountCancel() {
+    if (!this.data.isLoggedIn) {
+      this.goLogin();
+      return;
+    }
+    wx.navigateTo({ url: '/pages/account-cancel/account-cancel' });
+  },
+  logout() {
     wx.showModal({
-      title: '帮助与反馈',
-      content: '如需帮助，请在企业中心查看成员、合同和对账状态。反馈入口将在正式客服渠道接入后开放。',
-      showCancel: false,
-      confirmText: '我知道了'
+      title: '退出登录',
+      content: '退出后不会删除账号、企业或合同数据，确定退出当前账号吗？',
+      confirmColor: '#d54d4d',
+      success: res => {
+        if (res.confirm) app.logout();
+      }
     });
   },
   showProfileCode() {

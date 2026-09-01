@@ -57,9 +57,10 @@ page { background: #f4f8fd; }
 .setting-row { border-bottom: 1rpx solid #eaf0f7; gap: 15rpx; min-height: 104rpx; padding: 13rpx 22rpx; }
 .setting-row:last-child { border-bottom: none; }
 .setting-row image { border-radius: 21rpx; flex-shrink: 0; height: 76rpx; width: 76rpx; }
+.setting-status { color: #728198; flex-shrink: 0; font-size: 20rpx; }
 
 .dev-card { margin-top: 24rpx; padding: 24rpx; }
 .dev-head { justify-content: space-between; }
 .user-picker { background: #f2f6fb; border: 1rpx solid #e1eaf5; border-radius: 17rpx; color: #52647a; font-size: 24rpx; margin-top: 20rpx; padding: 18rpx 20rpx; }
-.logout-button { color: #c64949; font-size: 26rpx; font-weight: 600; margin-top: 34rpx; padding: 20rpx; text-align: center; }
+.logout-button { background: rgba(255,255,255,.78); border: 1rpx solid #e7edf4; border-radius: 24rpx; color: #d24f4f; font-size: 26rpx; margin-top: 30rpx; padding: 22rpx; text-align: center; }
 .page-end { color: #98a4b2; font-size: 20rpx; padding: 22rpx 0 8rpx; text-align: center; }

@@ -18,7 +18,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.net.URI;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.List;
@@ -26,6 +29,9 @@ import java.util.List;
 @Service
 public class FadadaPersonalIdentityService {
     private static final String AUTH_SCOPE = "ident_info";
+    private static final ZoneId BEIJING_ZONE = ZoneId.of("Asia/Shanghai");
+    private static final DateTimeFormatter DISPLAY_TIME =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private final FadadaUserIdentityMapper identityMapper;
     private final SysUserMapper userMapper;
     private final FadadaUserGateway gateway;
@@ -53,6 +59,7 @@ public class FadadaPersonalIdentityService {
         requireReady();
         FadadaUserIdentity identity = findByUserId(AuthContext.userId());
         if (identity == null) return toPayload(null);
+        if ("VERIFIED".equals(identity.getLocalStatus())) return toPayload(identity);
         return toPayload(sync(identity));
     }
 
@@ -138,7 +145,7 @@ public class FadadaPersonalIdentityService {
             if (hasText(detail.userName())) identity.setVerifiedName(detail.userName());
             if (hasText(detail.identMethod())) identity.setIdentMethod(detail.identMethod());
             identity.setIdentSubmittedAt(parseTime(detail.identSubmitTime(), identity.getIdentSubmittedAt()));
-            identity.setIdentVerifiedAt(parseTime(detail.identSuccessTime(), LocalDateTime.now()));
+            identity.setIdentVerifiedAt(parseTime(detail.identSuccessTime(), beijingNow()));
         }
         identity.setLocalStatus(resolveLocalStatus(identity));
         if ("VERIFIED".equals(identity.getLocalStatus())) {
@@ -240,6 +247,16 @@ public class FadadaPersonalIdentityService {
 
     private LocalDateTime parseTime(String value, LocalDateTime fallback) {
         if (!hasText(value)) return fallback;
+        try {
+            return OffsetDateTime.parse(value).atZoneSameInstant(BEIJING_ZONE).toLocalDateTime();
+        } catch (DateTimeParseException ignored) {
+            // Continue with provider formats that do not carry an explicit offset.
+        }
+        try {
+            return Instant.parse(value).atZone(BEIJING_ZONE).toLocalDateTime();
+        } catch (DateTimeParseException ignored) {
+            // Continue with provider formats that are documented as Beijing local time.
+        }
         for (DateTimeFormatter formatter : List.of(DateTimeFormatter.ISO_LOCAL_DATE_TIME,
                 DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"),
                 DateTimeFormatter.ofPattern("yyyyMMddHHmmss"))) {
@@ -253,7 +270,11 @@ public class FadadaPersonalIdentityService {
     }
 
     private String text(LocalDateTime value) {
-        return value == null ? null : value.toString();
+        return value == null ? null : DISPLAY_TIME.format(value);
+    }
+
+    private LocalDateTime beijingNow() {
+        return LocalDateTime.now(BEIJING_ZONE);
     }
 
     private String callbackText(JsonNode node, String... names) {

@@ -18,6 +18,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -26,6 +27,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class FadadaPersonalIdentityServiceTest {
@@ -115,15 +117,32 @@ class FadadaPersonalIdentityServiceTest {
                         "authorized", "identified", List.of("ident_info")));
         when(gateway.getIdentityInfo("open-user-8")).thenReturn(
                 new FadadaUserGateway.UserIdentityResult("open-user-8", "identified", "张三",
-                        "face", "2026-08-27 10:00:00", "2026-08-27 10:05:00"));
+                        "face", "2026-08-27 10:00:00", "2026-08-27T02:05:00Z"));
 
         PersonalIdentityPayload result = service.syncCurrent();
 
         assertThat(result.status()).isEqualTo("VERIFIED");
         assertThat(result.verifiedName()).isEqualTo("张三");
         assertThat(result.failureReason()).isNull();
+        assertThat(result.verifiedAt()).isEqualTo("2026-08-27 10:05:00");
+        assertThat(result.verifiedAt()).doesNotContain("T");
         assertThat(identity.getOpenUserId()).isEqualTo("open-user-8");
         verify(identityMapper).updateById(identity);
+    }
+
+    @Test
+    void treatsCompletedPersonalIdentityAsTerminalWhenUserRefreshes() {
+        FadadaUserIdentity verified = identity("VERIFIED");
+        verified.setBindingStatus("authorized");
+        verified.setIdentStatus("identified");
+        verified.setIdentVerifiedAt(LocalDateTime.of(2026, 8, 25, 13, 13, 35));
+        when(identityMapper.selectOne(any(Wrapper.class))).thenReturn(verified);
+
+        PersonalIdentityPayload result = service.syncCurrent();
+
+        assertThat(result.status()).isEqualTo("VERIFIED");
+        assertThat(result.verifiedAt()).isEqualTo("2026-08-25 13:13:35");
+        verifyNoInteractions(gateway);
     }
 
     @Test

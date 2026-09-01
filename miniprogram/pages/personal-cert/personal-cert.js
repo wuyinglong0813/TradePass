@@ -17,6 +17,13 @@ const EMPTY_IDENTITY = {
   verifiedAt: ''
 };
 
+function formatBeijingTime(value) {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  const matched = text.match(/^(\d{4}-\d{2}-\d{2})[T\s]+(\d{2}:\d{2}:\d{2})/);
+  return matched ? `${matched[1]} ${matched[2]}` : text.replace(/T\s*/, ' ');
+}
+
 Page({
   data: {
     loading: true,
@@ -41,12 +48,13 @@ Page({
     this.loadIdentity(true).finally(() => wx.stopPullDownRefresh());
   },
 
-  async loadIdentity(sync) {
+  async loadIdentity(sync, notify) {
     if (!this.data.identity || !this.data.identity.status) this.setData({ loading: true });
+    if (sync) this.setData({ syncing: true });
     try {
       let identity = await request({ url: '/fadada/users/me/identity', withCompany: false });
-      if (sync && identity && identity.status !== 'NOT_STARTED' && identity.providerEnabled) {
-        this.setData({ syncing: true });
+      if (sync && identity && identity.status !== 'NOT_STARTED'
+        && identity.status !== 'VERIFIED' && identity.providerEnabled) {
         identity = await request({
           url: '/fadada/users/me/identity/sync',
           method: 'POST',
@@ -54,11 +62,20 @@ Page({
         });
       }
       const status = identity && STATUS_VIEW[identity.status] ? identity.status : 'NOT_STARTED';
+      const displayIdentity = identity
+        ? { ...identity, verifiedAt: formatBeijingTime(identity.verifiedAt) }
+        : EMPTY_IDENTITY;
       this.setData({
-        identity: identity || EMPTY_IDENTITY,
+        identity: displayIdentity,
         providerEnabled: !!(identity && identity.providerEnabled),
         statusView: STATUS_VIEW[status]
       });
+      if (notify) {
+        wx.showToast({
+          title: status === 'VERIFIED' ? '认证结果已更新' : '认证状态已刷新',
+          icon: 'success'
+        });
+      }
     } catch (error) {
       wx.showToast({ title: error.message || '认证状态加载失败', icon: 'none' });
     } finally {
@@ -81,6 +98,6 @@ Page({
 
   refreshStatus() {
     if (this.data.syncing) return;
-    this.loadIdentity(true);
+    this.loadIdentity(true, true);
   }
 });

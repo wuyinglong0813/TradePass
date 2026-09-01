@@ -7,15 +7,10 @@ Page({
     phoneNumber: '',
     smsCode: '',
     codeSending: false,
-    countdown: 0,
-    showAgreement: false,
-    agreementTitle: '',
-    agreementType: ''
+    countdown: 0
   },
 
   toggleAgree() { this.setData({ agreed: !this.data.agreed }); },
-
-  noop() {},
 
   onPhoneInput(e) { this.setData({ phoneNumber: e.detail.value }); },
 
@@ -97,12 +92,10 @@ Page({
     if (this._countdownTimer) clearInterval(this._countdownTimer);
   },
 
-  /* 协议弹窗 */
   openUserAgreement() {
-    this.setData({ showAgreement: true, agreementTitle: '用户许可使用协议', agreementType: 'user' });
+    wx.navigateTo({ url: '/pages/legal-document/legal-document?type=user' });
   },
   openPrivacyAgreement() {
-    this.setData({ showAgreement: true, agreementTitle: '隐私协议', agreementType: 'privacy' });
-  },
-  closeAgreement() { this.setData({ showAgreement: false }); }
+    wx.navigateTo({ url: '/pages/legal-document/legal-document?type=privacy' });
+  }
 });

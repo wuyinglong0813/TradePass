@@ -643,6 +643,82 @@ test('contract detail renders first and defers fulfillment plus remote signing r
   assert.ok(!script.includes("signing${syncSigning ? '/sync' : ''}"));
 });
 
+test('personal certification refreshes terminal results safely and formats Beijing time', () => {
+  const pageDir = path.join(__dirname, '..', 'pages', 'personal-cert');
+  const script = fs.readFileSync(path.join(pageDir, 'personal-cert.js'), 'utf8');
+  const template = fs.readFileSync(path.join(pageDir, 'personal-cert.wxml'), 'utf8');
+  assert.ok(script.includes("identity.status !== 'VERIFIED'"));
+  assert.ok(script.includes('formatBeijingTime(identity.verifiedAt)'));
+  assert.ok(script.includes("title: status === 'VERIFIED' ? '认证结果已更新'"));
+  assert.ok(!template.includes('敏感信息安全处理'));
+  assert.ok(!template.includes('商签通不保存完整证件号或人脸照片'));
+});
+
+test('profile exposes legal, help, about and safe account cancellation without a settings layer', () => {
+  const appConfig = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'app.json'), 'utf8'));
+  [
+    'pages/legal-document/legal-document',
+    'pages/help-center/help-center',
+    'pages/about/about',
+    'pages/account-cancel/account-cancel'
+  ].forEach(page => assert.ok(appConfig.pages.includes(page)));
+  assert.ok(!appConfig.pages.includes('pages/settings/settings'));
+
+  const meScript = fs.readFileSync(path.join(__dirname, '..', 'pages', 'me', 'me.js'), 'utf8');
+  const meTemplate = fs.readFileSync(path.join(__dirname, '..', 'pages', 'me', 'me.wxml'), 'utf8');
+  assert.ok(!meScript.includes('/pages/settings/settings'));
+  assert.ok(!meTemplate.includes('设置中心'));
+  assert.ok(!meScript.includes("title: '关于商签通'"));
+  assert.ok(!meScript.includes("title: '用户许可使用协议'"));
+  assert.ok(meTemplate.includes('账号与身份'));
+  assert.ok(meTemplate.includes('个人信息收集清单'));
+  assert.ok(meTemplate.includes('第三方信息共享清单'));
+  assert.ok(meTemplate.includes('系统权限管理'));
+  assert.ok(meTemplate.includes('帮助与反馈'));
+  assert.ok(meTemplate.includes('账号注销'));
+  assert.ok(meTemplate.includes('/images/icons/info-collection.svg'));
+  assert.ok(meTemplate.includes('/images/icons/info-sharing.svg'));
+  assert.ok(meTemplate.includes('/images/icons/permissions.svg'));
+  assert.ok(meTemplate.includes('/images/icons/account-cancel.svg'));
+  assert.ok(!meTemplate.includes('setting-symbol'));
+
+  const legalTemplate = fs.readFileSync(
+    path.join(__dirname, '..', 'templates', 'legal-content.wxml'), 'utf8'
+  );
+  assert.ok(legalTemplate.includes('userAgreementContent'));
+  assert.ok(legalTemplate.includes('collectionListContent'));
+  assert.ok(legalTemplate.includes('sharingListContent'));
+  assert.ok(legalTemplate.includes('法大大电子签服务'));
+
+  const helpTemplate = fs.readFileSync(
+    path.join(__dirname, '..', 'pages', 'help-center', 'help-center.wxml'), 'utf8'
+  );
+  assert.ok(helpTemplate.includes('open-type="contact"'));
+  assert.ok(helpTemplate.includes('常见问题'));
+
+  const cancelScript = fs.readFileSync(
+    path.join(__dirname, '..', 'pages', 'account-cancel', 'account-cancel.js'), 'utf8'
+  );
+  const cancelTemplate = fs.readFileSync(
+    path.join(__dirname, '..', 'pages', 'account-cancel', 'account-cancel.wxml'), 'utf8'
+  );
+  assert.ok(cancelTemplate.includes('联系平台支持申请注销'));
+  assert.ok(cancelTemplate.includes('不提供一键删除'));
+  assert.ok(!cancelScript.includes("method: 'DELETE'"));
+  assert.ok(!cancelScript.includes('/account/cancel'));
+});
+
+test('login agreement links reuse the dedicated document reader', () => {
+  ['login', 'phone-login'].forEach(pageName => {
+    const pageDir = path.join(__dirname, '..', 'pages', pageName);
+    const script = fs.readFileSync(path.join(pageDir, `${pageName}.js`), 'utf8');
+    const template = fs.readFileSync(path.join(pageDir, `${pageName}.wxml`), 'utf8');
+    assert.ok(script.includes('/pages/legal-document/legal-document?type=user'));
+    assert.ok(script.includes('/pages/legal-document/legal-document?type=privacy'));
+    assert.ok(!template.includes('agreementType'));
+  });
+});
+
 test('request injects auth and tenant headers and unwraps API data', async () => {
   let captured;
   wx.getStorageSync = () => '';

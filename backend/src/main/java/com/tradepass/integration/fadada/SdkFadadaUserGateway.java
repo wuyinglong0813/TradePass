@@ -55,8 +55,7 @@ public class SdkFadadaUserGateway implements FadadaUserGateway {
     public UserAccountResult getUser(String clientUserId, String openUserId) {
         GetUserReq request = new GetUserReq();
         request.setAccessToken(tokenProvider.get());
-        if (hasText(clientUserId)) request.setClientUserId(clientUserId);
-        if (hasText(openUserId)) request.setOpenUserId(openUserId);
+        applyUserLookup(request, clientUserId, openUserId);
         UserRes response = invoke(() -> userClient.get(request), "查询个人认证状态");
         return new UserAccountResult(response.getClientUserId(), response.getOpenUserId(),
                 response.getBindingStatus(), response.getIdentStatus(), response.getAuthScope());
@@ -72,6 +71,18 @@ public class SdkFadadaUserGateway implements FadadaUserGateway {
         return new UserIdentityResult(response.getOpenUserId(), response.getIdentStatus(),
                 identity == null ? null : identity.getUserName(), response.getIdentMethod(),
                 response.getIdentSubmitTime(), response.getIdentSuccessTime());
+    }
+
+    static void applyUserLookup(GetUserReq request, String clientUserId, String openUserId) {
+        if (hasText(openUserId)) {
+            request.setOpenUserId(openUserId);
+            return;
+        }
+        if (hasText(clientUserId)) {
+            request.setClientUserId(clientUserId);
+            return;
+        }
+        throw new BusinessException("个人认证用户标识缺失");
     }
 
     private <T> T invoke(ApiCall<T> call, String action) {
@@ -90,7 +101,7 @@ public class SdkFadadaUserGateway implements FadadaUserGateway {
         }
     }
 
-    private boolean hasText(String value) {
+    private static boolean hasText(String value) {
         return value != null && !value.isBlank();
     }
 

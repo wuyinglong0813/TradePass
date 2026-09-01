@@ -19,13 +19,19 @@
       <view class="row-arrow">›</view>
     </view>
 
-    <view class="section-head service-head"><view><view class="section-title">账户与服务</view><view class="section-sub">未登录也可以查看协议与产品帮助</view></view></view>
+    <view class="section-head service-head"><view><view class="section-title">隐私与协议</view><view class="section-sub">个人信息规则与服务条款</view></view></view>
     <view class="settings-list">
-      <view class="setting-row" bindtap="openAccountSecurity"><image src="/images/icons/security.svg" mode="aspectFit"/><view class="setting-copy"><view class="setting-title">账号与安全</view><view class="setting-desc">登录后管理手机号与实名状态</view></view><view class="row-arrow">›</view></view>
-      <view class="setting-row" bindtap="openPrivacy"><image src="/images/icons/privacy.svg" mode="aspectFit"/><view class="setting-copy"><view class="setting-title">隐私设置</view><view class="setting-desc">个人信息与授权管理</view></view><view class="row-arrow">›</view></view>
-      <view class="setting-row" bindtap="openAgreement"><image src="/images/icons/agreement.svg" mode="aspectFit"/><view class="setting-copy"><view class="setting-title">用户协议</view><view class="setting-desc">服务条款与使用规则</view></view><view class="row-arrow">›</view></view>
-      <view class="setting-row" bindtap="openHelp"><image src="/images/icons/help.svg" mode="aspectFit"/><view class="setting-copy"><view class="setting-title">帮助与反馈</view><view class="setting-desc">使用指引与问题反馈</view></view><view class="row-arrow">›</view></view>
-      <view class="setting-row" bindtap="openAbout"><image src="/images/icons/about.svg" mode="aspectFit"/><view class="setting-copy"><view class="setting-title">关于商签通</view><view class="setting-desc">版本信息与品牌说明</view></view><view class="row-arrow">›</view></view>
+      <view class="setting-row" bindtap="openLegalDocument" data-type="privacy"><image src="/images/icons/privacy.svg" mode="aspectFit"/><view class="setting-copy"><view class="setting-title">隐私保护指引</view><view class="setting-desc">了解个人信息处理规则</view></view><view class="row-arrow">›</view></view>
+      <view class="setting-row" bindtap="openLegalDocument" data-type="collection"><image src="/images/icons/info-collection.svg" mode="aspectFit"/><view class="setting-copy"><view class="setting-title">个人信息收集清单</view><view class="setting-desc">查看收集内容、用途和场景</view></view><view class="row-arrow">›</view></view>
+      <view class="setting-row" bindtap="openLegalDocument" data-type="sharing"><image src="/images/icons/info-sharing.svg" mode="aspectFit"/><view class="setting-copy"><view class="setting-title">第三方信息共享清单</view><view class="setting-desc">查看受托服务与必要数据范围</view></view><view class="row-arrow">›</view></view>
+      <view class="setting-row" bindtap="openLegalDocument" data-type="user"><image src="/images/icons/agreement.svg" mode="aspectFit"/><view class="setting-copy"><view class="setting-title">用户服务协议</view><view class="setting-desc">服务条款与使用规则</view></view><view class="row-arrow">›</view></view>
+      <view class="setting-row" bindtap="openPermissions"><image src="/images/icons/permissions.svg" mode="aspectFit"/><view class="setting-copy"><view class="setting-title">系统权限管理</view><view class="setting-desc">前往微信管理已授权权限</view></view><view class="row-arrow">›</view></view>
+    </view>
+
+    <view class="section-head service-head"><view><view class="section-title">服务与支持</view><view class="section-sub">产品帮助、反馈与版本信息</view></view></view>
+    <view class="settings-list">
+      <view class="setting-row" bindtap="openHelp"><image src="/images/icons/help.svg" mode="aspectFit"/><view class="setting-copy"><view class="setting-title">帮助与反馈</view><view class="setting-desc">常见问题与平台支持</view></view><view class="row-arrow">›</view></view>
+      <view class="setting-row" bindtap="openAbout"><image src="/images/icons/about.svg" mode="aspectFit"/><view class="setting-copy"><view class="setting-title">关于商签通</view><view class="setting-desc">产品能力与版本信息</view></view><view class="row-arrow">›</view></view>
     </view>
     <view class="page-end">商签通 · 让每一份凭证可信流转</view>
   </view>
@@ -55,13 +61,25 @@
         <view class="company-avatar">企</view><view class="company-copy"><view class="company-name">暂未加入企业</view><view class="company-meta">创建或加入企业后开始业务协作</view></view><view class="row-arrow">›</view>
       </view>
 
-      <view class="section-head service-head"><view><view class="section-title">账户与服务</view><view class="section-sub">账户安全、隐私与产品支持</view></view></view>
+      <view class="section-head service-head"><view><view class="section-title">账号与身份</view><view class="section-sub">个人信息、认证与账号安全</view></view></view>
       <view class="settings-list">
-        <view class="setting-row" bindtap="openAccountSecurity"><image src="/images/icons/security.svg" mode="aspectFit"/><view class="setting-copy"><view class="setting-title">个人认证与安全</view><view class="setting-desc">手机号、实名状态与登录安全</view></view><view class="row-arrow">›</view></view>
-        <view class="setting-row" bindtap="openPrivacy"><image src="/images/icons/privacy.svg" mode="aspectFit"/><view class="setting-copy"><view class="setting-title">隐私设置</view><view class="setting-desc">个人信息与授权管理</view></view><view class="row-arrow">›</view></view>
-        <view class="setting-row" bindtap="openAgreement"><image src="/images/icons/agreement.svg" mode="aspectFit"/><view class="setting-copy"><view class="setting-title">用户协议</view><view class="setting-desc">服务条款与使用规则</view></view><view class="row-arrow">›</view></view>
-        <view class="setting-row" bindtap="openHelp"><image src="/images/icons/help.svg" mode="aspectFit"/><view class="setting-copy"><view class="setting-title">帮助与反馈</view><view class="setting-desc">使用指引与问题反馈</view></view><view class="row-arrow">›</view></view>
-        <view class="setting-row" bindtap="openAbout"><image src="/images/icons/about.svg" mode="aspectFit"/><view class="setting-copy"><view class="setting-title">关于商签通</view><view class="setting-desc">版本信息与品牌说明</view></view><view class="row-arrow">›</view></view>
+        <view class="setting-row" bindtap="openPersonalInfo"><image src="/images/icons/security.svg" mode="aspectFit"/><view class="setting-copy"><view class="setting-title">账号与个人信息</view><view class="setting-desc">手机号、个人认证与身份状态</view></view><view class="setting-status">{{personalIdentityStatusText}}</view><view class="row-arrow">›</view></view>
+        <view class="setting-row" bindtap="openAccountCancel"><image src="/images/icons/account-cancel.svg" mode="aspectFit"/><view class="setting-copy"><view class="setting-title">账号注销</view><view class="setting-desc">查看注销条件与数据处理说明</view></view><view class="row-arrow">›</view></view>
+      </view>
+
+      <view class="section-head service-head"><view><view class="section-title">隐私与协议</view><view class="section-sub">个人信息规则与服务条款</view></view></view>
+      <view class="settings-list">
+        <view class="setting-row" bindtap="openLegalDocument" data-type="privacy"><image src="/images/icons/privacy.svg" mode="aspectFit"/><view class="setting-copy"><view class="setting-title">隐私保护指引</view><view class="setting-desc">了解个人信息处理规则</view></view><view class="row-arrow">›</view></view>
+        <view class="setting-row" bindtap="openLegalDocument" data-type="collection"><image src="/images/icons/info-collection.svg" mode="aspectFit"/><view class="setting-copy"><view class="setting-title">个人信息收集清单</view><view class="setting-desc">查看收集内容、用途和场景</view></view><view class="row-arrow">›</view></view>
+        <view class="setting-row" bindtap="openLegalDocument" data-type="sharing"><image src="/images/icons/info-sharing.svg" mode="aspectFit"/><view class="setting-copy"><view class="setting-title">第三方信息共享清单</view><view class="setting-desc">查看受托服务与必要数据范围</view></view><view class="row-arrow">›</view></view>
+        <view class="setting-row" bindtap="openLegalDocument" data-type="user"><image src="/images/icons/agreement.svg" mode="aspectFit"/><view class="setting-copy"><view class="setting-title">用户服务协议</view><view class="setting-desc">服务条款与使用规则</view></view><view class="row-arrow">›</view></view>
+        <view class="setting-row" bindtap="openPermissions"><image src="/images/icons/permissions.svg" mode="aspectFit"/><view class="setting-copy"><view class="setting-title">系统权限管理</view><view class="setting-desc">前往微信管理已授权权限</view></view><view class="row-arrow">›</view></view>
+      </view>
+
+      <view class="section-head service-head"><view><view class="section-title">服务与支持</view><view class="section-sub">产品帮助、反馈与版本信息</view></view></view>
+      <view class="settings-list">
+        <view class="setting-row" bindtap="openHelp"><image src="/images/icons/help.svg" mode="aspectFit"/><view class="setting-copy"><view class="setting-title">帮助与反馈</view><view class="setting-desc">常见问题与平台支持</view></view><view class="row-arrow">›</view></view>
+        <view class="setting-row" bindtap="openAbout"><image src="/images/icons/about.svg" mode="aspectFit"/><view class="setting-copy"><view class="setting-title">关于商签通</view><view class="setting-desc">产品能力与版本信息</view></view><view class="row-arrow">›</view></view>
       </view>
 
       <view class="dev-card" wx:if="{{isDev}}">

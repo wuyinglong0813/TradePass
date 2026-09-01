@@ -1,5 +1,3 @@
-<import src="../../templates/privacy-content.wxml"/>
-
 <view class="page">
   <!-- 品牌区 -->
   <view class="branding">
@@ -39,28 +37,4 @@
   </view>
   <view class="agree-hint">未注册的用户将直接创建账号</view>
 
-  <!-- 协议弹窗 -->
-  <view class="mask" wx:if="{{showAgreement}}" bindtap="closeAgreement">
-    <view class="modal" catchtap="noop">
-      <view class="modal-title">{{agreementTitle}}</view>
-      <scroll-view class="modal-body" scroll-y>
-        <block wx:if="{{agreementType === 'user'}}">
-          <view class="h2">用户许可使用协议</view>
-          <view class="p">欢迎使用商签通！</view>
-          <view class="p">一、总则</view>
-          <view class="p">1.1 本协议是您与商签通之间关于使用商签通微信小程序服务的法律协议。</view>
-          <view class="p">二、用户账号</view>
-          <view class="p">2.1 您通过手机号登录后，即成为注册用户。</view>
-          <view class="p">三、服务内容</view>
-          <view class="p">3.1 商签通提供企业贸易管理服务：企业认证、授权管理、销售采购排行、电子章管理等。</view>
-        </block>
-        <block wx:else>
-          <view class="privacy-scroll-content">
-            <template is="privacyContent"/>
-          </view>
-        </block>
-      </scroll-view>
-      <button class="modal-btn" bindtap="closeAgreement">我知道了</button>
-    </view>
-  </view>
 </view>

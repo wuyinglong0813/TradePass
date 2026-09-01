@@ -4,9 +4,6 @@ const { request } = require('../../utils/request');
 Page({
   data: {
     agreed: false,
-    showAgreement: false,
-    agreementTitle: '',
-    agreementType: '',
     shaking: false,
     quickPhoneEnabled: false,
     desktopMode: false
@@ -31,8 +28,6 @@ Page({
     this.setData({ shaking: true });
     setTimeout(() => this.setData({ shaking: false }), 500);
   },
-
-  noop() {},
 
   skipLogin() { wx.switchTab({ url: '/pages/index/index' }); },
 
@@ -92,12 +87,10 @@ Page({
     }
   },
 
-  /* 协议弹窗 */
   openUserAgreement() {
-    this.setData({ showAgreement: true, agreementTitle: '用户许可使用协议', agreementType: 'user' });
+    wx.navigateTo({ url: '/pages/legal-document/legal-document?type=user' });
   },
   openPrivacyAgreement() {
-    this.setData({ showAgreement: true, agreementTitle: '隐私协议', agreementType: 'privacy' });
-  },
-  closeAgreement() { this.setData({ showAgreement: false }); }
+    wx.navigateTo({ url: '/pages/legal-document/legal-document?type=privacy' });
+  }
 });

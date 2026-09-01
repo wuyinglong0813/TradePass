@@ -9,7 +9,7 @@ page { background: #f4f8fd; }
 .hero-copy { margin-left: 22rpx; min-width: 0; }
 .hero-title { font-size: 33rpx; font-weight: 700; }
 .hero-desc { color: rgba(255,255,255,.78); font-size: 22rpx; line-height: 1.55; margin-top: 8rpx; }
-.loading-card,.info-card,.privacy-card,.config-notice { background: #fff; border: 1rpx solid #dfeaf6; border-radius: 26rpx; box-shadow: 0 10rpx 30rpx rgba(22,49,85,.05); margin-top: 22rpx; }
+.loading-card,.info-card,.config-notice { background: #fff; border: 1rpx solid #dfeaf6; border-radius: 26rpx; box-shadow: 0 10rpx 30rpx rgba(22,49,85,.05); margin-top: 22rpx; }
 .loading-card { color: #7f8da0; font-size: 24rpx; padding: 42rpx; text-align: center; }
 .config-notice { background: #fff9e8; border-color: #f5df9c; padding: 24rpx; }
 .notice-title { color: #8b6014; font-size: 26rpx; font-weight: 650; }
@@ -25,11 +25,6 @@ page { background: #f4f8fd; }
 .status-pill.success { background: #eaf4ff; color: #2884df; }
 .status-pill.failed { background: #fff0f0; color: #c74f55; }
 .failure-box { background: #fff2f1; border-radius: 16rpx; color: #b34b50; font-size: 22rpx; line-height: 1.55; margin-top: 16rpx; padding: 17rpx 19rpx; }
-.privacy-card { align-items: flex-start; display: flex; padding: 25rpx; }
-.privacy-icon { align-items: center; background: #e9f4ff; border-radius: 18rpx; color: #318ce5; display: flex; flex-shrink: 0; font-size: 21rpx; font-weight: 700; height: 64rpx; justify-content: center; width: 64rpx; }
-.privacy-copy { margin-left: 18rpx; }
-.privacy-title { color: #24354a; font-size: 25rpx; font-weight: 650; }
-.privacy-desc { color: #8290a2; font-size: 21rpx; line-height: 1.65; margin-top: 7rpx; }
 .actions { margin-top: 28rpx; }
 .primary-button,.secondary-button { border-radius: 24rpx; font-size: 27rpx; font-weight: 650; height: 88rpx; line-height: 88rpx; }
 .primary-button { background: linear-gradient(90deg,#45a8ff,#2788ec); color: #fff; }
