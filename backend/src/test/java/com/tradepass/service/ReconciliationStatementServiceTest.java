@@ -1,6 +1,7 @@
 package com.tradepass.service;
 
 import com.tradepass.common.AuthContext;
+import com.tradepass.support.TestIds;
 import com.tradepass.common.BusinessException;
 import com.tradepass.entity.CounterpartyRelationEntity;
 import com.tradepass.config.StorageProperties;
@@ -36,6 +37,7 @@ class ReconciliationStatementServiceTest {
 
     @BeforeEach
     void setUp() {
+        TestIds.use(18L);
         MybatisTestSupport.initialize(CounterpartyRelationEntity.class);
         jdbc = mock(JdbcTemplate.class);
         relationMapper = mock(CounterpartyRelationMapper.class);
@@ -48,6 +50,7 @@ class ReconciliationStatementServiceTest {
     @AfterEach
     void clearContext() {
         AuthContext.clear();
+        TestIds.reset();
     }
 
     @Test
@@ -57,7 +60,7 @@ class ReconciliationStatementServiceTest {
                 "statementPeriod", "2026-07",
                 "originalName", "对账单.xlsx"
         );
-        when(jdbc.queryForObject(anyString(), eq(Long.class))).thenReturn(18L);
+        TestIds.use(18L);
         doReturn(List.of(row)).when(jdbc).query(anyString(), any(RowMapper.class), any(Object[].class));
 
         Map<String, Object> uploaded = service.upload(4L, "2026-07", " 七月账单 ",
@@ -124,7 +127,7 @@ class ReconciliationStatementServiceTest {
         ReconciliationStatementService ossService = new ReconciliationStatementService(
                 jdbc, relationMapper, mock(AccessControlService.class), mock(AuditLogService.class),
                 storage, new StorageProperties());
-        when(jdbc.queryForObject(anyString(), eq(Long.class))).thenReturn(18L);
+        TestIds.use(18L);
         doReturn(List.of(Map.of("id", 18L))).when(jdbc)
                 .query(anyString(), any(RowMapper.class), any(Object[].class));
 

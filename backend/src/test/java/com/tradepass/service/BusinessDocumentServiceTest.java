@@ -202,6 +202,7 @@ class BusinessDocumentServiceTest {
         draft.setTemplateName("标准销售单");
         draft.setContent("{\"title\":\"销售单\",\"columns\":[\"品名\",\"数量\",\"金额\"],\"rows\":[[\"商品A\",\"1\",\"10\"]],\"blankRows\":8}");
         when(documentMapper.selectById(33L)).thenReturn(draft);
+        when(documentMapper.selectByIdForUpdate(33L)).thenReturn(draft);
 
         Map<String, Object> edited = service.updateDraft(33L, Map.of("content", Map.of(
                 "title", "已修改草稿",

@@ -8,7 +8,7 @@ import java.time.LocalDateTime;
 
 @TableName("fadada_corp_identity")
 public class FadadaCorpIdentity {
-    @TableId(type = IdType.AUTO)
+    @TableId(type = IdType.ASSIGN_ID)
     private Long id;
     private Long companyId;
     private Long applicantUserId;

@@ -260,13 +260,11 @@ public class TradeController {
 
     @PostMapping("/contracts/{id}/reject")
     public ApiResponse<String> rejectContract(@PathVariable Long id) {
-        if (signingService != null) signingService.cancelPending(id, "对方拒绝签署");
         return ApiResponse.ok(tradeService.rejectContract(id));
     }
 
     @PostMapping("/contracts/{id}/cancel")
     public ApiResponse<String> cancelContract(@PathVariable Long id) {
-        if (signingService != null) signingService.cancelPending(id, "发起方撤回合同");
         return ApiResponse.ok(tradeService.cancelContract(id));
     }
 

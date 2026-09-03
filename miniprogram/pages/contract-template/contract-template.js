@@ -48,7 +48,7 @@ Page({
       const payload = await request({ url });
       const list = Array.isArray(payload) ? payload : (payload.items || []);
       const templates = (list || []).map(t => ({
-        id: parseInt(t.id),
+        id: String(t.id),
         name: t.name,
         category: t.category || '通用',
         createdBy: t.createdByName || '',

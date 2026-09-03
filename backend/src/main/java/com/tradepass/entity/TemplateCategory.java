@@ -6,7 +6,7 @@ import com.baomidou.mybatisplus.annotation.TableName;
 
 @TableName("template_category")
 public class TemplateCategory {
-    @TableId(type = IdType.AUTO)
+    @TableId(type = IdType.ASSIGN_ID)
     private Long id;
     private Long companyId;
     private String name;

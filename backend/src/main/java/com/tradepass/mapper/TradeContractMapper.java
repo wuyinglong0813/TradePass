@@ -11,6 +11,9 @@ import java.util.List;
 
 @Mapper
 public interface TradeContractMapper extends BaseMapper<TradeContract> {
+    @Select("SELECT * FROM trade_contract WHERE id = #{id} FOR UPDATE")
+    TradeContract selectByIdForUpdate(@Param("id") Long id);
+
     @Select("""
         SELECT COUNT(*) AS total,
                COALESCE(SUM(CASE WHEN status = 'PENDING' THEN 1 ELSE 0 END), 0) AS pending,

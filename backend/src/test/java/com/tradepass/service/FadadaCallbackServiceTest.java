@@ -58,7 +58,46 @@ class FadadaCallbackServiceTest {
 
         assertThat(saved.get().getEventId()).isEqualTo("sign-task-finished:nonce-8");
         assertThat(saved.get().getPayloadSha256()).hasSize(64);
-        verify(processor).processAsync(28L, "sign-task-finished", body);
+        verify(processor, org.mockito.Mockito.times(2)).processAsync(28L);
+        verify(eventMapper).insert(any(FadadaCallbackEvent.class));
+        assertThat(saved.get().getRetryPayload()).isEqualTo("{\"signTaskId\":\"task-8\"}");
+    }
+
+    @Test
+    void failedLegacyEventCanRecoverFromProviderRedelivery() throws Exception {
+        String body = "{\"signTaskId\":\"task-9\"}";
+        FadadaCallbackEvent event = new FadadaCallbackEvent(); event.setId(29L); event.setStatus("FAILED");
+        event.setPayloadSha256(java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")
+                .digest(body.getBytes(java.nio.charset.StandardCharsets.UTF_8))));
+        when(eventMapper.selectOne(any(Wrapper.class))).thenReturn(event);
+        service.accept(signedHeaders(body, "sign-task-finished", "nonce-9"), body);
+        verify(eventMapper).restoreLegacyPayload(org.mockito.ArgumentMatchers.eq(29L),
+                org.mockito.ArgumentMatchers.eq(body), any());
+        verify(processor).processAsync(29L);
+    }
+
+    @Test
+    void completedDuplicateDoesNotRestartProcessing() throws Exception {
+        String body = "{\"signTaskId\":\"task-10\"}";
+        FadadaCallbackEvent event = new FadadaCallbackEvent(); event.setId(30L); event.setStatus("PROCESSED");
+        event.setPayloadSha256(java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")
+                .digest(body.getBytes(java.nio.charset.StandardCharsets.UTF_8))));
+        when(eventMapper.selectOne(any(Wrapper.class))).thenReturn(event);
+        service.accept(signedHeaders(body, "sign-task-finished", "nonce-10"), body);
+        org.mockito.Mockito.verifyNoInteractions(processor);
+    }
+
+    @Test
+    void rejectedAsyncDispatchLeavesARecoverableEventWithoutSensitivePayload() throws Exception {
+        String body = "{\"clientUserId\":\"user-1\",\"identProcessStatus\":\"success\",\"idCard\":\"sensitive\"}";
+        AtomicReference<FadadaCallbackEvent> saved = new AtomicReference<>();
+        doAnswer(inv -> { FadadaCallbackEvent event = inv.getArgument(0); event.setId(31L); saved.set(event); return 1; })
+                .when(eventMapper).insert(any(FadadaCallbackEvent.class));
+        org.mockito.Mockito.doThrow(new java.util.concurrent.RejectedExecutionException("busy")).when(processor).processAsync(31L);
+        service.accept(signedHeaders(body, "user-ident", "nonce-11"), body);
+        assertThat(saved.get().getStatus()).isEqualTo("RECEIVED");
+        assertThat(saved.get().getNextAttemptAt()).isNotNull();
+        assertThat(saved.get().getRetryPayload()).contains("clientUserId", "identProcessStatus").doesNotContain("idCard", "sensitive");
     }
 
     @Test
@@ -74,7 +113,7 @@ class FadadaCallbackServiceTest {
         service.accept(headers, "{}");
 
         verify(eventMapper, never()).insert(any(FadadaCallbackEvent.class));
-        verify(processor, never()).processAsync(any(), any(), any());
+        verify(processor, never()).processAsync(any());
     }
 
     private HttpHeaders signedHeaders(String body, String event, String nonce) throws Exception {

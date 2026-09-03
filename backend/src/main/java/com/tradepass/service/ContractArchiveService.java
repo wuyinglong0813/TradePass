@@ -1,5 +1,7 @@
 package com.tradepass.service;
 
+import com.tradepass.common.ApplicationIds;
+
 import com.tradepass.common.BusinessException;
 import com.tradepass.config.StorageProperties;
 import com.tradepass.dto.response.ContractPayload;
@@ -50,11 +52,11 @@ public class ContractArchiveService {
         try {
             jdbc.update("""
                     INSERT INTO contract_archive
-                    (contract_id, version_no, storage_provider, storage_bucket, object_key,
+                    (id, contract_id, version_no, storage_provider, storage_bucket, object_key,
                      object_version_id, etag, original_name, content_type, file_size, sha256,
                      encryption_algorithm, archived_by, archive_source, provider_file_id)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'FADADA_SIGNED', ?)
-                    """, contractId, versionNo, stored.provider(), stored.bucket(), stored.objectKey(),
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'FADADA_SIGNED', ?)
+                    """, ApplicationIds.next(), contractId, versionNo, stored.provider(), stored.bucket(), stored.objectKey(),
                     stored.versionId(), stored.etag(), pdfService.fileName(contract), PDF_CONTENT_TYPE,
                     stored.fileSize(), stored.sha256(), stored.encryptionAlgorithm(), archivedBy,
                     providerFileId);
@@ -100,11 +102,11 @@ public class ContractArchiveService {
         try {
             jdbc.update("""
                     INSERT INTO contract_archive
-                    (contract_id, version_no, storage_provider, storage_bucket, object_key,
+                    (id, contract_id, version_no, storage_provider, storage_bucket, object_key,
                      object_version_id, etag, original_name, content_type, file_size, sha256,
                      encryption_algorithm, archived_by)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, contractId, versionNo, stored.provider(), stored.bucket(), stored.objectKey(),
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, ApplicationIds.next(), contractId, versionNo, stored.provider(), stored.bucket(), stored.objectKey(),
                     stored.versionId(), stored.etag(), pdfService.fileName(contract), PDF_CONTENT_TYPE,
                     stored.fileSize(), stored.sha256(), stored.encryptionAlgorithm(), archivedBy);
         } catch (DuplicateKeyException race) {

@@ -116,12 +116,16 @@ Tab：
 
 ## 数据库与初始化
 
-当前 MVP 阶段由后端启动时自动创建表并写入演示数据，逻辑位于 `DatabaseInitializer`。MySQL 默认由 Docker Compose 提供：
+所有环境的表结构由后端启动时的 Flyway 迁移管理。`DatabaseInitializer` 的演示数据仅在本地 `dev` 配置启用；`prod` 关闭演示数据和体验手机号特权初始化。新企业走正常认证流程，认证通过后由 `TenantBootstrapService` 创建该企业的标准角色与模板。MySQL 默认由 Docker Compose 提供：
 
 - MySQL：`localhost:1118`
 - database：`tradepass`
 - username：`tradepass`
 - password：`tradepass_pwd`
+
+从 V26 起，39 张业务表的主键由应用生成 Snowflake ID，数据库不再使用 `AUTO_INCREMENT`；MyBatis 和 JDBC 共用一个 ID 生成器。接口中的 `Long/long` 值按字符串传递，小程序的 ID 全程使用字符串。`SystemPermissionInitializer` 在启动时幂等补齐 18 项权限定义，不创建业务账号或企业。
+
+需要清空数据重新验收时，使用 [完整重置说明](docs/database-reset-and-ids.md) 和 [清表 SQL](scripts/reset-for-online-retest.sql)。新版可以从空库重新建表及初始化，无须保留旧自增值或权限字典。后端与小程序需要同步更新。
 
 Redis 默认关闭且不是运行必需项：登录会话与排行榜直接查询 MySQL，企业搜索限流和微信 `access_token` 使用单实例内存。如未来多实例部署后需要共享缓存或分布式限流，可执行 `docker compose --profile redis up -d` 启动本地 Redis，并显式设置 `TRADEPASS_REDIS_ENABLED=true`。
 
@@ -135,6 +139,8 @@ Redis 默认关闭且不是运行必需项：登录会话与排行榜直接查�
 | `DB_PORT` | `1118` | 数据库端口 |
 | `DB_USERNAME` | `tradepass` | 数据库用户 |
 | `DB_PASSWORD` | `tradepass_pwd` | 数据库密码 |
+| `TRADEPASS_IDS_WORKER_ID` | 自动推导 | Snowflake worker 编号，范围 0–31；须与 datacenter 编号一起配置 |
+| `TRADEPASS_IDS_DATACENTER_ID` | 自动推导 | Snowflake datacenter 编号，范围 0–31；多实例须给每个并行实例分配不同的编号组合 |
 | `TRADEPASS_REDIS_ENABLED` | `false` | 是否启用可选的 Redis 缓存与分布式限流 |
 | `REDIS_HOST` | `localhost` | 仅启用 Redis 时需要：Redis 主机 |
 | `REDIS_PORT` | `1119` | 仅启用 Redis 时需要：Redis 端口 |
@@ -150,7 +156,8 @@ Redis 默认关闭且不是运行必需项：登录会话与排行榜直接查�
 | `WECHAT_CLOUD_OPEN_API_ENABLED` | 开发环境 `false`，生产环境 `true` | 是否使用云托管开放接口服务免鉴权调用微信接口 |
 | `WECHAT_APP_SECRET` | 空 | 仅本地传统 `code2Session`/`access_token` 兼容路径需要；生产云调用无需配置 |
 | `TRADEPASS_DEV_ENABLED` | `false` | 是否启用 `/api/dev/**` 和开发占位能力；`dev` profile 会开启 |
-| `TRADEPASS_CA_MOCK_ENABLED` | `false`（体验版 prod 配置当前默认 `true`） | 是否启用 CA、实名、人脸和电子章模拟结果；接入真实服务商前关闭 |
+| `TRADEPASS_EXPERIENCE_TEST_ACCOUNTS_ENABLED` | 基础配置 `false`；`prod` 固定关闭 | 原体验手机号自动创建企业、授予法人和模拟认证状态的开关；生产配置不再读取此变量，旧值为 `true` 也不会启用；本地 `dev` 配置仍保留体验能力 |
+| `TRADEPASS_CA_MOCK_ENABLED` | `false` | 是否启用 CA、实名、人脸和电子章模拟结果；真实业务保持关闭，本地 `dev` 配置会开启 |
 
 ### 微信云托管对象存储上线配置
 

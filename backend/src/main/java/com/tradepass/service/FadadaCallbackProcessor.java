@@ -2,6 +2,7 @@ package com.tradepass.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.tradepass.common.BusinessException;
 import com.tradepass.entity.FadadaCallbackEvent;
 import com.tradepass.mapper.FadadaCallbackEventMapper;
 import org.slf4j.Logger;
@@ -33,11 +34,20 @@ public class FadadaCallbackProcessor {
     }
 
     @Async
-    public void processAsync(Long eventId, String eventType, String bizContent) {
+    public void processAsync(Long eventId) {
+        process(eventId);
+    }
+
+    public void process(Long eventId) {
+        LocalDateTime now = LocalDateTime.now();
+        String token = java.util.UUID.randomUUID().toString();
+        if (eventMapper.claim(eventId, token, now, now.plusMinutes(5)) != 1) return;
         FadadaCallbackEvent event = eventMapper.selectById(eventId);
-        if (event == null || !"RECEIVED".equals(event.getStatus())) return;
+        if (event == null || !token.equals(event.getProcessingToken())) return;
+        event.setFailureReason(null);
+        event.setNextAttemptAt(null);
         try {
-            JsonNode data = objectMapper.readTree(bizContent);
+            JsonNode data = objectMapper.readTree(event.getRetryPayload());
             String clientUserId = text(data, "clientUserId");
             String clientCorpId = text(data, "clientCorpId");
             String openCorpId = text(data, "openCorpId");
@@ -51,28 +61,35 @@ public class FadadaCallbackProcessor {
                 event.setStatus("PROCESSED");
             } else if (hasText(clientCorpId)) {
                 var payload = companyService.syncCallback(clientCorpId, openCorpId, data);
+                if (payload == null) throw new BusinessException("企业认证记录尚未就绪");
                 event.setSubjectType("COMPANY");
-                if (payload != null) event.setSubjectId(Long.valueOf(payload.companyId()));
-                event.setStatus(payload == null ? "IGNORED" : "PROCESSED");
+                event.setSubjectId(Long.valueOf(payload.companyId()));
+                event.setStatus("PROCESSED");
             } else if (hasText(openCorpId)) {
                 var payload = companyService.syncCallback(null, openCorpId, data);
+                if (payload == null) throw new BusinessException("企业认证记录尚未就绪");
                 event.setSubjectType("COMPANY");
-                if (payload != null) event.setSubjectId(Long.valueOf(payload.companyId()));
-                event.setStatus(payload == null ? "IGNORED" : "PROCESSED");
+                event.setSubjectId(Long.valueOf(payload.companyId()));
+                event.setStatus("PROCESSED");
             } else if (hasText(clientUserId)) {
                 var payload = personalService.syncCallback(clientUserId, data);
+                if (payload == null) throw new BusinessException("个人认证记录尚未就绪");
                 event.setSubjectType("USER");
-                if (payload != null) event.setStatus("PROCESSED"); else event.setStatus("IGNORED");
+                event.setStatus("PROCESSED");
             } else {
                 event.setStatus("IGNORED");
             }
         } catch (Exception exception) {
-            log.warn("Electronic signature callback processing failed: event={}", eventType, exception);
+            log.warn("Electronic signature callback processing failed: eventId={}, attempt={}",
+                    eventId, event.getAttemptCount(), exception);
             event.setStatus("FAILED");
             event.setFailureReason(shortMessage(exception));
+            int attempts = event.getAttemptCount() == null ? 1 : Math.max(1, event.getAttemptCount());
+            long delaySeconds = Math.min(3600L, 30L << Math.min(attempts - 1, 7));
+            event.setNextAttemptAt(LocalDateTime.now().plusSeconds(delaySeconds));
         }
         event.setProcessedAt(LocalDateTime.now());
-        eventMapper.updateById(event);
+        eventMapper.finish(event, token);
     }
 
     private String text(JsonNode node, String name) {

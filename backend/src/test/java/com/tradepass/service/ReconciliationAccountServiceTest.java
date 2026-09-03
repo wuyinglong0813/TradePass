@@ -62,10 +62,10 @@ class ReconciliationAccountServiceTest {
 
         ArgumentCaptor<Object[]> args = ArgumentCaptor.forClass(Object[].class);
         verify(jdbc, times(2)).update(contains("ON DUPLICATE KEY UPDATE"), args.capture());
-        assertThat(args.getAllValues().get(0)[0]).isEqualTo(3L);
-        assertThat(args.getAllValues().get(0)[1]).isEqualTo(9L);
-        assertThat(args.getAllValues().get(1)[8]).isEqualTo(9L);
-        assertThat(args.getAllValues().get(1)[9]).isEqualTo(3L);
+        assertThat(args.getAllValues().get(0)[1]).isEqualTo(3L);
+        assertThat(args.getAllValues().get(0)[2]).isEqualTo(9L);
+        assertThat(args.getAllValues().get(1)[9]).isEqualTo(9L);
+        assertThat(args.getAllValues().get(1)[10]).isEqualTo(3L);
     }
 
     @Test
@@ -82,10 +82,10 @@ class ReconciliationAccountServiceTest {
 
         ArgumentCaptor<Object[]> args = ArgumentCaptor.forClass(Object[].class);
         verify(jdbc).update(contains("ON DUPLICATE KEY UPDATE"), args.capture());
-        assertThat(args.getValue()[3]).isEqualTo(ReconciliationAccountService.RETURN_ORDER);
-        assertThat(args.getValue()[7]).isEqualTo(new BigDecimal("-1000.00"));
-        assertThat(args.getValue()[8]).isEqualTo(9L);
-        assertThat(args.getValue()[9]).isEqualTo(3L);
+        assertThat(args.getValue()[4]).isEqualTo(ReconciliationAccountService.RETURN_ORDER);
+        assertThat(args.getValue()[8]).isEqualTo(new BigDecimal("-1000.00"));
+        assertThat(args.getValue()[9]).isEqualTo(9L);
+        assertThat(args.getValue()[10]).isEqualTo(3L);
     }
 
     @Test

@@ -62,7 +62,7 @@ class CompanyServiceTest {
 
     @BeforeEach
     void setUp() {
-        MybatisTestSupport.initialize(Company.class, CompanyMember.class, RoleDef.class);
+        MybatisTestSupport.initialize(Company.class, CompanyMember.class, RoleDef.class, CompanyInvite.class);
         companyMapper = mock(CompanyMapper.class);
         memberMapper = mock(CompanyMemberMapper.class);
         inviteMapper = mock(CompanyInviteMapper.class);
@@ -88,6 +88,7 @@ class CompanyServiceTest {
         when(memberMapper.update(any(Wrapper.class))).thenReturn(1);
         when(memberMapper.delete(any(Wrapper.class))).thenReturn(1);
         when(roleMapper.update(any(Wrapper.class))).thenReturn(1);
+        when(inviteMapper.update(any(Wrapper.class))).thenReturn(1);
         AuthContext.set(7L, 3L);
     }
 
@@ -172,6 +173,7 @@ class CompanyServiceTest {
 
         Company existing = company(11L, "旧名称");
         existing.setCreatedBy(7L);
+        existing.setCertificationStatus("PENDING");
         when(companyMapper.selectOne(any(Wrapper.class))).thenReturn(existing);
         when(companyMapper.selectById(11L)).thenReturn(existing);
         CompanyProfile updated = service.submitCompany(
@@ -192,6 +194,86 @@ class CompanyServiceTest {
                 new CompanySubmitRequest("10", "新企业", "NEW-CODE", "新法人")))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("请先完成个人实名认证，再创建或认证企业");
+    }
+
+    @Test
+    void verifiedCompanyCannotRenameItselfOrItsLegalRepresentative() {
+        Company company = company(3L, "认证名称");
+        company.setCreatedBy(7L);
+        company.setLegalPersonName("认证法人");
+        when(companyMapper.selectOne(any(Wrapper.class))).thenReturn(company);
+        assertThatThrownBy(() -> service.submitCompany(new CompanySubmitRequest(
+                "3", "另一个名称", company.getCreditCode(), "认证法人"))).hasMessageContaining("不能直接修改");
+        assertThatThrownBy(() -> service.submitCompany(new CompanySubmitRequest(
+                "3", "认证名称", company.getCreditCode(), "另一个法人"))).hasMessageContaining("不能直接修改");
+        verify(companyMapper, org.mockito.Mockito.never()).updateById(any(Company.class));
+        assertThat(company.getCertificationStatus()).isEqualTo("VERIFIED");
+        assertThat(company.getName()).isEqualTo("认证名称");
+    }
+
+    @Test
+    void verifiedCompanyCanUpdateContactInformationWithCurrentLegalPermission() {
+        Company company = company(3L, "认证名称");
+        company.setCreatedBy(7L); company.setLegalPersonName("认证法人");
+        when(companyMapper.selectOne(any(Wrapper.class))).thenReturn(company);
+        when(companyMapper.selectById(3L)).thenReturn(company);
+        service.submitCompany(new CompanySubmitRequest("3", "认证名称", company.getCreditCode(), "认证法人",
+                "新地址", "13800138000", "银行", "123456"));
+        verify(accessControl).requireLegal(3L);
+        verify(companyMapper).updateById(company);
+        assertThat(company.getRegisteredAddress()).isEqualTo("新地址");
+    }
+
+    @Test
+    void formerCreatorCannotEditVerifiedCompanyAfterLosingLegalRole() {
+        Company company = company(3L, "认证名称"); company.setCreatedBy(7L);
+        when(companyMapper.selectOne(any(Wrapper.class))).thenReturn(company);
+        org.mockito.Mockito.doThrow(new BusinessException("仅法人可操作")).when(accessControl).requireLegal(3L);
+        assertThatThrownBy(() -> service.submitCompany(new CompanySubmitRequest(
+                "3", company.getName(), company.getCreditCode(), company.getLegalPersonName()))).hasMessage("仅法人可操作");
+        verify(companyMapper, org.mockito.Mockito.never()).updateById(any(Company.class));
+    }
+
+    @Test
+    void identityCannotChangeWhileCertificationIsPending() {
+        Company company = company(3L, "审核中企业");
+        company.setCreatedBy(7L); company.setCertificationStatus("PENDING_REVIEW");
+        when(companyMapper.selectOne(any(Wrapper.class))).thenReturn(company);
+        assertThatThrownBy(() -> service.submitCompany(new CompanySubmitRequest(
+                "3", "修改名称", company.getCreditCode(), "法人"))).hasMessageContaining("不能直接修改");
+    }
+
+    @Test
+    void cooperationInvitationUsesCurrentCompanyEvenForMultiCompanyLegalUser() {
+        AuthContext.set(7L, 8L);
+        when(inviteMapper.selectOne(any(Wrapper.class))).thenReturn(invite(true));
+        when(memberMapper.selectOne(any(Wrapper.class))).thenAnswer(invocation -> {
+            var wrapper = (com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<CompanyMember>) invocation.getArgument(0);
+            // A query without the current-company condition would choose the user's other company.
+            String sql = wrapper.getSqlSegment();
+            CompanyMember member = new CompanyMember();
+            member.setCompanyId(sql.contains("company_id =") && wrapper.getParamNameValuePairs().containsValue(8L) ? 8L : 5L);
+            return member;
+        });
+        service.joinCompany(new JoinRequest("PARTNER1"));
+        ArgumentCaptor<CounterpartyRelationEntity> relation = ArgumentCaptor.forClass(CounterpartyRelationEntity.class);
+        verify(relationMapper).insert(relation.capture());
+        assertThat(relation.getValue().getCounterpartyCompanyId()).isEqualTo(8L);
+    }
+
+    @Test
+    void selfInvitationAndFailedRelationInsertDoNotConsumeInvitation() {
+        CompanyInvite invitation = invite(true);
+        when(inviteMapper.selectOne(any(Wrapper.class))).thenReturn(invitation);
+        assertThatThrownBy(() -> service.joinCompany(new JoinRequest("PARTNER1"))).hasMessageContaining("本企业");
+        AuthContext.set(7L, 8L);
+        CompanyMember member = new CompanyMember(); member.setCompanyId(8L);
+        when(memberMapper.selectOne(any(Wrapper.class))).thenReturn(member);
+        org.mockito.Mockito.doThrow(new org.springframework.dao.DataAccessResourceFailureException("数据库异常"))
+                .when(relationMapper).insert(any(CounterpartyRelationEntity.class));
+        assertThatThrownBy(() -> service.joinCompany(new JoinRequest("PARTNER1"))).hasMessage("数据库异常");
+        verify(inviteMapper, org.mockito.Mockito.never()).update(any(Wrapper.class));
+        assertThat(invitation.getUsed()).isFalse();
     }
 
     @Test
@@ -295,7 +377,7 @@ class CompanyServiceTest {
         assertThat(memberCaptor.getValue().getRoleCode()).isEqualTo("GUEST");
         assertThat(invite.getUsed()).isTrue();
         assertThat(invite.getUsedBy()).isEqualTo(7L);
-        verify(inviteMapper).updateById(invite);
+        verify(inviteMapper).update(any(Wrapper.class));
     }
 
     @Test
@@ -316,6 +398,7 @@ class CompanyServiceTest {
     @Test
     @SuppressWarnings("unchecked")
     void counterpartyInviteRequiresLegalMemberAndBuildsRelation() {
+        AuthContext.set(7L, 8L);
         CompanyInvite invite = invite(true);
         invite.setRelationRole("supplier");
         when(inviteMapper.selectOne(any(Wrapper.class))).thenReturn(invite);

@@ -220,7 +220,7 @@ public class CompanyCertificationService {
     }
 
     private Company requireCompany(long companyId) {
-        Company company = companyMapper.selectById(companyId);
+        Company company = companyMapper.selectByIdForUpdate(companyId);
         if (company == null) {
             throw new BusinessException("企业不存在");
         }

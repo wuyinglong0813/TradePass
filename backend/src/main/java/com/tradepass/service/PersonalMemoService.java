@@ -1,5 +1,7 @@
 package com.tradepass.service;
 
+import com.tradepass.common.ApplicationIds;
+
 import com.tradepass.common.AuthContext;
 import com.tradepass.common.BusinessException;
 import com.tradepass.entity.BusinessDocument;
@@ -71,10 +73,10 @@ public class PersonalMemoService {
         String value = content == null ? "" : content.trim();
         if (value.length() > 4000) throw new BusinessException("备忘录不能超过 4000 字");
         jdbc.update("""
-                INSERT INTO business_memo (company_id, user_id, biz_type, biz_id, content)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO business_memo (id, company_id, user_id, biz_type, biz_id, content)
+                VALUES (?, ?, ?, ?, ?, ?)
                 ON DUPLICATE KEY UPDATE content = VALUES(content), updated_at = CURRENT_TIMESTAMP
-                """, target.companyId(), AuthContext.userId(), target.type(), bizId, value);
+                """, ApplicationIds.next(), target.companyId(), AuthContext.userId(), target.type(), bizId, value);
         auditLogService.log(target.companyId(), "PERSONAL_MEMO", target.type() + ":" + bizId,
                 "UPDATE", "更新个人进展备忘录");
         return get(target.type(), bizId);

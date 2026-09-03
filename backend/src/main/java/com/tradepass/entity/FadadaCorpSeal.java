@@ -8,7 +8,7 @@ import java.time.LocalDateTime;
 
 @TableName("fadada_corp_seal")
 public class FadadaCorpSeal {
-    @TableId(type = IdType.AUTO)
+    @TableId(type = IdType.ASSIGN_ID)
     private Long id;
     private Long companyId;
     private String sealId;

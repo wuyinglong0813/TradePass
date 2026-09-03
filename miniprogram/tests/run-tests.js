@@ -1039,6 +1039,97 @@ test('home partner list is driven only by bound enterprise relations', () => {
   assert.ok(detail.includes("canSignContract: !!counterpartyCompanyId && hasPerm('contract_sign')"));
 });
 
+const largeIds = ['2098123456789012345', '2098123456789012346'];
+
+async function withIdPage(relativePath, check) {
+  const previousApp = global.getApp;
+  const previousWx = global.wx;
+  const idApp = { globalData: {
+    baseUrl: 'https://api.example.test', isLocalDevelopment: true,
+    token: 'id-test-token', currentCompanyId: largeIds[1]
+  }, getCurrentCompanyId: () => largeIds[1] };
+  global.getApp = () => idApp;
+  global.wx = { getStorageSync: () => '', showToast: () => {} };
+  try {
+    const definition = loadPage(relativePath);
+    const page = { ...definition, data: JSON.parse(JSON.stringify(definition.data)),
+      setData(values) { Object.assign(this.data, values); } };
+    await check(page);
+  } finally {
+    global.getApp = previousApp;
+    global.wx = previousWx;
+  }
+}
+
+for (const [file, method, collection] of [
+  ['contract-center', 'loadContracts', 'contracts'],
+  ['order-detail', 'loadContracts', 'contracts'],
+  ['contract-template', 'loadTemplates', 'templates']
+]) {
+  test(`${file} keeps adjacent 19-digit IDs distinct when loading records`, async () => {
+    await withIdPage(`../pages/${file}/${file}`, async page => {
+      wx.request = options => options.success({ statusCode: 200, data: { code: 0, data:
+        options.url.endsWith('/summary') ? {} : { items: largeIds.map(id => ({
+          id, name: '大整数记录', status: 'ACTIVE', amount: 1, counterpartyName: '往来企业'
+        })) }
+      } });
+      await page[method](true);
+      assert.deepStrictEqual(page.data[collection].map(item => item.id), largeIds);
+      let url;
+      wx.navigateTo = options => { url = options.url; };
+      if (file === 'contract-center') page.openContract({ currentTarget: { dataset: { item: page.data.contracts[0] } } });
+      if (file === 'contract-template') page.onTemplateTap({ currentTarget: { dataset: { template: page.data.templates[0] } } });
+      if (url) assert.ok(url.includes(largeIds[0]));
+    });
+  });
+}
+
+test('approval lists preserve contract, attachment and notification source IDs', async () => {
+  await withIdPage('../pages/contract-approval/contract-approval', async page => {
+    wx.request = options => options.success({ statusCode: 200, data: { code: 0,
+      data: [{ id: largeIds[0], contractId: largeIds[1], sourceId: largeIds[1],
+        approvalType: 'INVOICE', resultType: 'INVOICE', status: 'ACTIVE', isRead: true }]
+    } });
+    await page.loadPending();
+    assert.strictEqual(page.data.contracts[0].id, largeIds[0]);
+    assert.strictEqual(page.data.fulfillmentItems[0].id, largeIds[0]);
+    assert.strictEqual(page.data.fulfillmentItems[0].contractId, largeIds[1]);
+    assert.strictEqual(page.data.results[0].id, largeIds[0]);
+    assert.strictEqual(page.data.results[0].sourceId, largeIds[1]);
+    let url;
+    wx.navigateTo = options => { url = options.url; };
+    page.viewContract({ currentTarget: { dataset: { contract: page.data.contracts[0] } } });
+    assert.ok(url.endsWith(`contractId=${largeIds[0]}`));
+  });
+});
+
+test('contract submission sends the exact company ID and routes to the returned contract ID', async () => {
+  await withIdPage('../pages/sign-contract/sign-contract', async page => {
+    page.setData({ templates: [{ name: '测试模板' }], templateIndex: 0,
+      contractName: '测试合同', counterpartyName: '往来企业', counterpartyCompanyId: largeIds[1] });
+    wx.showModal = options => options.success({ confirm: true });
+    wx.showLoading = () => {};
+    wx.hideLoading = () => {};
+    let sent;
+    let url;
+    wx.request = options => {
+      sent = options;
+      options.success({ statusCode: 200, data: { code: 0, data: { id: largeIds[0] } } });
+    };
+    wx.redirectTo = options => { url = options.url; };
+    const previousTimeout = global.setTimeout;
+    let redirect;
+    global.setTimeout = callback => { redirect = callback; };
+    try {
+      await page.onSubmit();
+      assert.strictEqual(sent.data.counterpartyCompanyId, largeIds[1]);
+      assert.strictEqual(sent.header['X-Company-Id'], largeIds[1]);
+      redirect();
+      assert.ok(url.includes(`contractId=${largeIds[0]}&`));
+    } finally { global.setTimeout = previousTimeout; }
+  });
+});
+
 (async () => {
   let failed = 0;
   for (const { name, fn } of tests) {

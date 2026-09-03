@@ -2,6 +2,8 @@ package com.tradepass.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasc.open.api.utils.crypt.FddCryptUtil;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.tradepass.common.BusinessException;
 import com.tradepass.config.FadadaProperties;
 import com.tradepass.entity.FadadaCallbackEvent;
 import com.tradepass.mapper.FadadaCallbackEventMapper;
@@ -23,6 +25,7 @@ import java.util.Map;
 public class FadadaCallbackService {
     private static final Logger log = LoggerFactory.getLogger(FadadaCallbackService.class);
     private static final long MAX_CLOCK_SKEW_MILLIS = 300_000L;
+    private final ObjectMapper objectMapper = new ObjectMapper();
     private final FadadaProperties properties;
     private final FadadaCallbackEventMapper eventMapper;
     private final FadadaCallbackProcessor processor;
@@ -48,20 +51,72 @@ public class FadadaCallbackService {
         String eventId = safe(eventType) + ":" + safe(nonce);
         FadadaCallbackEvent event = eventMapper.selectOne(new LambdaQueryWrapper<FadadaCallbackEvent>()
                 .eq(FadadaCallbackEvent::getEventId, eventId).last("LIMIT 1"));
-        if (event != null) return;
+        if (event != null) {
+            retryExisting(event, bizContent);
+            return;
+        }
         event = new FadadaCallbackEvent();
         event.setEventId(eventId);
         event.setEventType(eventType);
         event.setSubjectType("CALLBACK");
         event.setPayloadSha256(sha256(bizContent));
+        event.setRetryPayload(retryPayload(bizContent));
+        event.setAttemptCount(0);
+        event.setNextAttemptAt(LocalDateTime.now());
         event.setStatus("RECEIVED");
         event.setReceivedAt(LocalDateTime.now());
         try {
             eventMapper.insert(event);
         } catch (DuplicateKeyException duplicate) {
+            FadadaCallbackEvent existing = eventMapper.selectOne(new LambdaQueryWrapper<FadadaCallbackEvent>()
+                    .eq(FadadaCallbackEvent::getEventId, eventId).last("LIMIT 1"));
+            if (existing != null) retryExisting(existing, bizContent);
             return;
         }
-        processor.processAsync(event.getId(), eventType, bizContent);
+        dispatch(event.getId());
+    }
+
+    private void retryExisting(FadadaCallbackEvent event, String body) {
+        if (!sha256(body).equals(event.getPayloadSha256())) {
+            log.warn("Ignored callback with conflicting payload: eventId={}", event.getId());
+            return;
+        }
+        if ("PROCESSED".equals(event.getStatus()) || "IGNORED".equals(event.getStatus())) return;
+        if (event.getRetryPayload() == null) {
+            eventMapper.restoreLegacyPayload(event.getId(), retryPayload(body), LocalDateTime.now());
+        }
+        dispatch(event.getId());
+    }
+
+    private void dispatch(Long id) {
+        try { processor.processAsync(id); }
+        catch (RuntimeException exception) {
+            // The event is already durable. The scheduled worker will recover it.
+            log.warn("Callback dispatch deferred to recovery worker: eventId={}", id, exception);
+        }
+    }
+
+    private String retryPayload(String body) {
+        try {
+            var source = objectMapper.readTree(body);
+            if (source == null || !source.isObject()) throw new IllegalArgumentException("Expected callback object");
+            var result = objectMapper.createObjectNode();
+            // Persist only routing identifiers and status details used by the processor,
+            // never arbitrary provider fields such as full identity documents or face data.
+            for (String field : java.util.List.of("clientUserId", "clientCorpId", "openCorpId", "signTaskId",
+                    "openUserId", "existOpenUserId", "authResult", "verifyStatus", "corpIdentProcessStatus",
+                    "corpIdentFailedReason", "authFailedReason", "identProcessStatus", "identMethod", "identFailedReason")) {
+                var value = source.get(field);
+                if (value != null && value.isValueNode() && !value.isNull()) {
+                    String text = value.asText();
+                    if (text.length() > 512) text = text.substring(0, 512);
+                    result.put(field, text);
+                }
+            }
+            return result.toString();
+        } catch (Exception exception) {
+            throw new BusinessException("回调数据格式不正确");
+        }
     }
 
     private boolean valid(String appId, String signType, String sign, String timestamp,

@@ -8,7 +8,7 @@ import java.time.LocalDateTime;
 
 @TableName("logistics_document")
 public class LogisticsDocument {
-    @TableId(type = IdType.AUTO)
+    @TableId(type = IdType.ASSIGN_ID)
     private Long id;
     private Long companyId;
     private Long contractId;

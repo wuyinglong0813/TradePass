@@ -3,9 +3,9 @@ tradepass:
     enabled: false
   demo-data:
     enabled: false
-  # 体验版临时账号：只匹配指定的两个测试手机号，正式上线前关闭。
+  # 正式环境禁用体验账号特权初始化，旧体验环境变量不再启用该功能。
   experience-test-accounts:
-    enabled: ${TRADEPASS_EXPERIENCE_TEST_ACCOUNTS_ENABLED:true}
+    enabled: false
   # 生产及云托管开发版默认使用真实认证链路；仅显式开启时使用旧模拟链路。
   ca:
     mock-enabled: ${TRADEPASS_CA_MOCK_ENABLED:false}

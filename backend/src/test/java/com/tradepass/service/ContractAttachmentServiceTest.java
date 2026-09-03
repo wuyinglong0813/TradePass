@@ -1,6 +1,7 @@
 package com.tradepass.service;
 
 import com.tradepass.common.AuthContext;
+import com.tradepass.support.TestIds;
 import com.tradepass.common.BusinessException;
 import com.tradepass.entity.TradeContract;
 import com.tradepass.config.StorageProperties;
@@ -41,6 +42,7 @@ class ContractAttachmentServiceTest {
 
     @BeforeEach
     void setUp() {
+        TestIds.use(8L);
         MybatisTestSupport.initialize(TradeContract.class);
         jdbc = mock(JdbcTemplate.class);
         contractMapper = mock(TradeContractMapper.class);
@@ -57,6 +59,7 @@ class ContractAttachmentServiceTest {
     @AfterEach
     void clearContext() {
         AuthContext.clear();
+        TestIds.reset();
     }
 
     @Test
@@ -67,7 +70,7 @@ class ContractAttachmentServiceTest {
                 "contentType", "application/pdf",
                 "fileSize", 9L
         );
-        when(jdbc.queryForObject(anyString(), eq(Long.class))).thenReturn(8L);
+        TestIds.use(8L);
         doReturn(List.of(row)).when(jdbc).query(anyString(), any(RowMapper.class), any(Object[].class));
 
         Map<String, Object> uploaded = service.upload(12L, "payment_voucher", "../转款凭证.pdf",
@@ -80,7 +83,7 @@ class ContractAttachmentServiceTest {
     void acceptsWordOnlyForOtherAttachments() throws Exception {
         byte[] docx = ooxml("word/document.xml");
         Map<String, Object> row = Map.of("id", 9L, "originalName", "说明.docx");
-        when(jdbc.queryForObject(anyString(), eq(Long.class))).thenReturn(9L);
+        TestIds.use(9L);
         doReturn(List.of(row)).when(jdbc).query(anyString(), any(RowMapper.class), any(Object[].class));
 
         assertThat(service.upload(12L, "OTHER", "说明.docx", docx, null, null))
@@ -96,7 +99,7 @@ class ContractAttachmentServiceTest {
         byte[] pdf = "%PDF-1.7".getBytes();
         byte[] docx = ooxml("word/document.xml");
         Map<String, Object> row = Map.of("id", 10L, "originalName", "发票.pdf");
-        when(jdbc.queryForObject(anyString(), eq(Long.class))).thenReturn(10L);
+        TestIds.use(10L);
         doReturn(List.of(row)).when(jdbc).query(anyString(), any(RowMapper.class), any(Object[].class));
 
         assertThat(service.upload(12L, "INVOICE", "发票.pdf", pdf, null, null,
@@ -193,7 +196,7 @@ class ContractAttachmentServiceTest {
         ContractAttachmentService ossService = new ContractAttachmentService(
                 jdbc, contractMapper, mock(AccessControlService.class), mock(AuditLogService.class),
                 storage, properties);
-        when(jdbc.queryForObject(anyString(), eq(Long.class))).thenReturn(8L);
+        TestIds.use(8L);
         doReturn(List.of(Map.of("id", 8L))).when(jdbc)
                 .query(anyString(), any(RowMapper.class), any(Object[].class));
 

@@ -123,7 +123,7 @@ public class CompanyService {
 
     @Transactional
     public CompanyProfile submitCompany(CompanySubmitRequest request) {
-        Company company = companyMapper.selectOne(new LambdaQueryWrapper<Company>().eq(Company::getCreditCode, request.creditCode()).last("LIMIT 1"));
+        Company company = companyMapper.selectOne(new LambdaQueryWrapper<Company>().eq(Company::getCreditCode, request.creditCode()).last("LIMIT 1 FOR UPDATE"));
         if (company == null) {
             if (personalIdentityService != null) {
                 PersonalIdentityPayload identity = personalIdentityService.requireCurrentVerified();
@@ -141,8 +141,19 @@ public class CompanyService {
         } else if (company.getCreatedBy() == null || company.getCreatedBy() != AuthContext.userId()) {
             throw new BusinessException("企业已入驻，请通过企业邀请或认领流程加入");
         }
-        company.setName(request.name());
-        company.setLegalPersonName(request.legalPersonName());
+        if (company.getId() != null && "VERIFIED".equals(company.getCertificationStatus())) {
+            accessControlService.requireLegal(company.getId());
+        }
+        boolean identityLocked = "VERIFIED".equals(company.getCertificationStatus())
+                || "PENDING_REVIEW".equals(company.getCertificationStatus());
+        if (identityLocked && (!java.util.Objects.equals(trim(company.getName()), trim(request.name()))
+                || !java.util.Objects.equals(trim(company.getLegalPersonName()), trim(request.legalPersonName())))) {
+            throw new BusinessException("认证中或已认证的企业名称及法人信息不能直接修改，请先处理企业认证变更");
+        }
+        if (!identityLocked) {
+            company.setName(request.name());
+            company.setLegalPersonName(request.legalPersonName());
+        }
         company.setRegisteredAddress(trim(request.registeredAddress()));
         company.setContactPhone(trim(request.contactPhone()));
         company.setBankName(trim(request.bankName()));
@@ -215,7 +226,7 @@ public class CompanyService {
     public JoinResult joinCompany(JoinRequest req) {
         CompanyInvite invite = companyInviteMapper.selectOne(new LambdaQueryWrapper<CompanyInvite>()
                 .eq(CompanyInvite::getCode, req.code())
-                .last("LIMIT 1"));
+                .last("LIMIT 1 FOR UPDATE"));
         if (invite == null) {
             throw new BusinessException("邀请码无效");
         }
@@ -228,8 +239,13 @@ public class CompanyService {
 
         long userId = AuthContext.userId();
         if ("counterparty".equals(invite.getType())) {
+            long currentCompanyId = AuthContext.requireCompanyId();
+            if (Long.valueOf(currentCompanyId).equals(invite.getCompanyId())) {
+                throw new BusinessException("不能接受本企业发出的合作邀请");
+            }
             CompanyMember legalMember = companyMemberMapper.selectOne(new LambdaQueryWrapper<CompanyMember>()
                     .eq(CompanyMember::getUserId, userId)
+                    .eq(CompanyMember::getCompanyId, currentCompanyId)
                     .eq(CompanyMember::getRoleCode, "LEGAL")
                     .eq(CompanyMember::getStatus, "ACTIVE")
                     .last("LIMIT 1"));
@@ -251,10 +267,7 @@ public class CompanyService {
             }
             relation.setRelationType("SUPPLIER");
             relation.setStatus("ACTIVE");
-            try {
-                counterpartyRelationMapper.insert(relation);
-            } catch (Exception ignored) {
-            }
+            counterpartyRelationMapper.insert(relation);
             markInviteUsed(invite, userId);
             String relationText = "supplier".equalsIgnoreCase(invite.getRelationRole()) ? "客户关系" : "供应商关系";
             return new JoinResult("ACTIVE", "已建立" + relationText);
@@ -478,7 +491,13 @@ public class CompanyService {
     private void markInviteUsed(CompanyInvite invite, long userId) {
         invite.setUsed(true);
         invite.setUsedBy(userId);
-        companyInviteMapper.updateById(invite);
+        int updated = companyInviteMapper.update(new LambdaUpdateWrapper<CompanyInvite>()
+                .eq(CompanyInvite::getId, invite.getId())
+                .eq(CompanyInvite::getUsed, false)
+                .gt(CompanyInvite::getExpiresAt, LocalDateTime.now())
+                .set(CompanyInvite::getUsed, true)
+                .set(CompanyInvite::getUsedBy, userId));
+        if (updated != 1) throw new BusinessException("邀请码已被使用或已过期，请刷新后重试");
     }
 
     private CompanyProfile toCompanyProfile(Company company) {

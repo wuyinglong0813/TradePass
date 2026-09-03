@@ -1,5 +1,7 @@
 package com.tradepass.service;
 
+import com.tradepass.common.ApplicationIds;
+
 import com.tradepass.common.AuthContext;
 import com.tradepass.common.BusinessException;
 import com.tradepass.entity.TradeContract;
@@ -204,31 +206,31 @@ public class ContractAttachmentService {
         String sha256 = FileTypeInspector.sha256(data);
         ObjectStorageService.StoredObject stored = store(companyId, contractId, normalized,
                 contentType, data, sha256);
+        Long id = ApplicationIds.next();
         if (stored == null) {
             jdbc.update("""
                     INSERT INTO contract_attachment
-                    (contract_id, uploader_company_id, recipient_company_id, category, status,
+                    (id, contract_id, uploader_company_id, recipient_company_id, category, status,
                      original_name, content_type, file_size, file_data, sha256, voucher_date,
                      voucher_amount, invoice_no, invoice_date, invoice_amount, created_by)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, contractId, companyId, recipientCompanyId, normalized, status,
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, id, contractId, companyId, recipientCompanyId, normalized, status,
                     safeName, contentType, data.length, data, sha256, parsedDate, parsedAmount,
                     emptyToNull(safeInvoiceNo), parsedInvoiceDate, parsedInvoiceAmount, AuthContext.userId());
         } else {
             jdbc.update("""
                     INSERT INTO contract_attachment
-                    (contract_id, uploader_company_id, recipient_company_id, category, status,
+                    (id, contract_id, uploader_company_id, recipient_company_id, category, status,
                      original_name, content_type, file_size, file_data, sha256, storage_provider,
                      storage_bucket, object_key, object_version_id, etag, encryption_algorithm,
                      voucher_date, voucher_amount, invoice_no, invoice_date, invoice_amount, created_by)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, contractId, companyId, recipientCompanyId, normalized, status,
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, id, contractId, companyId, recipientCompanyId, normalized, status,
                     safeName, contentType, data.length,
                     sha256, stored.provider(), stored.bucket(), stored.objectKey(), stored.versionId(),
                     stored.etag(), stored.encryptionAlgorithm(), parsedDate, parsedAmount,
                     emptyToNull(safeInvoiceNo), parsedInvoiceDate, parsedInvoiceAmount, AuthContext.userId());
         }
-        Long id = jdbc.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
         auditLogService.log(companyId, "CONTRACT_ATTACHMENT", id,
                 "UPLOAD", (OTHER.equals(normalized) ? "上传" : "提交待确认")
                         + categoryLabel(normalized) + " " + safeName);

@@ -1,5 +1,7 @@
 package com.tradepass.service;
 
+import com.tradepass.common.ApplicationIds;
+
 import com.tradepass.common.AuthContext;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -135,10 +137,10 @@ public class ApprovalService {
                              String rejectedReason) {
         jdbc.update("""
                 INSERT INTO approval_result_notification
-                    (recipient_company_id, source_company_id, result_type, source_id,
+                    (id, recipient_company_id, source_company_id, result_type, source_id,
                      contract_id, result_status, title, detail, rejected_reason)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, recipientCompanyId, sourceCompanyId, resultType, sourceId,
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, ApplicationIds.next(), recipientCompanyId, sourceCompanyId, resultType, sourceId,
                 contractId, resultStatus, title, detail,
                 rejectedReason == null || rejectedReason.isBlank() ? null : rejectedReason.trim());
     }

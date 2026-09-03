@@ -1,6 +1,7 @@
 package com.tradepass.service;
 
 import com.tradepass.common.AuthContext;
+import com.tradepass.support.TestIds;
 import com.tradepass.common.BusinessException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -33,6 +34,7 @@ class ProjectLedgerServiceTest {
 
     @BeforeEach
     void setUp() {
+        TestIds.use(51L);
         jdbc = mock(JdbcTemplate.class);
         accessControlService = mock(AccessControlService.class);
         service = new ProjectLedgerService(jdbc, accessControlService, mock(AuditLogService.class));
@@ -42,12 +44,13 @@ class ProjectLedgerServiceTest {
     @AfterEach
     void clearContext() {
         AuthContext.clear();
+        TestIds.reset();
     }
 
     @Test
     void createsAnOptionalCompanyProjectWithoutTouchingContracts() {
         Map<String, Object> project = project(51L, "雄安办公楼一期");
-        when(jdbc.queryForObject("SELECT LAST_INSERT_ID()", Long.class)).thenReturn(51L);
+        TestIds.use(51L);
         doReturn(List.of(project)).when(jdbc)
                 .query(anyString(), any(RowMapper.class), any(Object[].class));
 
@@ -57,10 +60,10 @@ class ProjectLedgerServiceTest {
         verify(accessControlService).requireManager(4L);
         ArgumentCaptor<Object[]> arguments = ArgumentCaptor.forClass(Object[].class);
         verify(jdbc).update(anyString(), arguments.capture());
-        assertThat(arguments.getValue()[0]).isEqualTo(4L);
-        assertThat(arguments.getValue()[1].toString()).startsWith("XM-");
-        assertThat(arguments.getValue()[2]).isEqualTo("雄安办公楼一期");
-        assertThat(arguments.getValue()[3]).isEqualTo("项目说明");
+        assertThat(arguments.getValue()[1]).isEqualTo(4L);
+        assertThat(arguments.getValue()[2].toString()).startsWith("XM-");
+        assertThat(arguments.getValue()[3]).isEqualTo("雄安办公楼一期");
+        assertThat(arguments.getValue()[4]).isEqualTo("项目说明");
     }
 
     @Test
@@ -90,7 +93,7 @@ class ProjectLedgerServiceTest {
         assertThat(result).containsEntry("id", 51L).containsEntry("contracts", List.of());
         ArgumentCaptor<Object[]> arguments = ArgumentCaptor.forClass(Object[].class);
         verify(jdbc).update(anyString(), arguments.capture());
-        assertThat(arguments.getValue()).containsExactly(4L, 51L, 12L, 8L);
+        assertThat(arguments.getValue()).containsExactly(51L, 4L, 51L, 12L, 8L);
     }
 
     @Test

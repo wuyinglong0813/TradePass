@@ -51,6 +51,7 @@ class TradeServiceTest {
     private RankingCacheService rankingCache;
     private ContractArchiveService contractArchiveService;
     private ApprovalService approvalService;
+    private ContractSigningCancellationService signingCancellation;
     private TradeService service;
 
     @BeforeEach
@@ -74,6 +75,9 @@ class TradeServiceTest {
                 contractMapper, companyMapper, accessControl, auditLogService,
                 rankingCache, contractArchiveService);
         service.setApprovalService(approvalService);
+        signingCancellation = mock(ContractSigningCancellationService.class);
+        service.setSigningCancellation(signingCancellation);
+        when(contractMapper.update(any(Wrapper.class))).thenReturn(1);
         AuthContext.set(7L, 3L);
     }
 
@@ -301,6 +305,9 @@ class TradeServiceTest {
         when(contractMapper.update(any(Wrapper.class))).thenReturn(1);
 
         assertThat(service.cancelContract(41L)).isEqualTo("合同审批已撤回");
+        var cancellationOrder = org.mockito.Mockito.inOrder(signingCancellation, contractMapper);
+        cancellationOrder.verify(signingCancellation).cancelForChange(outgoing, "发起方撤回合同");
+        cancellationOrder.verify(contractMapper).update(any(Wrapper.class));
         verify(approvalService).recordResult(9L, 3L, "CONTRACT", 41L, null,
                 "CANCELLED", "合同已被发起方撤回", "发起方已撤回合同 HT-41", null);
 
@@ -320,9 +327,36 @@ class TradeServiceTest {
 
         ContractPayload resubmitted = service.resubmitContract(41L, changed);
         assertThat(resubmitted.id()).isEqualTo("41");
+        verify(signingCancellation).cancelForChange(outgoing, "合同修改，终止旧版本签署");
 
         outgoing.setStatus("REJECTED");
         assertThat(service.deleteContract(41L)).isEqualTo("合同已从我方列表删除");
+    }
+
+    @Test
+    void deniedContractChangesCannotCancelExternalSigning() {
+        org.mockito.Mockito.doThrow(new BusinessException("无合同权限"))
+                .when(accessControl).requirePermission(3L, "contract_sign");
+        assertThatThrownBy(() -> service.cancelContract(41L)).hasMessage("无合同权限");
+        assertThatThrownBy(() -> service.rejectContract(41L)).hasMessage("无合同权限");
+        org.mockito.Mockito.verifyNoInteractions(signingCancellation);
+    }
+
+    @Test
+    void foreignContractChangesCannotCancelExternalSigning() {
+        when(contractMapper.selectOne(any(Wrapper.class))).thenReturn(null);
+        assertThatThrownBy(() -> service.cancelContract(41L)).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> service.rejectContract(41L)).isInstanceOf(BusinessException.class);
+        org.mockito.Mockito.verifyNoInteractions(signingCancellation);
+    }
+
+    @Test
+    void electronicActivationRejectsOldVersionEvenIfContractAlreadyActive() {
+        TradeContract contract = new TradeContract(); contract.setId(41L); contract.setVersionNo(2); contract.setStatus("ACTIVE");
+        when(contractMapper.selectByIdForUpdate(41L)).thenReturn(contract);
+        assertThatThrownBy(() -> service.activateAfterElectronicSignature(41L, 1, 7L)).hasMessageContaining("版本不一致");
+        assertThatThrownBy(() -> service.voidAfterElectronicAbolish(41L, 1, 7L)).hasMessageContaining("版本不一致");
+        verify(contractMapper, org.mockito.Mockito.never()).update(any(Wrapper.class));
     }
 
     @Test
@@ -384,6 +418,7 @@ class TradeServiceTest {
         AuthContext.set(7L, null);
         assertThat(service.pendingContracts()).isEmpty();
 
+        when(contractMapper.update(any(Wrapper.class))).thenReturn(1);
         AuthContext.set(7L, 3L);
         assertThat(service.pendingContracts()).isEmpty();
 

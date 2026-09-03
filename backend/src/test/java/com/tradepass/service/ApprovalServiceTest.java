@@ -31,7 +31,8 @@ class ApprovalServiceTest {
         verify(jdbc).update(sql.capture(), values.capture());
         assertThat(sql.getValue()).contains("approval_result_notification", "VALUES");
         assertThat(sql.getValue()).doesNotContain("ON DUPLICATE KEY UPDATE");
-        assertThat(values.getValue()).containsExactly(
+        assertThat((Long) values.getValue()[0]).isPositive();
+        assertThat(java.util.Arrays.copyOfRange(values.getValue(), 1, values.getValue().length)).containsExactly(
                 3L, 4L, "INVOICE", 18L, 12L, "REJECTED",
                 "发票已被驳回", "对方已驳回发票 invoice.pdf", "金额不一致");
     }

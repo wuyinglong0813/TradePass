@@ -61,7 +61,7 @@ class CompanyCertificationServiceTest {
         Company company = company();
         company.setRealNameStatus("VERIFIED");
         company.setFaceStatus("VERIFIED");
-        when(companyMapper.selectById(3L)).thenReturn(company);
+        when(companyMapper.selectByIdForUpdate(3L)).thenReturn(company);
         CompanyCertificationService service = service(true, "");
 
         CertificationApplicationPayload payload = service.submit(3L);
@@ -77,7 +77,7 @@ class CompanyCertificationServiceTest {
     @Test
     void productionCallbackIsSecretProtectedAndIdempotent() {
         Company company = company();
-        when(companyMapper.selectById(3L)).thenReturn(company);
+        when(companyMapper.selectByIdForUpdate(3L)).thenReturn(company);
         CompanyCertificationApplication application = new CompanyCertificationApplication();
         application.setId(18L);
         application.setCompanyId(3L);
@@ -100,7 +100,7 @@ class CompanyCertificationServiceTest {
         Company company = company();
         company.setRealNameStatus("VERIFIED");
         company.setFaceStatus("VERIFIED");
-        when(companyMapper.selectById(3L)).thenReturn(company);
+        when(companyMapper.selectByIdForUpdate(3L)).thenReturn(company);
         when(memberMapper.update(any(Wrapper.class))).thenReturn(0);
         when(memberMapper.selectCount(any(Wrapper.class))).thenReturn(1L);
 

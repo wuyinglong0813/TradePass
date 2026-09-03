@@ -2,6 +2,7 @@ package com.tradepass.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tradepass.common.AuthContext;
+import com.tradepass.support.TestIds;
 import com.tradepass.common.BusinessException;
 import com.tradepass.entity.BusinessDocument;
 import com.tradepass.entity.TradeContract;
@@ -24,6 +25,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
@@ -54,6 +56,7 @@ class SalesOrderInventoryServiceTest {
 
     @BeforeEach
     void setUp() {
+        TestIds.use(60L);
         MybatisTestSupport.initialize(BusinessDocument.class, TradeContract.class);
         jdbc = mock(JdbcTemplate.class);
         documentMapper = mock(BusinessDocumentMapper.class);
@@ -85,6 +88,7 @@ class SalesOrderInventoryServiceTest {
                  "rows":[["1","商品A","A-1","件","2","3.5","7",""]]}
                 """);
         when(documentMapper.selectById(31L)).thenReturn(document);
+        when(documentMapper.selectByIdForUpdate(31L)).thenReturn(document);
 
         contract = new TradeContract();
         contract.setId(12L);
@@ -109,6 +113,7 @@ class SalesOrderInventoryServiceTest {
     @AfterEach
     void clearContext() {
         AuthContext.clear();
+        TestIds.reset();
     }
 
     @Test
@@ -159,7 +164,7 @@ class SalesOrderInventoryServiceTest {
         service.saveDocumentItems(document);
 
         verify(jdbc).update(argThat(sql -> sql.contains("business_document_item")),
-                eq(31L), eq(3L), eq(4L), eq(2), eq("FEE"), eq("运费"), eq(""), eq("项"),
+                anyLong(), eq(31L), eq(3L), eq(4L), eq(2), eq("FEE"), eq("运费"), eq(""), eq("项"),
                 eq(new BigDecimal("1.0000")), eq(new BigDecimal("15.000000")),
                 eq(new BigDecimal("15.00")), eq("送货上门"));
     }
@@ -230,7 +235,7 @@ class SalesOrderInventoryServiceTest {
         doReturn(List.of(warehouse), List.of(balance), List.of(warehouse))
                 .when(jdbc).query(anyString(), any(RowMapper.class), any(Object[].class));
         when(jdbc.queryForObject(anyString(), eq(Long.class), any(Object[].class))).thenReturn(1L);
-        when(jdbc.queryForObject(anyString(), eq(Long.class))).thenReturn(55L);
+        TestIds.use(55L);
 
         assertThat(service.listWarehouses()).containsExactly(warehouse);
         Map<String, Object> overview = service.inventoryOverview();
@@ -256,7 +261,7 @@ class SalesOrderInventoryServiceTest {
         document.setStatus("ISSUED");
         doReturn(null).when(jdbc).query(anyString(), any(ResultSetExtractor.class), any(Object[].class));
         doReturn(List.of(item)).when(jdbc).query(anyString(), any(RowMapper.class), any(Object[].class));
-        when(jdbc.queryForObject(anyString(), eq(Long.class))).thenReturn(60L);
+        TestIds.use(60L);
 
         Map<String, Object> result = service.receive(
                 31L, "receive_only", null, null, "签名.png", SIGNATURE);
@@ -304,7 +309,7 @@ class SalesOrderInventoryServiceTest {
                 .query(anyString(), any(ResultSetExtractor.class), any(Object[].class));
         doReturn(List.of(item), List.of(), List.of(item)).when(jdbc)
                 .query(anyString(), any(RowMapper.class), any(Object[].class));
-        when(jdbc.queryForObject(anyString(), eq(Long.class))).thenReturn(60L, 70L, 80L);
+        TestIds.use(60L, 70L, 80L);
         when(jdbc.queryForObject(anyString(), eq(Long.class), any(Object[].class))).thenReturn(1L);
         when(jdbc.queryForObject(anyString(), eq(BigDecimal.class), any(Object[].class)))
                 .thenReturn(new BigDecimal("2.0000"));
@@ -350,7 +355,7 @@ class SalesOrderInventoryServiceTest {
         when(jdbc.queryForObject(anyString(), eq(Long.class), any(Object[].class)))
                 .thenAnswer(invocation -> invocation.<String>getArgument(0)
                         .contains("bilateral_action_request") ? 0L : 1L);
-        when(jdbc.queryForObject(anyString(), eq(Long.class))).thenReturn(60L, 70L, 80L, 90L);
+        TestIds.use(60L, 70L, 71L, 80L, 90L, 91L, 92L, 93L);
         when(jdbc.queryForObject(anyString(), eq(BigDecimal.class), any(Object[].class)))
                 .thenReturn(new BigDecimal("2.0000"));
 
@@ -360,13 +365,13 @@ class SalesOrderInventoryServiceTest {
         assertThat(result).containsEntry("status", "INBOUNDED");
         assertThat(document.getInboundWarehouseId()).isEqualTo(55L);
         verify(jdbc).update(argThat(sql -> sql.contains("'RETURN_ORDER_OUTBOUND'")),
-                eq(4L), eq(44L), eq(501L), eq(70L),
+                anyLong(), eq(4L), eq(44L), eq(501L), eq(70L),
                 eq(new BigDecimal("-2.0000")), eq(new BigDecimal("8.0000")), eq(18L));
         verify(jdbc).update(argThat(sql -> sql.contains("INSERT INTO inventory_inbound")),
-                eq(3L), eq(55L), eq(31L), anyString(), eq(18L));
+                eq(80L), eq(3L), eq(55L), eq(31L), anyString(), eq(18L));
         verify(jdbc).update(argThat(sql -> sql.contains("INSERT INTO inventory_transaction")
                         && !sql.contains("'RETURN_ORDER_OUTBOUND'")),
-                eq(3L), eq(55L), eq(90L), eq("RETURN_ORDER_INBOUND"), eq(70L),
+                anyLong(), eq(3L), eq(55L), eq(90L), eq("RETURN_ORDER_INBOUND"), eq(70L),
                 eq(new BigDecimal("2.0000")), eq(new BigDecimal("2.0000")), eq(18L));
     }
 
@@ -378,7 +383,7 @@ class SalesOrderInventoryServiceTest {
 
         AuthContext.set(8L, 4L);
         doReturn(null).when(jdbc).query(anyString(), any(ResultSetExtractor.class), any(Object[].class));
-        when(jdbc.queryForObject(anyString(), eq(Long.class))).thenReturn(60L);
+        TestIds.use(60L);
         assertThatThrownBy(() -> service.receive(
                 31L, "INBOUND", null, null, "签名.png", SIGNATURE))
                 .isInstanceOf(BusinessException.class).hasMessage("请选择入库仓库");

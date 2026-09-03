@@ -10,7 +10,7 @@ import java.time.LocalDateTime;
 
 @TableName("trade_order")
 public class TradeOrder {
-    @TableId(type = IdType.AUTO)
+    @TableId(type = IdType.ASSIGN_ID)
     private Long id;
     private Long companyId;
     private Long contractId;

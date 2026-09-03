@@ -179,8 +179,14 @@ public class FadadaCompanyService {
 
     public FadadaCorpIdentity requireVerified(long companyId) {
         FadadaCorpIdentity identity = find(companyId);
-        if (identity == null || !"VERIFIED".equals(identity.getLocalStatus()) || !hasText(identity.getOpenCorpId())) {
+        Company company = companyMapper.selectById(companyId);
+        if (identity == null || company == null || !"VERIFIED".equals(company.getCertificationStatus())
+                || !"VERIFIED".equals(identity.getLocalStatus()) || !hasText(identity.getOpenCorpId())) {
             throw new BusinessException("请先完成企业认证");
+        }
+        if (!normalize(company.getName()).equals(normalize(identity.getVerifiedName()))
+                || !normalize(company.getCreditCode()).equals(normalize(identity.getVerifiedCreditCode()))) {
+            throw new BusinessException("企业信息与认证记录不一致，请重新核验企业认证");
         }
         for (String scope : AUTH_SCOPES) {
             if (!hasText(identity.getAuthScopes()) || !identity.getAuthScopes().contains("\"" + scope + "\"")) {
@@ -283,7 +289,7 @@ public class FadadaCompanyService {
     }
 
     private Company requireCompany(long companyId) {
-        Company company = companyMapper.selectById(companyId);
+        Company company = companyMapper.selectByIdForUpdate(companyId);
         if (company == null) throw new BusinessException("企业不存在");
         return company;
     }

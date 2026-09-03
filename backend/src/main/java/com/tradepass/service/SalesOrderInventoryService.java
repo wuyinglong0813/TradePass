@@ -1,5 +1,7 @@
 package com.tradepass.service;
 
+import com.tradepass.common.ApplicationIds;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tradepass.common.AuthContext;
@@ -88,10 +90,10 @@ public class SalesOrderInventoryService {
         for (SalesItem item : items) {
             jdbc.update("""
                     INSERT INTO business_document_item
-                    (document_id, issuer_company_id, recipient_company_id, line_no, line_type, product_name,
+                    (id, document_id, issuer_company_id, recipient_company_id, line_no, line_type, product_name,
                      specification, base_unit, quantity, unit_price, amount, remark)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, document.getId(), document.getCompanyId(), document.getRecipientCompanyId(),
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, ApplicationIds.next(), document.getId(), document.getCompanyId(), document.getRecipientCompanyId(),
                     item.lineNo(), item.lineType(), item.productName(), item.specification(), item.baseUnit(),
                     item.quantity(), item.unitPrice(), item.amount(), item.remark());
         }
@@ -205,15 +207,15 @@ public class SalesOrderInventoryService {
         String safeAddress = address == null ? "" : address.trim();
         if (safeName.isBlank() || safeName.length() > 128) throw new BusinessException("仓库名称不能为空且不能超过 128 字");
         if (safeAddress.length() > 256) throw new BusinessException("仓库地址不能超过 256 字");
+        Long id = ApplicationIds.next();
         try {
             jdbc.update("""
-                    INSERT INTO warehouse (company_id, name, address, created_by)
-                    VALUES (?, ?, ?, ?)
-                    """, companyId, safeName, safeAddress, AuthContext.userId());
+                    INSERT INTO warehouse (id, company_id, name, address, created_by)
+                    VALUES (?, ?, ?, ?, ?)
+                    """, id, companyId, safeName, safeAddress, AuthContext.userId());
         } catch (DuplicateKeyException exception) {
             throw new BusinessException("仓库名称已存在");
         }
-        Long id = jdbc.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
         auditLogService.log(companyId, "WAREHOUSE", id, "CREATE", "创建仓库 " + safeName);
         return listWarehouses().stream().filter(item -> id != null && id.equals(item.get("id")))
                 .findFirst().orElseThrow(() -> new BusinessException("仓库创建失败"));
@@ -302,7 +304,7 @@ public class SalesOrderInventoryService {
                                        String rejectedReason, String signatureName,
                                        byte[] signatureData) {
         long companyId = AuthContext.requireCompanyId();
-        BusinessDocument document = documentMapper.selectById(documentId);
+        BusinessDocument document = documentMapper.selectByIdForUpdate(documentId);
         if (document != null && "RETURN_ORDER".equals(document.getDocumentType())) {
             accessControlService.requireAnyPermission(companyId,
                     "sales_order_receive", "contract_sign", "order_create");
@@ -389,14 +391,14 @@ public class SalesOrderInventoryService {
 
         Long receiptId = existingReceipt(companyId, documentId);
         if (receiptId == null) {
+            receiptId = ApplicationIds.next();
             jdbc.update("""
                     INSERT INTO sales_order_receipt
-                    (company_id, document_id, decision, status, received_by)
-                    VALUES (?, ?, ?, ?, ?)
-                    """, companyId, documentId, normalized,
+                    (id, company_id, document_id, decision, status, received_by)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """, receiptId, companyId, documentId, normalized,
                     INBOUND.equals(normalized) ? "INBOUNDING" : "RECEIVED_PENDING_INBOUND",
                     AuthContext.userId());
-            receiptId = jdbc.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
         } else {
             jdbc.update("UPDATE sales_order_receipt SET decision = ?, status = ? WHERE id = ?",
                     normalized, INBOUND.equals(normalized) ? "INBOUNDING" : "RECEIVED_PENDING_INBOUND", receiptId);
@@ -443,12 +445,12 @@ public class SalesOrderInventoryService {
                 ? createReturnTransfer(document, items, AuthContext.userId()) : null;
 
         String inboundNo = createInboundNo();
+        Long inboundId = ApplicationIds.next();
         jdbc.update("""
                 INSERT INTO inventory_inbound
-                (company_id, warehouse_id, source_document_id, inbound_no, created_by)
-                VALUES (?, ?, ?, ?, ?)
-                """, companyId, warehouseId, documentId, inboundNo, AuthContext.userId());
-        Long inboundId = jdbc.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
+                (id, company_id, warehouse_id, source_document_id, inbound_no, created_by)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """, inboundId, companyId, warehouseId, documentId, inboundNo, AuthContext.userId());
         for (Map<String, Object> item : items) {
             BigDecimal quantity = (BigDecimal) item.get("quantity");
             if (quantity == null || quantity.signum() <= 0) throw new BusinessException("销售单商品数量必须大于 0");
@@ -460,8 +462,8 @@ public class SalesOrderInventoryService {
                     String.valueOf(item.get("baseUnit")));
             jdbc.update("""
                     INSERT INTO inventory_balance
-                    (company_id, warehouse_id, product_id, quantity, unit_price, inventory_amount)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    (id, company_id, warehouse_id, product_id, quantity, unit_price, inventory_amount)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
                     ON DUPLICATE KEY UPDATE
                         unit_price = CASE
                             WHEN quantity + VALUES(quantity) = 0 THEN 0
@@ -471,22 +473,22 @@ public class SalesOrderInventoryService {
                         inventory_amount = inventory_amount + VALUES(inventory_amount),
                         quantity = quantity + VALUES(quantity),
                         updated_at = CURRENT_TIMESTAMP
-                    """, companyId, warehouseId, productId, quantity, unitPrice, inboundAmount);
+                    """, ApplicationIds.next(), companyId, warehouseId, productId, quantity, unitPrice, inboundAmount);
             BigDecimal balance = jdbc.queryForObject("""
                     SELECT quantity FROM inventory_balance
                     WHERE company_id = ? AND warehouse_id = ? AND product_id = ?
                     """, BigDecimal.class, companyId, warehouseId, productId);
             jdbc.update("""
                     INSERT INTO inventory_inbound_item
-                    (inbound_id, document_item_id, product_id, quantity, unit_price, amount)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                    """, inboundId, item.get("id"), productId, quantity, unitPrice, inboundAmount);
+                    (id, inbound_id, document_item_id, product_id, quantity, unit_price, amount)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """, ApplicationIds.next(), inboundId, item.get("id"), productId, quantity, unitPrice, inboundAmount);
             jdbc.update("""
                     INSERT INTO inventory_transaction
-                    (company_id, warehouse_id, product_id, biz_type, biz_id,
+                    (id, company_id, warehouse_id, product_id, biz_type, biz_id,
                      quantity_delta, balance_after, created_by)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    """, companyId, warehouseId, productId,
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, ApplicationIds.next(), companyId, warehouseId, productId,
                     "RETURN_ORDER".equals(document.getDocumentType())
                             ? "RETURN_ORDER_INBOUND" : "SALES_ORDER_INBOUND",
                     returnOrder ? transferId : inboundId, quantity, balance, AuthContext.userId());
@@ -518,7 +520,7 @@ public class SalesOrderInventoryService {
 
     @Transactional
     public void reverseDocumentInventory(Long documentId, long actionRequestId, long userId) {
-        BusinessDocument document = documentMapper.selectById(documentId);
+        BusinessDocument document = documentMapper.selectByIdForUpdate(documentId);
         if (document == null || !"INBOUNDED".equals(document.getStatus())) return;
         if ("RETURN_ORDER".equals(document.getDocumentType())) {
             reverseReturnTransfer(documentId, actionRequestId, userId);
@@ -617,10 +619,10 @@ public class SalesOrderInventoryService {
                 movement.companyId(), movement.warehouseId(), movement.productId());
         jdbc.update("""
                 INSERT INTO inventory_transaction
-                (company_id, warehouse_id, product_id, biz_type, biz_id,
+                (id, company_id, warehouse_id, product_id, biz_type, biz_id,
                  quantity_delta, balance_after, created_by)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """, movement.companyId(), movement.warehouseId(), movement.productId(),
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, ApplicationIds.next(), movement.companyId(), movement.warehouseId(), movement.productId(),
                 bizType, bizId, delta, nextQuantity, userId);
     }
 
@@ -778,7 +780,7 @@ public class SalesOrderInventoryService {
         requireWarehouse(buyerCompanyId, document.getOutboundWarehouseId(), "退货方尚未选择出库仓库");
         requireWarehouse(supplierCompanyId, document.getInboundWarehouseId(), "收货方尚未选择入库仓库");
 
-        List<OutboundStock> stocks = new ArrayList<>();
+        Map<Long, OutboundStock> stocksByProduct = new java.util.TreeMap<>();
         for (Map<String, Object> item : items) {
             BigDecimal quantity = (BigDecimal) item.get("quantity");
             List<OutboundStock> matches = jdbc.query("""
@@ -798,24 +800,35 @@ public class SalesOrderInventoryService {
                     buyerCompanyId, document.getOutboundWarehouseId(),
                     String.valueOf(item.get("productName")), safeSpec(item.get("specification")),
                     String.valueOf(item.get("baseUnit")));
-            if (matches.isEmpty() || matches.get(0).balanceQuantity().compareTo(quantity) < 0) {
+            if (matches.isEmpty()) {
                 BigDecimal available = matches.isEmpty() ? BigDecimal.ZERO : matches.get(0).balanceQuantity();
                 throw new BusinessException("退货出库库存不足：" + item.get("productName")
                         + "，可用 " + available.stripTrailingZeros().toPlainString()
                         + "，需要 " + quantity.stripTrailingZeros().toPlainString());
             }
-            stocks.add(matches.get(0));
+            OutboundStock stock = matches.get(0);
+            stocksByProduct.merge(stock.productId(), stock, (first, next) -> new OutboundStock(
+                    first.productId(), first.quantity().add(next.quantity()), first.balanceQuantity(),
+                    first.unitPrice(), first.inventoryAmount(), first.productName()));
         }
 
+        for (OutboundStock stock : stocksByProduct.values()) {
+            if (stock.balanceQuantity().compareTo(stock.quantity()) < 0) {
+                throw new BusinessException("退货出库库存不足：" + stock.productName()
+                        + "，可用 " + stock.balanceQuantity().stripTrailingZeros().toPlainString()
+                        + "，合计需要 " + stock.quantity().stripTrailingZeros().toPlainString());
+            }
+        }
+
+        Long transferId = ApplicationIds.next();
         jdbc.update("""
                 INSERT INTO inventory_transfer
-                (source_document_id, outbound_company_id, outbound_warehouse_id,
+                (id, source_document_id, outbound_company_id, outbound_warehouse_id,
                  inbound_company_id, inbound_warehouse_id, created_by)
-                VALUES (?, ?, ?, ?, ?, ?)
-                """, document.getId(), buyerCompanyId, document.getOutboundWarehouseId(),
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, transferId, document.getId(), buyerCompanyId, document.getOutboundWarehouseId(),
                 supplierCompanyId, document.getInboundWarehouseId(), createdBy);
-        Long transferId = jdbc.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
-        for (OutboundStock stock : stocks) {
+        for (OutboundStock stock : stocksByProduct.values()) {
             BigDecimal averageCost = stock.balanceQuantity().signum() == 0
                     ? BigDecimal.ZERO : stock.inventoryAmount().divide(
                     stock.balanceQuantity(), 6, RoundingMode.HALF_UP);
@@ -832,10 +845,10 @@ public class SalesOrderInventoryService {
                     buyerCompanyId, document.getOutboundWarehouseId(), stock.productId());
             jdbc.update("""
                     INSERT INTO inventory_transaction
-                    (company_id, warehouse_id, product_id, biz_type, biz_id,
+                    (id, company_id, warehouse_id, product_id, biz_type, biz_id,
                      quantity_delta, balance_after, created_by)
-                    VALUES (?, ?, ?, 'RETURN_ORDER_OUTBOUND', ?, ?, ?, ?)
-                    """, buyerCompanyId, document.getOutboundWarehouseId(), stock.productId(),
+                    VALUES (?, ?, ?, ?, 'RETURN_ORDER_OUTBOUND', ?, ?, ?, ?)
+                    """, ApplicationIds.next(), buyerCompanyId, document.getOutboundWarehouseId(), stock.productId(),
                     transferId, stock.quantity().negate(), nextQuantity, createdBy);
         }
         return transferId;
@@ -853,12 +866,13 @@ public class SalesOrderInventoryService {
                         WHERE company_id = ? AND product_name = ? AND specification = ? AND base_unit = ? LIMIT 1
                         """, (rs, rowNum) -> rs.getLong(1), companyId, name, safeSpec, unit);
         if (!existing.isEmpty()) return existing.get(0);
+        Long productId = ApplicationIds.next();
         try {
             jdbc.update("""
-                    INSERT INTO inventory_product (company_id, product_name, specification, base_unit)
-                    VALUES (?, ?, ?, ?)
-                    """, companyId, name, safeSpec, unit);
-            return jdbc.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
+                    INSERT INTO inventory_product (id, company_id, product_name, specification, base_unit)
+                    VALUES (?, ?, ?, ?, ?)
+                    """, productId, companyId, name, safeSpec, unit);
+            return productId;
         } catch (DuplicateKeyException exception) {
             return jdbc.queryForObject("""
                     SELECT id FROM inventory_product

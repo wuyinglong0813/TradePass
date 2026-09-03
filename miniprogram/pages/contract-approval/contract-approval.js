@@ -80,7 +80,7 @@ Page({
       ]);
       const contracts = (contractList || []).map(item => ({
         ...item,
-        id: Number(item.id),
+        id: String(item.id),
         companyId: String(item.viewerCounterpartyCompanyId || item.companyId || ''),
         companyName: item.viewerCounterpartyName || item.counterpartyName || '往来公司',
         amountText: money(item.amount),
@@ -88,8 +88,8 @@ Page({
       }));
       const fulfillmentItems = (fulfillmentList || []).map(item => ({
         ...item,
-        id: Number(item.id),
-        contractId: Number(item.contractId),
+        id: String(item.id),
+        contractId: String(item.contractId),
         companyId: String(item.sourceCompanyId || ''),
         companyName: item.sourceCompanyName || '往来公司',
         amountText: item.amount == null ? '' : money(item.amount),
@@ -102,9 +102,9 @@ Page({
       }));
       const results = (resultList || []).map(item => ({
         ...item,
-        id: Number(item.id),
-        sourceId: Number(item.sourceId),
-        contractId: item.contractId == null ? null : Number(item.contractId),
+        id: String(item.id),
+        sourceId: String(item.sourceId),
+        contractId: item.contractId == null ? null : String(item.contractId),
         companyId: String(item.sourceCompanyId || ''),
         companyName: item.sourceCompanyName || '往来公司',
         iconText: resultIcon(item.resultType),

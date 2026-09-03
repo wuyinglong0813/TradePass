@@ -69,5 +69,8 @@ spring:
     baseline-version: 0
 
 mybatis-plus:
+  global-config:
+    db-config:
+      id-type: assign_id
   configuration:
     map-underscore-to-camel-case: true

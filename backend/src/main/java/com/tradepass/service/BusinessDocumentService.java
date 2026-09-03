@@ -303,7 +303,7 @@ public class BusinessDocumentService {
                 .eq(BusinessDocument::getCreatedBy, AuthContext.userId())
                 .in(BusinessDocument::getStatus, List.of("DRAFT", "REJECTED"))
                 .isNull(BusinessDocument::getDeletedAt)
-                .last("LIMIT 1"));
+                .last("LIMIT 1 FOR UPDATE"));
         if (document == null) throw new BusinessException("可删除的单据草稿不存在");
         if (bilateralActionService != null) {
             requireContractMutable(requireContractParty(document.getContractId(), companyId));
@@ -326,7 +326,7 @@ public class BusinessDocumentService {
                 .eq(BusinessDocument::getCreatedBy, AuthContext.userId())
                 .eq(BusinessDocument::getStatus, "ISSUED")
                 .isNull(BusinessDocument::getDeletedAt)
-                .last("LIMIT 1"));
+                .last("LIMIT 1 FOR UPDATE"));
         if (document == null) throw new BusinessException("可撤回的单据不存在");
         if (bilateralActionService != null) {
             requireContractMutable(requireContractParty(document.getContractId(), companyId));
@@ -655,7 +655,7 @@ public class BusinessDocumentService {
     }
 
     private BusinessDocument requireOwnedEditableDocument(Long id, long companyId) {
-        BusinessDocument document = documentMapper.selectById(id);
+        BusinessDocument document = documentMapper.selectByIdForUpdate(id);
         if (document == null || document.getDeletedAt() != null || (!SALES_ORDER.equals(document.getDocumentType())
                 && !RETURN_ORDER.equals(document.getDocumentType()))
                 || !Long.valueOf(companyId).equals(document.getCompanyId())

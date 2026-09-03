@@ -52,6 +52,7 @@ public class TradeService {
     private final RankingCacheService rankingCache;
     private final ContractArchiveService contractArchiveService;
     private ApprovalService approvalService;
+    private ContractSigningCancellationService signingCancellation;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Autowired
@@ -80,6 +81,11 @@ public class TradeService {
     @Autowired
     void setApprovalService(ApprovalService approvalService) {
         this.approvalService = approvalService;
+    }
+
+    @Autowired
+    void setSigningCancellation(ContractSigningCancellationService signingCancellation) {
+        this.signingCancellation = signingCancellation;
     }
 
     TradeService(TradeOrderMapper tradeOrderMapper,
@@ -381,14 +387,18 @@ public class TradeService {
     }
 
     @Transactional
-    public void activateAfterElectronicSignature(Long id, long completedBy) {
-        TradeContract contract = tradeContractMapper.selectById(id);
+    public void activateAfterElectronicSignature(Long id, int expectedVersion, long completedBy) {
+        TradeContract contract = tradeContractMapper.selectByIdForUpdate(id);
         if (contract == null) throw new BusinessException("合同不存在");
+        if (contract.getVersionNo() == null || contract.getVersionNo() != expectedVersion) {
+            throw new BusinessException("签署任务版本与合同版本不一致");
+        }
         if ("ACTIVE".equals(contract.getStatus())) return;
         if (!"PENDING".equals(contract.getStatus())) throw new BusinessException("合同状态已变化，不能生效");
         LocalDateTime approvedAt = LocalDateTime.now();
         int updated = tradeContractMapper.update(new LambdaUpdateWrapper<TradeContract>()
-                .eq(TradeContract::getId, id).eq(TradeContract::getStatus, "PENDING")
+                .eq(TradeContract::getId, id).eq(TradeContract::getVersionNo, expectedVersion)
+                .eq(TradeContract::getStatus, "PENDING")
                 .set(TradeContract::getStatus, "ACTIVE")
                 .set(TradeContract::getApprovedBy, completedBy)
                 .set(TradeContract::getApprovedAt, approvedAt));
@@ -403,12 +413,16 @@ public class TradeService {
     }
 
     @Transactional
-    public void voidAfterElectronicAbolish(Long id, long completedBy) {
-        TradeContract contract = tradeContractMapper.selectById(id);
+    public void voidAfterElectronicAbolish(Long id, int expectedVersion, long completedBy) {
+        TradeContract contract = tradeContractMapper.selectByIdForUpdate(id);
         if (contract == null) throw new BusinessException("合同不存在");
+        if (contract.getVersionNo() == null || contract.getVersionNo() != expectedVersion) {
+            throw new BusinessException("签署任务版本与合同版本不一致");
+        }
         if ("VOIDED".equals(contract.getStatus())) return;
         int updated = tradeContractMapper.update(new LambdaUpdateWrapper<TradeContract>()
-                .eq(TradeContract::getId, id).eq(TradeContract::getStatus, "ACTIVE")
+                .eq(TradeContract::getId, id).eq(TradeContract::getVersionNo, expectedVersion)
+                .eq(TradeContract::getStatus, "ACTIVE")
                 .set(TradeContract::getStatus, "VOIDED"));
         if (updated != 1) throw new BusinessException("合同状态已变化，请刷新后重试");
         auditLogService.logAs(contract.getCompanyId(), completedBy, "CONTRACT", id,
@@ -540,12 +554,14 @@ public class TradeService {
         long companyId = AuthContext.requireCompanyId();
         accessControlService.requirePermission(companyId, "contract_sign");
         TradeContract contract = ensurePendingIncomingContract(id, companyId);
-        tradeContractMapper.update(new LambdaUpdateWrapper<TradeContract>()
+        if (signingCancellation != null) signingCancellation.cancelForChange(contract, "对方拒绝签署");
+        int updated = tradeContractMapper.update(new LambdaUpdateWrapper<TradeContract>()
                 .eq(TradeContract::getId, id)
                 .eq(TradeContract::getStatus, "PENDING")
                 .set(TradeContract::getStatus, "REJECTED")
                 .set(TradeContract::getApprovedBy, AuthContext.userId())
                 .set(TradeContract::getApprovedAt, LocalDateTime.now()));
+        if (updated != 1) throw new BusinessException("合同状态已变化，请刷新后重试");
         auditLogService.log(companyId, "CONTRACT", id, "REJECT",
                 "拒绝合同 " + contract.getContractNo());
         recordContractResult(contract, companyId, "REJECTED",
@@ -558,6 +574,7 @@ public class TradeService {
         long companyId = AuthContext.requireCompanyId();
         accessControlService.requirePermission(companyId, "contract_sign");
         TradeContract contract = ensureOutgoingContract(id, companyId, List.of("PENDING"));
+        if (signingCancellation != null) signingCancellation.cancelForChange(contract, "发起方撤回合同");
         int updated = tradeContractMapper.update(new LambdaUpdateWrapper<TradeContract>()
                 .eq(TradeContract::getId, id)
                 .eq(TradeContract::getCompanyId, companyId)
@@ -597,10 +614,14 @@ public class TradeService {
         String direction = normalizeDirection(request.direction());
         String contractName = request.name().trim();
         BigDecimal amount = requireNonNegativeAmount(request.amount(), "合同金额");
+        String terms = normalizeContractTerms(request.terms(), contractName,
+                initiator.getName(), counterparty.getName(), direction);
+        if (signingCancellation != null) signingCancellation.cancelForChange(existing, "合同修改，终止旧版本签署");
         int nextVersion = Math.max(1, existing.getVersionNo() == null ? 1 : existing.getVersionNo()) + 1;
         int updated = tradeContractMapper.update(new LambdaUpdateWrapper<TradeContract>()
                 .eq(TradeContract::getId, id)
                 .eq(TradeContract::getCompanyId, companyId)
+                .eq(TradeContract::getVersionNo, existing.getVersionNo())
                 .in(TradeContract::getStatus, List.of("PENDING", "REJECTED", "CANCELLED"))
                 .set(TradeContract::getDirection, direction)
                 .set(TradeContract::getName, contractName)
@@ -608,8 +629,7 @@ public class TradeService {
                 .set(TradeContract::getAmount, amount)
                 .set(TradeContract::getStartDate, startDate)
                 .set(TradeContract::getEndDate, endDate)
-                .set(TradeContract::getTerms, normalizeContractTerms(request.terms(), contractName,
-                        initiator.getName(), counterparty.getName(), direction))
+                .set(TradeContract::getTerms, terms)
                 .set(TradeContract::getVersionNo, nextVersion)
                 .set(TradeContract::getStatus, "PENDING")
                 .set(TradeContract::getInitiatorHidden, false)
@@ -670,7 +690,7 @@ public class TradeService {
                 .eq(TradeContract::getCompanyId, companyId)
                 .eq(TradeContract::getInitiatorHidden, false)
                 .in(TradeContract::getStatus, allowedStatuses)
-                .last("LIMIT 1"));
+                .last("LIMIT 1 FOR UPDATE"));
         if (contract == null) {
             throw new BusinessException("合同不存在或当前状态不能执行该操作");
         }
@@ -708,7 +728,7 @@ public class TradeService {
                 .eq(TradeContract::getId, id)
                 .eq(TradeContract::getCounterpartyCompanyId, companyId)
                 .eq(TradeContract::getStatus, "PENDING")
-                .last("LIMIT 1"));
+                .last("LIMIT 1 FOR UPDATE"));
         if (contract == null) {
             throw new BusinessException("合同不存在或状态不是待审批");
         }

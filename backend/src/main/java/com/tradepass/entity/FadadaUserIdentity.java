@@ -8,7 +8,7 @@ import java.time.LocalDateTime;
 
 @TableName("fadada_user_identity")
 public class FadadaUserIdentity {
-    @TableId(type = IdType.AUTO)
+    @TableId(type = IdType.ASSIGN_ID)
     private Long id;
     private Long userId;
     private String clientUserId;

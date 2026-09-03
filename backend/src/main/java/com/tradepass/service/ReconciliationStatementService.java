@@ -1,5 +1,7 @@
 package com.tradepass.service;
 
+import com.tradepass.common.ApplicationIds;
+
 import com.tradepass.common.AuthContext;
 import com.tradepass.common.BusinessException;
 import com.tradepass.mapper.CounterpartyRelationMapper;
@@ -72,27 +74,27 @@ public class ReconciliationStatementService {
         String sha256 = FileTypeInspector.sha256(data);
         ObjectStorageService.StoredObject stored = store(companyId, counterpartyCompanyId,
                 normalizedPeriod, contentType, data, sha256);
+        Long id = ApplicationIds.next();
         if (stored == null) {
             jdbc.update("""
                     INSERT INTO reconciliation_statement
-                    (issuer_company_id, counterparty_company_id, statement_period, original_name,
+                    (id, issuer_company_id, counterparty_company_id, statement_period, original_name,
                      content_type, file_size, file_data, sha256, remark, created_by)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, companyId, counterpartyCompanyId, normalizedPeriod, safeName, contentType,
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, id, companyId, counterpartyCompanyId, normalizedPeriod, safeName, contentType,
                     data.length, data, sha256, safeRemark, AuthContext.userId());
         } else {
             jdbc.update("""
                     INSERT INTO reconciliation_statement
-                    (issuer_company_id, counterparty_company_id, statement_period, original_name,
+                    (id, issuer_company_id, counterparty_company_id, statement_period, original_name,
                      content_type, file_size, file_data, sha256, storage_provider, storage_bucket,
                      object_key, object_version_id, etag, encryption_algorithm, remark, created_by)
-                    VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, companyId, counterpartyCompanyId, normalizedPeriod, safeName, contentType,
+                    VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, id, companyId, counterpartyCompanyId, normalizedPeriod, safeName, contentType,
                     data.length, sha256, stored.provider(), stored.bucket(), stored.objectKey(),
                     stored.versionId(), stored.etag(), stored.encryptionAlgorithm(), safeRemark,
                     AuthContext.userId());
         }
-        Long id = jdbc.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
         auditLogService.log(companyId, "RECONCILIATION_STATEMENT", id,
                 "UPLOAD", "上传 " + normalizedPeriod + " 客户对账单 " + safeName);
         return queryStatements(companyId, counterpartyCompanyId).stream()

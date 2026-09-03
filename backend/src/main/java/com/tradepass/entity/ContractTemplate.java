@@ -8,7 +8,7 @@ import java.time.LocalDateTime;
 
 @TableName("contract_template")
 public class ContractTemplate {
-    @TableId(type = IdType.AUTO)
+    @TableId(type = IdType.ASSIGN_ID)
     private Long id;
     private Long companyId;
     private String name;

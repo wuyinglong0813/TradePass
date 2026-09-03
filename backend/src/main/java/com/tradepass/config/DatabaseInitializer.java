@@ -1,9 +1,11 @@
 package com.tradepass.config;
 
+import com.tradepass.common.ApplicationIds;
 import jakarta.annotation.PostConstruct;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
+import org.springframework.context.annotation.DependsOn;
 
 import java.util.List;
 
@@ -11,6 +13,7 @@ import java.util.List;
  * 仅开发环境启用的本地基础账号与模板数据。所有环境的数据库结构都只由 Flyway 管理。
  */
 @Component
+@DependsOn("identifierGenerator")
 @ConditionalOnProperty(name = "tradepass.demo-data.enabled", havingValue = "true")
 public class DatabaseInitializer {
     private final JdbcTemplate db;
@@ -22,206 +25,10 @@ public class DatabaseInitializer {
     @PostConstruct
     void initData() {
         seedBaseData();
-        seedPermissions();
         seedTemplateCategories();
         seedContractTemplates();
         seedBusinessDocumentTemplates();
         seedRoles();
-    }
-
-    private void createTables() {
-        db.execute("""
-            CREATE TABLE IF NOT EXISTS sys_user (
-                id BIGINT PRIMARY KEY AUTO_INCREMENT,
-                openid VARCHAR(64) NOT NULL UNIQUE,
-                phone VARCHAR(32),
-                nickname VARCHAR(64),
-                status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
-                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-            )
-        """);
-        db.execute("""
-            CREATE TABLE IF NOT EXISTS company (
-                id BIGINT PRIMARY KEY AUTO_INCREMENT,
-                name VARCHAR(128) NOT NULL,
-                credit_code VARCHAR(32) NOT NULL UNIQUE,
-                legal_person_name VARCHAR(64) NOT NULL,
-                certification_status VARCHAR(32) NOT NULL DEFAULT 'NOT_SUBMITTED',
-                real_name_status VARCHAR(32) NOT NULL DEFAULT 'NOT_STARTED',
-                face_status VARCHAR(32) NOT NULL DEFAULT 'NOT_STARTED',
-                seal_status VARCHAR(32) NOT NULL DEFAULT 'NOT_UPLOADED',
-                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-            )
-        """);
-        db.execute("""
-            CREATE TABLE IF NOT EXISTS company_member (
-                id BIGINT PRIMARY KEY AUTO_INCREMENT,
-                company_id BIGINT NOT NULL,
-                user_id BIGINT NOT NULL,
-                role_code VARCHAR(64) NOT NULL,
-                is_legal_person TINYINT(1) NOT NULL DEFAULT 0,
-                is_administrator TINYINT(1) NOT NULL DEFAULT 0,
-                status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
-                custom_permissions JSON,
-                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE KEY uk_company_user (company_id, user_id)
-            )
-        """);
-        try { db.execute("ALTER TABLE company_member ADD COLUMN custom_permissions JSON"); } catch (Exception ignored) {}
-        db.execute("""
-            CREATE TABLE IF NOT EXISTS company_invite (
-                id BIGINT PRIMARY KEY AUTO_INCREMENT,
-                company_id BIGINT NOT NULL,
-                code VARCHAR(64) NOT NULL UNIQUE,
-                type VARCHAR(32) NOT NULL DEFAULT 'member',
-                used TINYINT(1) NOT NULL DEFAULT 0,
-                used_by BIGINT,
-                expires_at DATETIME NOT NULL,
-                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                INDEX idx_code (code)
-            )
-        """);
-        try { db.execute("ALTER TABLE company_invite ADD COLUMN type VARCHAR(32) NOT NULL DEFAULT 'member'"); } catch (Exception ignored) {}
-        db.execute("""
-            CREATE TABLE IF NOT EXISTS role_def (
-                id BIGINT PRIMARY KEY AUTO_INCREMENT,
-                company_id BIGINT NOT NULL,
-                name VARCHAR(64) NOT NULL,
-                permissions JSON NOT NULL,
-                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE KEY uk_company_role (company_id, name)
-            )
-        """);
-        db.execute("""
-            CREATE TABLE IF NOT EXISTS perm_def (
-                code VARCHAR(64) PRIMARY KEY,
-                label VARCHAR(64) NOT NULL,
-                sort_order INT NOT NULL DEFAULT 0
-            )
-        """);
-        db.execute("""
-            CREATE TABLE IF NOT EXISTS contract_template (
-                id BIGINT PRIMARY KEY AUTO_INCREMENT,
-                company_id BIGINT NOT NULL,
-                name VARCHAR(256) NOT NULL,
-                category VARCHAR(64),
-                content TEXT,
-                created_by BIGINT,
-                updated_by BIGINT,
-                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                INDEX idx_company (company_id)
-            )
-        """);
-        try { db.execute("ALTER TABLE contract_template ADD COLUMN created_by BIGINT"); } catch (Exception ignored) {}
-        try { db.execute("ALTER TABLE contract_template ADD COLUMN updated_by BIGINT"); } catch (Exception ignored) {}
-        db.execute("""
-            CREATE TABLE IF NOT EXISTS template_category (
-                id BIGINT PRIMARY KEY AUTO_INCREMENT,
-                company_id BIGINT NOT NULL,
-                name VARCHAR(64) NOT NULL,
-                sort_order INT NOT NULL DEFAULT 0,
-                UNIQUE KEY uk_company_cat (company_id, name),
-                INDEX idx_company (company_id)
-            )
-        """);
-        db.execute("""
-            CREATE TABLE IF NOT EXISTS trade_contract (
-                id BIGINT PRIMARY KEY AUTO_INCREMENT,
-                company_id BIGINT NOT NULL,
-                counterparty_name VARCHAR(128) NOT NULL,
-                name VARCHAR(256) NOT NULL,
-                template_name VARCHAR(128),
-                amount DECIMAL(15,2) NOT NULL DEFAULT 0,
-                start_date DATE,
-                end_date DATE,
-                terms TEXT,
-                status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
-                initiator_hidden TINYINT(1) NOT NULL DEFAULT 0,
-                initiated_by BIGINT NOT NULL,
-                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                INDEX idx_company (company_id),
-                INDEX idx_counterparty (counterparty_name)
-            )
-        """);
-        try { db.execute("ALTER TABLE trade_contract ADD COLUMN initiator_hidden TINYINT(1) NOT NULL DEFAULT 0 AFTER status"); } catch (Exception ignored) {}
-        db.execute("""
-            CREATE TABLE IF NOT EXISTS counterparty_relation (
-                id BIGINT PRIMARY KEY AUTO_INCREMENT,
-                company_id BIGINT NOT NULL,
-                counterparty_company_name VARCHAR(128) NOT NULL,
-                relation_type VARCHAR(32) NOT NULL,
-                status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
-                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE KEY uk_company_counterparty (company_id, counterparty_company_name)
-            )
-        """);
-        db.execute("""
-            CREATE TABLE IF NOT EXISTS trade_order (
-                id BIGINT PRIMARY KEY AUTO_INCREMENT,
-                company_id BIGINT NOT NULL,
-                direction VARCHAR(16) NOT NULL,
-                counterparty_name VARCHAR(128) NOT NULL,
-                order_no VARCHAR(64),
-                amount DECIMAL(18,2) NOT NULL,
-                order_date DATE NOT NULL,
-                status VARCHAR(32) NOT NULL DEFAULT 'CONFIRMED',
-                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                INDEX idx_company_dir (company_id, direction)
-            )
-        """);
-        try { db.execute("ALTER TABLE trade_order ADD COLUMN order_no VARCHAR(64) AFTER counterparty_name"); } catch (Exception ignored) {}
-        db.execute("""
-            CREATE TABLE IF NOT EXISTS business_document_template (
-                id BIGINT PRIMARY KEY AUTO_INCREMENT,
-                company_id BIGINT NOT NULL,
-                document_type VARCHAR(32) NOT NULL,
-                name VARCHAR(256) NOT NULL,
-                content TEXT,
-                source_file_name VARCHAR(256),
-                created_by BIGINT,
-                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                INDEX idx_company_type (company_id, document_type)
-            )
-        """);
-        db.execute("""
-            CREATE TABLE IF NOT EXISTS business_document (
-                id BIGINT PRIMARY KEY AUTO_INCREMENT,
-                company_id BIGINT NOT NULL,
-                contract_id BIGINT NOT NULL,
-                document_type VARCHAR(32) NOT NULL,
-                document_no VARCHAR(64) NOT NULL,
-                template_id BIGINT NOT NULL,
-                template_name VARCHAR(256) NOT NULL,
-                content LONGTEXT,
-                created_by BIGINT,
-                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE KEY uk_document_no (document_no),
-                INDEX idx_contract_type (company_id, contract_id, document_type)
-            )
-        """);
-        try { db.execute("ALTER TABLE business_document ADD COLUMN supplier_company_id BIGINT NULL AFTER recipient_company_id"); } catch (Exception ignored) {}
-        try { db.execute("ALTER TABLE business_document ADD COLUMN buyer_company_id BIGINT NULL AFTER supplier_company_id"); } catch (Exception ignored) {}
-        try { db.execute("ALTER TABLE business_document ADD COLUMN deleted_by BIGINT NULL AFTER rejected_reason"); } catch (Exception ignored) {}
-        try { db.execute("ALTER TABLE business_document ADD COLUMN deleted_at DATETIME NULL AFTER deleted_by"); } catch (Exception ignored) {}
-        db.execute("""
-            CREATE TABLE IF NOT EXISTS logistics_document (
-                id BIGINT PRIMARY KEY AUTO_INCREMENT,
-                company_id BIGINT NOT NULL,
-                contract_id BIGINT NOT NULL,
-                original_name VARCHAR(255) NOT NULL,
-                content_type VARCHAR(64) NOT NULL,
-                file_size BIGINT NOT NULL,
-                image_data LONGBLOB NOT NULL,
-                created_by BIGINT,
-                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                INDEX idx_logistics_contract (contract_id, created_at),
-                INDEX idx_logistics_company (company_id)
-            )
-        """);
     }
 
     private void seedBaseData() {
@@ -233,34 +40,13 @@ public class DatabaseInitializer {
         db.execute("INSERT IGNORE INTO sys_user (id, openid, phone, nickname) VALUES (4, 'dev-openid-004', '18800000004', '王财务')");
         db.execute("INSERT IGNORE INTO sys_user (id, openid, phone, nickname) VALUES (5, 'dev-openid-005', '18800000005', '赵管理')");
         db.execute("INSERT IGNORE INTO sys_user (id, openid, phone, nickname) VALUES (14, 'dev-openid-014', '18800000014', '王海')");
-        db.execute("INSERT IGNORE INTO company_member (company_id, user_id, role_code, is_legal_person, is_administrator) VALUES (1, 1, 'LEGAL', 1, 0)");
-        db.execute("INSERT IGNORE INTO company_member (company_id, user_id, role_code, is_legal_person, is_administrator) VALUES (1, 2, 'PURCHASER', 0, 0)");
-        db.execute("INSERT IGNORE INTO company_member (company_id, user_id, role_code, is_legal_person, is_administrator) VALUES (1, 3, 'SALES', 0, 0)");
-        db.execute("INSERT IGNORE INTO company_member (company_id, user_id, role_code, is_legal_person, is_administrator) VALUES (1, 4, 'FINANCE', 0, 0)");
-        db.execute("INSERT IGNORE INTO company_member (company_id, user_id, role_code, is_legal_person, is_administrator) VALUES (1, 5, 'ADMIN', 0, 1)");
-        db.execute("INSERT IGNORE INTO company_member (company_id, user_id, role_code, is_legal_person) VALUES (2, 1, 'SALES', 0)");
-        db.execute("INSERT IGNORE INTO company_member (company_id, user_id, role_code, is_legal_person, is_administrator) VALUES (2, 14, 'LEGAL', 1, 0)");
-    }
-
-    private void seedPermissions() {
-        seedPerm("supplier_view", "供方首页", 1);
-        seedPerm("buyer_view", "需方首页", 2);
-        seedPerm("counterparty_manage", "供方公司管理", 3);
-        seedPerm("order_view", "订单查看", 4);
-        seedPerm("order_create", "下单", 5);
-        seedPerm("contract_template", "合同模板管理", 6);
-        seedPerm("contract_sign", "签订合同", 7);
-        seedPerm("contract_view", "合同预览", 8);
-        seedPerm("invoice_view", "发票查看", 9);
-        seedPerm("reconciliation", "对账情况", 10);
-        seedPerm("inventory_view", "库存查看", 11);
-        seedPerm("member_manage", "成员管理", 12);
-        seedPerm("auth_manage", "授权管理", 13);
-        seedPerm("company_manage", "企业认证", 14);
-        seedPerm("seal_manage", "电子章管理", 15);
-        seedPerm("contract_attachment_upload", "合同资料上传", 16);
-        seedPerm("sales_order_receive", "销售单接收", 17);
-        seedPerm("inventory_receive", "销售单入库", 18);
+        db.update("INSERT IGNORE INTO company_member (id, company_id, user_id, role_code, is_legal_person, is_administrator) VALUES (?, 1, 1, 'LEGAL', 1, 0)", ApplicationIds.next());
+        db.update("INSERT IGNORE INTO company_member (id, company_id, user_id, role_code, is_legal_person, is_administrator) VALUES (?, 1, 2, 'PURCHASER', 0, 0)", ApplicationIds.next());
+        db.update("INSERT IGNORE INTO company_member (id, company_id, user_id, role_code, is_legal_person, is_administrator) VALUES (?, 1, 3, 'SALES', 0, 0)", ApplicationIds.next());
+        db.update("INSERT IGNORE INTO company_member (id, company_id, user_id, role_code, is_legal_person, is_administrator) VALUES (?, 1, 4, 'FINANCE', 0, 0)", ApplicationIds.next());
+        db.update("INSERT IGNORE INTO company_member (id, company_id, user_id, role_code, is_legal_person, is_administrator) VALUES (?, 1, 5, 'ADMIN', 0, 1)", ApplicationIds.next());
+        db.update("INSERT IGNORE INTO company_member (id, company_id, user_id, role_code, is_legal_person) VALUES (?, 2, 1, 'SALES', 0)", ApplicationIds.next());
+        db.update("INSERT IGNORE INTO company_member (id, company_id, user_id, role_code, is_legal_person, is_administrator) VALUES (?, 2, 14, 'LEGAL', 1, 0)", ApplicationIds.next());
     }
 
     private void seedTemplateCategories() {
@@ -300,12 +86,8 @@ public class DatabaseInitializer {
         });
     }
 
-    private void seedPerm(String code, String label, int sortOrder) {
-        try { db.update("INSERT IGNORE INTO perm_def (code, label, sort_order) VALUES (?, ?, ?)", code, label, sortOrder); } catch (Exception ignored) {}
-    }
-
     private void seedTemplateCategory(long companyId, String name, int sortOrder) {
-        try { db.update("INSERT IGNORE INTO template_category (company_id, name, sort_order) VALUES (?, ?, ?)", companyId, name, sortOrder); } catch (Exception ignored) {}
+        try { db.update("INSERT IGNORE INTO template_category (id, company_id, name, sort_order) VALUES (?, ?, ?, ?)", ApplicationIds.next(), companyId, name, sortOrder); } catch (Exception ignored) {}
     }
 
     private void seedContractTemplate(long companyId, String name, String category) {
@@ -314,7 +96,7 @@ public class DatabaseInitializer {
                     "SELECT COUNT(1) FROM contract_template WHERE company_id = ? AND name = ? AND category = ?",
                     Integer.class, companyId, name, category);
             if (count == null || count == 0) {
-                db.update("INSERT INTO contract_template (company_id, name, category) VALUES (?, ?, ?)", companyId, name, category);
+                db.update("INSERT INTO contract_template (id, company_id, name, category) VALUES (?, ?, ?, ?)", ApplicationIds.next(), companyId, name, category);
             }
         } catch (Exception ignored) {}
     }
@@ -327,17 +109,17 @@ public class DatabaseInitializer {
         if (count == null || count == 0) {
             db.update("""
                     INSERT INTO business_document_template
-                    (company_id, document_type, name, content, created_by)
-                    VALUES (?, ?, ?, ?, 1)
-                    """, companyId, type, name, content);
+                    (id, company_id, document_type, name, content, created_by)
+                    VALUES (?, ?, ?, ?, ?, 1)
+                    """, ApplicationIds.next(), companyId, type, name, content);
         }
     }
 
     private void seedRole(long companyId, String name, List<String> permissions) {
         try {
             String json = "[\"" + String.join("\",\"", permissions) + "\"]";
-            db.update("INSERT INTO role_def (company_id, code, name, system_role, permissions) VALUES (?, ?, ?, 1, ?) ON DUPLICATE KEY UPDATE code = VALUES(code), system_role = 1, permissions = VALUES(permissions)",
-                    companyId, roleCode(name), name, json);
+            db.update("INSERT INTO role_def (id, company_id, code, name, system_role, permissions) VALUES (?, ?, ?, ?, 1, ?) ON DUPLICATE KEY UPDATE code = VALUES(code), system_role = 1, permissions = VALUES(permissions)",
+                    ApplicationIds.next(), companyId, roleCode(name), name, json);
         } catch (Exception ignored) {}
     }
 

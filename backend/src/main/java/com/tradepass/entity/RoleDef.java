@@ -8,7 +8,7 @@ import java.time.LocalDateTime;
 
 @TableName("role_def")
 public class RoleDef {
-    @TableId(type = IdType.AUTO)
+    @TableId(type = IdType.ASSIGN_ID)
     private Long id;
     private Long companyId;
     private String code;

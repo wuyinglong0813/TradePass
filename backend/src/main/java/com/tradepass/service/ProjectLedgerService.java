@@ -1,5 +1,7 @@
 package com.tradepass.service;
 
+import com.tradepass.common.ApplicationIds;
+
 import com.tradepass.common.AuthContext;
 import com.tradepass.common.BusinessException;
 import org.springframework.dao.DuplicateKeyException;
@@ -81,9 +83,9 @@ public class ProjectLedgerService {
         requireActivePartyContract(companyId, contractId);
         jdbc.update("""
                 INSERT IGNORE INTO project_contract_prompt_preference
-                (company_id, contract_id, dismissed_by)
-                VALUES (?, ?, ?)
-                """, companyId, contractId, AuthContext.userId());
+                (id, company_id, contract_id, dismissed_by)
+                VALUES (?, ?, ?, ?)
+                """, ApplicationIds.next(), companyId, contractId, AuthContext.userId());
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("dismissed", true);
         return result;
@@ -113,16 +115,16 @@ public class ProjectLedgerService {
         if (safeNo.isBlank()) safeNo = createProjectNo();
         if (safeNo.length() > 64) throw new BusinessException("项目编号不能超过 64 字");
         if (safeDescription.length() > 500) throw new BusinessException("项目说明不能超过 500 字");
+        Long projectId = ApplicationIds.next();
         try {
             jdbc.update("""
                     INSERT INTO project_ledger
-                    (company_id, project_no, name, description, created_by)
-                    VALUES (?, ?, ?, ?, ?)
-                    """, companyId, safeNo, safeName, emptyToNull(safeDescription), AuthContext.userId());
+                    (id, company_id, project_no, name, description, created_by)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """, projectId, companyId, safeNo, safeName, emptyToNull(safeDescription), AuthContext.userId());
         } catch (DuplicateKeyException exception) {
             throw new BusinessException("项目名称或编号已存在");
         }
-        Long projectId = jdbc.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
         if (projectId == null) throw new BusinessException("项目创建失败");
         auditLogService.log(companyId, "PROJECT_LEDGER", projectId, "CREATE",
                 "创建项目 " + safeName + "（" + safeNo + "）");
@@ -180,9 +182,9 @@ public class ProjectLedgerService {
             try {
                 jdbc.update("""
                         INSERT INTO project_contract_assignment
-                        (company_id, project_id, contract_id, created_by)
-                        VALUES (?, ?, ?, ?)
-                        """, companyId, projectId, contractId, AuthContext.userId());
+                        (id, company_id, project_id, contract_id, created_by)
+                        VALUES (?, ?, ?, ?, ?)
+                        """, ApplicationIds.next(), companyId, projectId, contractId, AuthContext.userId());
             } catch (DuplicateKeyException exception) {
                 throw new BusinessException("所选合同已划入其他项目");
             }

@@ -683,7 +683,7 @@ Page({
         method: 'POST',
         data: {
           counterpartyName,
-          counterpartyCompanyId: Number(counterpartyCompanyId),
+          counterpartyCompanyId: String(counterpartyCompanyId),
           direction: role === 'supplier' ? 'SALE' : 'PURCHASE',
           clientRequestId,
           name: contractName.trim(),

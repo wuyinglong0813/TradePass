@@ -1,5 +1,7 @@
 package com.tradepass.service;
 
+import com.tradepass.common.ApplicationIds;
+
 import com.tradepass.common.AuthContext;
 import com.tradepass.common.BusinessException;
 import com.tradepass.entity.BusinessDocument;
@@ -208,12 +210,12 @@ public class ReconciliationAccountService {
         ReversalSource source = sources.get(0);
         jdbc.update("""
                 INSERT INTO reconciliation_entry
-                (company_a_id, company_b_id, contract_id, source_type, source_id,
+                (id, company_a_id, company_b_id, contract_id, source_type, source_id,
                  business_date, document_no, amount, supplier_company_id, buyer_company_id,
                  issuer_company_id, approved_by, approved_at, reversal_of_id, action_request_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON DUPLICATE KEY UPDATE reversal_of_id = VALUES(reversal_of_id)
-                """, source.companyAId(), source.companyBId(), source.contractId(),
+                """, ApplicationIds.next(), source.companyAId(), source.companyBId(), source.contractId(),
                 source.sourceType() + "_VOID", actionRequestId, source.businessDate(),
                 safe(source.documentNo()) + "（作废冲销）", source.amount().negate(),
                 source.supplierCompanyId(), source.buyerCompanyId(), source.issuerCompanyId(),
@@ -235,12 +237,12 @@ public class ReconciliationAccountService {
         long companyBId = Math.max(leftCompanyId, rightCompanyId);
         jdbc.update("""
                 INSERT INTO reconciliation_entry
-                (company_a_id, company_b_id, contract_id, source_type, source_id,
+                (id, company_a_id, company_b_id, contract_id, source_type, source_id,
                  business_date, document_no, amount, supplier_company_id, buyer_company_id,
                  issuer_company_id, approved_by, approved_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON DUPLICATE KEY UPDATE source_id = VALUES(source_id)
-                """, companyAId, companyBId, contractId, sourceType, sourceId,
+                """, ApplicationIds.next(), companyAId, companyBId, contractId, sourceType, sourceId,
                 businessDate, safe(documentNo), money(amount), supplierCompanyId, buyerCompanyId,
                 issuerCompanyId, approvedBy, approvedAt == null ? LocalDateTime.now() : approvedAt);
     }

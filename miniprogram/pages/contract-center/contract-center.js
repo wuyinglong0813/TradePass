@@ -67,7 +67,7 @@ Page({
           companyId: String(item.viewerCounterpartyCompanyId || item.counterpartyCompanyId
             || `name:${counterpartyName}`),
           direction: item.viewerDirection || item.direction,
-          id: parseInt(item.id),
+          id: String(item.id),
           amount: Number(item.amount || 0),
           statusText: statusText[item.status] || item.status,
           createdDate: (item.createdAt || '').substring(0, 10)

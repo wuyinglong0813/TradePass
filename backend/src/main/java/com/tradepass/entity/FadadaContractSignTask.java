@@ -8,7 +8,7 @@ import java.time.LocalDateTime;
 
 @TableName("fadada_contract_sign_task")
 public class FadadaContractSignTask {
-    @TableId(type = IdType.AUTO)
+    @TableId(type = IdType.ASSIGN_ID)
     private Long id;
     private Long contractId;
     private Integer versionNo;
@@ -17,6 +17,7 @@ public class FadadaContractSignTask {
     private String sourceFileId;
     private String docId;
     private String sourceSha256;
+    private String contractSnapshot;
     private String providerStatus;
     private Long initiatorCompanyId;
     private Long counterpartyCompanyId;
@@ -47,6 +48,8 @@ public class FadadaContractSignTask {
     public void setDocId(String docId) { this.docId = docId; }
     public String getSourceSha256() { return sourceSha256; }
     public void setSourceSha256(String sourceSha256) { this.sourceSha256 = sourceSha256; }
+    public String getContractSnapshot() { return contractSnapshot; }
+    public void setContractSnapshot(String value) { this.contractSnapshot = value; }
     public String getProviderStatus() { return providerStatus; }
     public void setProviderStatus(String providerStatus) { this.providerStatus = providerStatus; }
     public Long getInitiatorCompanyId() { return initiatorCompanyId; }

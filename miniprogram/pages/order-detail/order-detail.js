@@ -135,7 +135,7 @@ Page({
       const statusMap = { ACTIVE: '履行中', PENDING: '待签署', REJECTED: '已拒绝', CANCELLED: '已撤回', COMPLETED: '已结束', VOIDED: '已作废' };
       const total = list.length;
       const contracts = (list || []).map((c, index) => ({
-        id: parseInt(c.id),
+        id: String(c.id),
         name: c.name,
         startDate: c.startDate || '',
         endDate: c.endDate || '',

@@ -1,5 +1,7 @@
 package com.tradepass.service;
 
+import com.tradepass.common.ApplicationIds;
+
 import com.tradepass.common.AuthContext;
 import com.tradepass.common.BusinessException;
 import com.tradepass.entity.TradeContract;
@@ -63,19 +65,19 @@ public class BilateralActionService {
             throw new BusinessException("合同对方企业信息不完整");
         }
         long approverCompanyId = approverCompanyIdValue;
+        Long id = ApplicationIds.next();
         try {
             jdbc.update("""
                     INSERT INTO bilateral_action_request
-                    (contract_id, biz_type, biz_id, action_type, requester_company_id,
+                    (id, contract_id, biz_type, biz_id, action_type, requester_company_id,
                      requester_user_id, approver_company_id, reason, risk_confirmed)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, target.contract().getId(), normalizedBizType, bizId, normalizedAction,
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, id, target.contract().getId(), normalizedBizType, bizId, normalizedAction,
                     companyId, AuthContext.userId(), approverCompanyId, safeReason,
                     normalizedAction.equals(END) && riskConfirmed);
         } catch (DuplicateKeyException exception) {
             throw new BusinessException("该业务已有待处理的" + actionLabel(normalizedAction) + "申请");
         }
-        Long id = jdbc.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
         auditLogService.log(companyId, "BILATERAL_ACTION", id, "REQUEST",
                 "发起" + target.label() + actionLabel(normalizedAction) + "申请：" + safeReason);
         return findView(id, companyId);
@@ -256,7 +258,7 @@ public class BilateralActionService {
     }
 
     private void applyApprovedAction(ActionRecord action, long approvedCompanyId) {
-        Target target = requireTarget(action.bizType(), action.bizId(), approvedCompanyId);
+        Target target = requireTarget(action.bizType(), action.bizId(), approvedCompanyId, true);
         LocalDateTime approvedAt = LocalDateTime.now();
         if (CONTRACT.equals(action.bizType())) {
             if (VOID.equals(action.actionType())) {
@@ -301,6 +303,10 @@ public class BilateralActionService {
     }
 
     private Target requireTarget(String bizType, Long bizId, long companyId) {
+        return requireTarget(bizType, bizId, companyId, false);
+    }
+
+    private Target requireTarget(String bizType, Long bizId, long companyId, boolean forUpdate) {
         if (bizId == null) throw new BusinessException("业务 ID 不能为空");
         if (CONTRACT.equals(bizType)) {
             TradeContract contract = requireContractParty(bizId, companyId);
@@ -324,7 +330,7 @@ public class BilateralActionService {
         List<TargetRow> rows = jdbc.query("""
                         SELECT contract_id, status, document_type FROM business_document
                         WHERE id = ? AND deleted_at IS NULL
-                        """, (rs, rowNum) -> new TargetRow(rs.getLong("contract_id"),
+                        """ + (forUpdate ? " FOR UPDATE" : ""), (rs, rowNum) -> new TargetRow(rs.getLong("contract_id"),
                         rs.getString("status"), rs.getString("document_type")), bizId);
         if (rows.isEmpty()) throw new BusinessException("单据不存在");
         TargetRow row = rows.get(0);
