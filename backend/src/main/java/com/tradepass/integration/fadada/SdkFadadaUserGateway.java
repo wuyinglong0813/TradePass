@@ -39,8 +39,8 @@ public class SdkFadadaUserGateway implements FadadaUserGateway {
         request.setClientUserId(command.clientUserId());
         request.setAuthScopes(List.of("ident_info"));
         if (hasText(command.accountName())) {
+            // Prefill the current phone number while allowing edits on the authentication page.
             request.setAccountName(command.accountName());
-            request.setNonEditableInfo(List.of("accountName"));
         }
         if (hasText(command.callbackUrl())) request.setCallbackUrl(command.callbackUrl());
         if (hasText(command.redirectUrl())) request.setRedirectUrl(command.redirectUrl());
