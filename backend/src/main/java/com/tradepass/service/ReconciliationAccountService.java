@@ -53,7 +53,9 @@ public class ReconciliationAccountService {
         this.accessControlService = accessControlService;
     }
 
-    public List<Map<String, Object>> listAccounts() {
+    public List<Map<String, Object>> listAccounts() { return listAccounts(null); }
+
+    public List<Map<String, Object>> listAccounts(String role) {
         long companyId = AuthContext.requireCompanyId();
         accessControlService.requirePermission(companyId, "reconciliation");
         List<Map<String, Object>> counterparties = jdbc.query("""
@@ -76,18 +78,20 @@ public class ReconciliationAccountService {
         for (Map<String, Object> counterparty : counterparties) {
             long counterpartyId = ((Number) counterparty.get("counterpartyCompanyId")).longValue();
             accounts.add(account(companyId, counterpartyId,
-                    String.valueOf(counterparty.get("counterpartyName")), false));
+                    String.valueOf(counterparty.get("counterpartyName")), false, role));
         }
         return accounts;
     }
 
-    public Map<String, Object> account(Long counterpartyCompanyId) {
+    public Map<String, Object> account(Long counterpartyCompanyId) { return account(counterpartyCompanyId, null); }
+
+    public Map<String, Object> account(Long counterpartyCompanyId, String role) {
         long companyId = AuthContext.requireCompanyId();
         accessControlService.requirePermission(companyId, "reconciliation");
         requireRelation(companyId, counterpartyCompanyId);
         String name = jdbc.queryForObject("SELECT name FROM company WHERE id = ?", String.class,
                 counterpartyCompanyId);
-        return account(companyId, counterpartyCompanyId, name, true);
+        return account(companyId, counterpartyCompanyId, name, true, role);
     }
 
     public WorkbookPayload workbook(Long counterpartyCompanyId) {
@@ -248,7 +252,7 @@ public class ReconciliationAccountService {
     }
 
     private Map<String, Object> account(long companyId, long counterpartyCompanyId,
-                                        String counterpartyName, boolean includeEntries) {
+                                        String counterpartyName, boolean includeEntries, String role) {
         long companyAId = Math.min(companyId, counterpartyCompanyId);
         long companyBId = Math.max(companyId, counterpartyCompanyId);
         List<Entry> entries = jdbc.query("""
@@ -279,8 +283,11 @@ public class ReconciliationAccountService {
         BigDecimal paidPayments = BigDecimal.ZERO;
         LocalDateTime updatedAt = null;
         List<Map<String, Object>> detail = new ArrayList<>();
+        int entryCount = 0;
         for (Entry entry : entries) {
             boolean mySale = entry.supplierCompanyId() == companyId;
+            if ("buyer".equals(role) && mySale || "supplier".equals(role) && !mySale) continue;
+            entryCount++;
             String sourceType = baseSourceType(entry.sourceType());
             if (SALES_ORDER.equals(sourceType) || RETURN_ORDER.equals(sourceType)) {
                 if (mySale) mySales = mySales.add(entry.amount());
@@ -309,7 +316,7 @@ public class ReconciliationAccountService {
         view.put("payableBalance", money(myPurchases.subtract(paidPayments)));
         view.put("unbilledAmount", money(mySales.subtract(issuedInvoices)));
         view.put("unreceivedInvoiceAmount", money(myPurchases.subtract(receivedInvoices)));
-        view.put("entryCount", entries.size());
+        view.put("entryCount", entryCount);
         view.put("updatedAt", updatedAt);
         if (includeEntries) view.put("entries", detail);
         return view;

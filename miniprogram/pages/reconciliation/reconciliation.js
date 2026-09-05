@@ -56,8 +56,8 @@ Page({
     this.setData({ loading: true });
     try {
       const raw = this.data.isGlobal
-        ? await request({ url: '/reconciliation-accounts' })
-        : [await request({ url: `/reconciliation-accounts/${encodeURIComponent(this.data.counterpartyCompanyId)}` })];
+        ? await request({ url: `/reconciliation-accounts?role=${this.data.role}` })
+        : [await request({ url: `/reconciliation-accounts/${encodeURIComponent(this.data.counterpartyCompanyId)}?role=${this.data.role}` })];
       const accounts = (raw || []).map(item => this.mapAccount(item));
       const companyOptions = [
         { id: '', name: `全部往来公司（${accounts.length}）` },
@@ -99,7 +99,7 @@ Page({
     wx.showLoading({ title: download ? '下载 PDF 中...' : '打开明细中...' });
     try {
       const result = await downloadApiFile(
-        `/reconciliation-accounts/${account.counterpartyCompanyId}/pdf-data`, filePath
+        `/reconciliation-accounts/${account.counterpartyCompanyId}/pdf-data?role=${this.data.role}`, filePath
       );
       wx.openDocument({
         filePath: result.filePath,

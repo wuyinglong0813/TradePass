@@ -193,14 +193,14 @@ public class CollaborationController {
     }
 
     @GetMapping("/reconciliation-accounts")
-    public ApiResponse<List<Map<String, Object>>> reconciliationAccounts() {
-        return ApiResponse.ok(accountService.listAccounts());
+    public ApiResponse<List<Map<String, Object>>> reconciliationAccounts(@RequestParam(required = false) String role) {
+        return ApiResponse.ok(accountService.listAccounts(role));
     }
 
     @GetMapping("/reconciliation-accounts/{counterpartyCompanyId}")
     public ApiResponse<Map<String, Object>> reconciliationAccount(
-            @PathVariable Long counterpartyCompanyId) {
-        return ApiResponse.ok(accountService.account(counterpartyCompanyId));
+            @PathVariable Long counterpartyCompanyId, @RequestParam(required = false) String role) {
+        return ApiResponse.ok(accountService.account(counterpartyCompanyId, role));
     }
 
     @GetMapping("/reconciliation-accounts/{counterpartyCompanyId}/workbook")

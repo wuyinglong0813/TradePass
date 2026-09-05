@@ -75,6 +75,8 @@ Page({
     approveRoles: [],
     approveCode: '',
     inviteCode: '',
+    inviteCompanyId: '',
+    preparingInvite: false,
     loading: false,
     page: 1,
     size: 20,
@@ -98,6 +100,7 @@ Page({
   async onShow() {
     await app.ensureSessionReady();
     const cid = app.getCurrentCompanyId();
+    if (String(cid) !== this.data.inviteCompanyId) this.setData({ inviteCode: '', inviteCompanyId: '' });
     const companies = app.globalData.companies || [];
     const current = companies.find(company => String(company.companyId) === String(cid));
     const companyName = (current && current.companyName) || '当前企业';
@@ -181,22 +184,31 @@ Page({
   },
 
   async shareInvite() {
+    if (this.data.preparingInvite) return;
     const cid = currentCompanyId();
     if (!cid) return;
+    this.setData({ preparingInvite: true, inviteCode: '', inviteCompanyId: '' });
     try {
       const result = await request({ url: '/companies/invite', method: 'POST', data: { companyId: cid } });
-      this.setData({ inviteCode: result.code });
-      // 触发分享
-      wx.showShareMenu({ withShareTicket: true });
-    } catch (e) { wx.showToast({ title: e.message, icon: 'none' }); }
+      if (String(cid) !== String(app.getCurrentCompanyId())) return;
+      if (!result || !result.code) throw new Error('邀请生成失败，请重试');
+      this.setData({ inviteCode: result.code, inviteCompanyId: String(cid) });
+      wx.showToast({ title: '已生成，请点击发送给微信好友', icon: 'none' });
+    } catch (e) { wx.showToast({ title: e.message || '邀请生成失败', icon: 'none' }); }
+    finally { this.setData({ preparingInvite: false }); }
   },
 
-  onShareAppMessage() {
+  onShareAppMessage(event) {
     const code = this.data.inviteCode;
-    if (!code) return { title: '商签通', path: '/pages/index/index' };
+    if (!code || !event || event.from !== 'button'
+        || !event.target || event.target.dataset.inviteType !== 'member'
+        || this.data.inviteCompanyId !== String(app.getCurrentCompanyId())) {
+      return { title: '商签通', imageUrl: '/images/member-invite-cover.png', path: '/pages/index/index' };
+    }
     return {
-      title: '邀请你加入我的企业',
-      path: `/pages/index/index?inviteCode=${code}&type=member`
+      title: '邀请你加入商签通企业组织',
+      imageUrl: '/images/member-invite-cover.png',
+      path: `/pages/index/index?inviteCode=${encodeURIComponent(code)}&type=member`
     };
   },
 

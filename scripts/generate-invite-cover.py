@@ -1,5 +1,7 @@
 """Draw the branded share cover using the original logo, without company data."""
 from pathlib import Path
+import sys
+MEMBER = "--member" in sys.argv
 from PIL import Image, ImageDraw, ImageFont
 ROOT = Path(__file__).resolve().parents[1]
 FONT = '/System/Library/Fonts/STHeiti Medium.ttc'
@@ -20,12 +22,12 @@ text(208,103,'商签通',36,'#163c68')
 text(210,151,'TradePass',22,'#8193aa')
 text(694,125,'诚 挚 邀 请',24,'#4678ab')
 d.line((100,220,900,220),fill='#dce6f1',width=2)
-text(100,266,'企业合作邀请函',66,'#143964')
-text(104,359,'携手合作，让每一笔往来更高效',31,'#657e98')
+text(100,266,'组织成员邀请函' if MEMBER else '企业合作邀请函',66,'#143964')
+text(104,359,'邀请您加入团队，让协作更高效' if MEMBER else '携手合作，让每一笔往来更高效',31,'#657e98')
 d.rounded_rectangle((100,440,900,549),radius=18,fill='#eaf2fb')
-for x,label,sub in [(134,'采购协同','连接供需'),(391,'合同签署','确认合作'),(649,'业务往来','同步进展')]:
+for x,label,sub in ([(134,'加入组织','连接团队'),(391,'分配角色','明确职责'),(649,'协同办公','同步进展')] if MEMBER else [(134,'采购协同','连接供需'),(391,'合同签署','确认合作'),(649,'业务往来','同步进展')]):
     text(x,461,label,28,'#266cb2');text(x,502,sub,21,'#8295ab')
 d.rounded_rectangle((100,603,900,678),radius=18,fill='#2385e6')
-text(304,623,'查看邀请 · 建立合作',30,'#ffffff')
-text(303,701,'以各自企业身份，开启合作',22,'#8a9db2')
-im.save(ROOT/'miniprogram/images/company-invite-cover.png',optimize=True)
+text(304,623,'查看邀请 · 申请加入' if MEMBER else '查看邀请 · 建立合作',30,'#ffffff')
+text(303,701,'提交加入申请，等待管理员审核' if MEMBER else '以各自企业身份，开启合作',22,'#8a9db2')
+im.save(ROOT/('miniprogram/images/member-invite-cover.png' if MEMBER else 'miniprogram/images/company-invite-cover.png'),optimize=True)

@@ -2,6 +2,10 @@ const { request } = require('../../utils/request');
 
 Page({
   data: {
+    showInbound: false,
+    savingInbound: false,
+    inbound: {},
+    warehouseIndex: 0,
     loading: false,
     overview: { warehouseCount: 0, productCount: 0, balances: [] },
     warehouses: [],
@@ -39,6 +43,44 @@ Page({
     } finally {
       this.setData({ loading: false });
     }
+  },
+
+  openInbound() {
+    if (!this.data.warehouses.length) {
+      wx.showToast({ title: '请先新建仓库', icon: 'none' });
+      return;
+    }
+    this.setData({ showInbound: true, warehouseIndex: 0,
+      inbound: { requestId: `manual-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        productName: '', specification: '', baseUnit: '', quantity: '', unitPrice: '', remark: '' } });
+  },
+  closeInbound() { if (!this.data.savingInbound) this.setData({ showInbound: false }); },
+  selectInboundWarehouse(e) { this.setData({ warehouseIndex: Number(e.detail.value) }); },
+  onInboundInput(e) {
+    const field = e.currentTarget.dataset.field;
+    if (['productName', 'specification', 'baseUnit', 'quantity', 'unitPrice', 'remark'].includes(field))
+      this.setData({ [`inbound.${field}`]: e.detail.value });
+  },
+  async saveInbound() {
+    if (this.data.savingInbound) return;
+    const form = this.data.inbound;
+    const warehouse = this.data.warehouses[this.data.warehouseIndex];
+    if (!warehouse || !form.productName.trim() || !form.baseUnit.trim()
+        || !/^\d+(\.\d{1,4})?$/.test(form.quantity) || Number(form.quantity) <= 0
+        || !/^\d+(\.\d{1,4})?$/.test(form.unitPrice)) {
+      wx.showToast({ title: '请填写商品、单位、正数数量和单价（最多四位小数）', icon: 'none' });
+      return;
+    }
+    this.setData({ savingInbound: true });
+    try {
+      await request({ url: '/inventory/manual-inbound', method: 'POST',
+        data: { ...form, warehouseId: warehouse.id } });
+      this.setData({ showInbound: false });
+      wx.showToast({ title: '已入库', icon: 'success' });
+      await this.loadData();
+    } catch (error) {
+      wx.showToast({ title: error.message || '入库失败，请重试', icon: 'none' });
+    } finally { this.setData({ savingInbound: false }); }
   },
 
   openCreate() {

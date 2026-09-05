@@ -117,6 +117,39 @@ class SalesOrderInventoryServiceTest {
     }
 
     @Test
+    void manualInboundRejectsInvalidQuantityAndForeignWarehouse() {
+        assertThatThrownBy(() -> service.manualInbound(9L, "manual-request-123", "商品", "", "件",
+                BigDecimal.ZERO, BigDecimal.ONE, "")) .isInstanceOf(BusinessException.class);
+        when(jdbc.queryForObject(anyString(), eq(Long.class), eq(9L), eq(4L))).thenReturn(0L);
+        assertThatThrownBy(() -> service.manualInbound(9L, "manual-request-123", "商品", "", "件",
+                BigDecimal.ONE, BigDecimal.ONE, "")).hasMessage("仓库不存在");
+    }
+
+    @Test
+    void manualInboundRetryDoesNotIncreaseStockTwice() {
+        when(jdbc.queryForObject(anyString(), eq(Long.class), eq(9L), eq(4L))).thenReturn(1L);
+        doReturn(List.of(123L)).when(jdbc).query(anyString(), any(RowMapper.class), eq(4L), eq("manual-request-123"));
+        assertThat(service.manualInbound(9L, "manual-request-123", "商品", "", "件",
+                BigDecimal.ONE, BigDecimal.ONE, "")).containsEntry("id", 123L);
+        verify(accessControlService).requirePermission(4L, "inventory_receive");
+        org.mockito.Mockito.verify(jdbc, org.mockito.Mockito.never()).update(anyString(), any(Object[].class));
+    }
+
+    @Test
+    void manualInboundWritesBalanceAndAuditMovement() {
+        when(jdbc.queryForObject(anyString(), eq(Long.class), eq(9L), eq(4L))).thenReturn(1L);
+        doReturn(List.of(77L)).when(jdbc).query(argThat(sql -> sql.contains("FROM inventory_product")),
+                any(RowMapper.class), eq(4L), eq("商品"), eq(""), eq("件"));
+        when(jdbc.queryForObject(anyString(), eq(BigDecimal.class), eq(4L), eq(9L), eq(77L))).thenReturn(new BigDecimal("2"));
+        service.manualInbound(9L, "manual-request-123", "商品", "", "件", new BigDecimal("2"), new BigDecimal("3.5"), "期初库存");
+        verify(jdbc).update(argThat(sql -> sql.contains("INSERT INTO inventory_manual_entry")),
+                anyLong(), eq(4L), eq("manual-request-123"), eq(9L), eq(77L), eq(new BigDecimal("2")),
+                eq(new BigDecimal("3.5")), eq(new BigDecimal("7.00")), eq("期初库存"), eq(8L));
+        verify(jdbc).update(argThat(sql -> sql.contains("MANUAL_INBOUND")), anyLong(), eq(4L), eq(9L), eq(77L),
+                anyLong(), eq(new BigDecimal("2")), eq(new BigDecimal("2")), eq(8L));
+    }
+
+    @Test
     void snapshotsStructuredItemsAndValidatesProductRows() {
         service.saveDocumentItems(document);
         verify(jdbc, atLeastOnce()).update(anyString(), any(Object[].class));

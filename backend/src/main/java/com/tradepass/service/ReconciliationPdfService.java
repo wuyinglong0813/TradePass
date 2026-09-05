@@ -42,15 +42,24 @@ public class ReconciliationPdfService {
     }
 
     public PdfPayload generate(Long counterpartyCompanyId) {
+        return generate(counterpartyCompanyId, "supplier");
+    }
+
+    public PdfPayload generate(Long counterpartyCompanyId, String role) {
         Map<String, Object> account = accountService.account(counterpartyCompanyId);
         Company currentCompany = companyMapper.selectById(AuthContext.requireCompanyId());
         String currentName = currentCompany == null ? "当前企业" : safe(currentCompany.getName());
         String counterpartyName = safe(account.get("counterpartyName"));
         String title = currentName + "与" + counterpartyName + "对账单";
-        return new PdfPayload(safeFileName(title) + ".pdf", generatePdf(title, account));
+        return new PdfPayload(safeFileName(title) + ".pdf", generatePdf(title, account, role));
     }
 
     byte[] generatePdf(String title, Map<String, Object> account) {
+        return generatePdf(title, account, "supplier");
+    }
+
+    byte[] generatePdf(String title, Map<String, Object> account, String role) {
+        if (!"supplier".equals(role) && !"buyer".equals(role)) throw new BusinessException("对账视角无效");
         try (ByteArrayOutputStream output = new ByteArrayOutputStream()) {
             Document document = new Document(PageSize.A4.rotate(), 38, 38, 38, 34);
             PdfWriter.getInstance(document, output);
@@ -72,8 +81,8 @@ public class ReconciliationPdfService {
             generated.setSpacingAfter(10);
             document.add(generated);
 
-            addSummary(document, account, bodyFont);
-            addEntries(document, account, bodyFont, smallFont);
+            addSummary(document, account, bodyFont, role);
+            addEntries(document, account, bodyFont, smallFont, role);
             document.close();
             return output.toByteArray();
         } catch (IOException | DocumentException exception) {
@@ -81,17 +90,17 @@ public class ReconciliationPdfService {
         }
     }
 
-    private void addSummary(Document document, Map<String, Object> account, Font font)
+    private void addSummary(Document document, Map<String, Object> account, Font font, String role)
             throws DocumentException {
-        PdfPTable summary = new PdfPTable(6);
+        boolean buyer = "buyer".equals(role);
+        PdfPTable summary = new PdfPTable(5);
         summary.setWidthPercentage(100);
         summary.setSpacingAfter(12);
-        addSummaryCell(summary, "我方销售", account.get("mySalesAmount"), font);
-        addSummaryCell(summary, "我方采购", account.get("myPurchaseAmount"), font);
-        addSummaryCell(summary, "已收款", account.get("receivedPaymentAmount"), font);
-        addSummaryCell(summary, "已付款", account.get("paidPaymentAmount"), font);
-        addSummaryCell(summary, "应收余额", account.get("receivableBalance"), font);
-        addSummaryCell(summary, "应付余额", account.get("payableBalance"), font);
+        addSummaryCell(summary, buyer ? "我方采购" : "我方销售", account.get(buyer ? "myPurchaseAmount" : "mySalesAmount"), font);
+        addSummaryCell(summary, buyer ? "已付款" : "已收款", account.get(buyer ? "paidPaymentAmount" : "receivedPaymentAmount"), font);
+        addSummaryCell(summary, buyer ? "应付余额" : "应收余额", account.get(buyer ? "payableBalance" : "receivableBalance"), font);
+        addSummaryCell(summary, "已开发票金额", account.get(buyer ? "receivedInvoiceAmount" : "issuedInvoiceAmount"), font);
+        addSummaryCell(summary, "未开发票金额", account.get(buyer ? "unreceivedInvoiceAmount" : "unbilledAmount"), font);
         document.add(summary);
     }
 
@@ -108,7 +117,7 @@ public class ReconciliationPdfService {
 
     @SuppressWarnings("unchecked")
     private void addEntries(Document document, Map<String, Object> account,
-                            Font headerFont, Font bodyFont) throws DocumentException {
+                            Font headerFont, Font bodyFont, String role) throws DocumentException {
         Paragraph label = new Paragraph("已确认业务明细", headerFont);
         label.setSpacingAfter(5);
         document.add(label);
@@ -123,6 +132,9 @@ public class ReconciliationPdfService {
         }
         List<Map<String, Object>> entries = account.get("entries") instanceof List<?>
                 ? (List<Map<String, Object>>) account.get("entries") : List.of();
+        String direction = "buyer".equals(role) ? "PURCHASE" : "SALE";
+        entries = entries.stream().filter(entry -> direction.equals(entry.get("direction"))).toList();
+        table.setHeaderRows(1);
         if (entries.isEmpty()) {
             PdfPCell empty = tableCell("暂无已确认业务单据", bodyFont, Element.ALIGN_CENTER, 42);
             empty.setColspan(7);

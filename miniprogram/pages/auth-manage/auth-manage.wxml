@@ -6,10 +6,11 @@
         <view class="hero-eyebrow">ORGANIZATION</view>
         <view class="hero-title">组织成员</view>
       </view>
-      <button class="invite-btn" open-type="share" bindtap="shareInvite">
-        <text class="invite-plus">＋</text> 邀请成员
+      <button class="invite-btn" loading="{{preparingInvite}}" disabled="{{preparingInvite}}" bindtap="shareInvite">
+        <text class="invite-plus">＋</text> 生成成员邀请
       </button>
     </view>
+    <button class="invite-btn" wx:if="{{inviteCode}}" open-type="share" data-invite-type="member">发送成员邀请给微信好友</button>
     <view class="company-identity">
       <view class="company-avatar">{{companyAbbr}}</view>
       <view class="company-copy">

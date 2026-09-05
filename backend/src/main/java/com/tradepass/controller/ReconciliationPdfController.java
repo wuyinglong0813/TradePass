@@ -26,8 +26,9 @@ public class ReconciliationPdfController {
 
     @GetMapping(value = "/{counterpartyCompanyId}/pdf", produces = MediaType.APPLICATION_PDF_VALUE)
     public ResponseEntity<byte[]> pdf(@PathVariable Long counterpartyCompanyId,
-                                      @RequestParam(defaultValue = "false") boolean download) {
-        ReconciliationPdfService.PdfPayload file = pdfService.generate(counterpartyCompanyId);
+                                      @RequestParam(defaultValue = "false") boolean download,
+                                      @RequestParam(defaultValue = "supplier") String role) {
+        ReconciliationPdfService.PdfPayload file = pdfService.generate(counterpartyCompanyId, role);
         ContentDisposition disposition = (download ? ContentDisposition.attachment() : ContentDisposition.inline())
                 .filename(file.originalName(), StandardCharsets.UTF_8)
                 .build();
@@ -41,8 +42,9 @@ public class ReconciliationPdfController {
     }
 
     @GetMapping("/{counterpartyCompanyId}/pdf-data")
-    public ApiResponse<FileDataPayload> pdfData(@PathVariable Long counterpartyCompanyId) {
-        ReconciliationPdfService.PdfPayload file = pdfService.generate(counterpartyCompanyId);
+    public ApiResponse<FileDataPayload> pdfData(@PathVariable Long counterpartyCompanyId,
+                                                 @RequestParam(defaultValue = "supplier") String role) {
+        ReconciliationPdfService.PdfPayload file = pdfService.generate(counterpartyCompanyId, role);
         return ApiResponse.ok(FileDataPayload.of(
                 file.originalName(), MediaType.APPLICATION_PDF_VALUE, file.data()));
     }

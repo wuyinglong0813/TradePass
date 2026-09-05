@@ -106,6 +106,27 @@ function loadPage(relativePath) {
   return definition;
 }
 
+test('home approval polling refreshes while visible and stops across page exits', async () => {
+  const testApp = getApp();
+  const oldCompany = testApp.getCurrentCompanyId;
+  testApp.getCurrentCompanyId = () => testApp.globalData.currentCompanyId;
+  const page = loadPage('../pages/index/index');
+  const timers = new Map(); let nextId = 0; let count = 0;
+  const oldSet = global.setTimeout; const oldClear = global.clearTimeout;
+  global.setTimeout = (callback, delay) => { assert.strictEqual(delay, 10000); timers.set(++nextId, callback); return nextId; };
+  global.clearTimeout = id => timers.delete(id);
+  const instance = { ...page, data: { showJoinForm: false }, loadApprovalIndicator: async () => { count++; } };
+  try {
+    instance.startApprovalPolling();
+    const callback = timers.values().next().value; timers.clear(); await callback();
+    assert.strictEqual(count, 1); assert.strictEqual(timers.size, 1);
+    const stale = timers.values().next().value;
+    instance.stopApprovalPolling(); assert.strictEqual(timers.size, 0);
+    await stale(); assert.strictEqual(count, 1);
+    instance.startApprovalPolling(); instance.stopApprovalPolling(); assert.strictEqual(timers.size, 0);
+  } finally { global.setTimeout = oldSet; global.clearTimeout = oldClear; testApp.getCurrentCompanyId = oldCompany; }
+});
+
 test('logistics images get readable names and file sizes', () => {
   const contractPreview = loadPage('../pages/contract-preview/contract-preview');
   assert.match(
@@ -904,6 +925,58 @@ test('auth completion returns to result synchronization rather than reopening en
   wx.redirectTo = options => { url = options.url; };
   page.openReturnPage.call({ data: { scene: 'personal', options: {} }, stopStatusPolling() {} });
   assert.strictEqual(url, '/pages/service-return/service-return?scene=personal');
+});
+
+function pageInstance(page) {
+  return { ...page, data: JSON.parse(JSON.stringify(page.data)),
+    setData(values) { Object.assign(this.data, values); } };
+}
+
+test('member invitation waits for a code and cannot share across companies', async () => {
+  const page = loadPage('../pages/auth-manage/auth-manage');
+  const previousGetter = app.getCurrentCompanyId;
+  const previousRequest = wx.request;
+  let cid = '123'; let pending;
+  app.getCurrentCompanyId = () => cid;
+  wx.request = options => { pending = options; };
+  const context = pageInstance(page);
+  const event = { from: 'button', target: { dataset: { inviteType: 'member' } } };
+  try {
+    const generating = context.shareInvite();
+    assert.strictEqual(context.data.preparingInvite, true);
+    assert.strictEqual(context.onShareAppMessage(event).path, '/pages/index/index');
+    pending.success({ statusCode: 200, data: { code: 0, data: { code: 'member+code' } } });
+    await generating;
+    const share = context.onShareAppMessage(event);
+    assert.strictEqual(share.path, '/pages/index/index?inviteCode=member%2Bcode&type=member');
+    assert.strictEqual(share.imageUrl, '/images/member-invite-cover.png');
+    cid = '456';
+    assert.strictEqual(context.onShareAppMessage(event).path, '/pages/index/index');
+    const next = context.shareInvite(); cid = '789';
+    pending.success({ statusCode: 200, data: { code: 0, data: { code: 'stale' } } });
+    await next;
+    assert.strictEqual(context.data.inviteCode, '');
+  } finally { app.getCurrentCompanyId = previousGetter; wx.request = previousRequest; }
+});
+
+test('member invitation reaches confirmation for an account with no enterprise', async () => {
+  const previous = { ...app }; const data = { ...app.globalData }; const oldModal = wx.showModal;
+  app.globalData.token = 'member-token'; app.globalData.userInfo = { id: 'new-user' };
+  app.globalData.memberInfo = null; app.globalData.pendingInvite = { type: 'member', code: 'join-code' };
+  app.getCurrentCompanyId = () => ''; app.restoreStoredSession = () => {}; app.ensureSessionReady = async () => {};
+  const context = pageInstance(loadPage('../pages/index/index'));
+  context.startApprovalPolling = () => {}; context.clearSessionRestoreTimer = () => {};
+  context.restoreHomeSnapshot = () => {}; context.initRoleFromMember = () => {};
+  let modal; let accepted;
+  wx.showModal = options => { modal = options; };
+  context.processInvite = code => { accepted = code; };
+  try {
+    await context.onShow();
+    assert.strictEqual(context.data.showJoinForm, true);
+    assert.strictEqual(modal.title, '申请加入企业组织');
+    modal.success({ confirm: true }); modal.complete();
+    assert.strictEqual(accepted, 'join-code');
+  } finally { Object.assign(app, previous); app.globalData = data; wx.showModal = oldModal; }
 });
 
 test('partner sharing waits for invite creation and rejects stale company context', async () => {

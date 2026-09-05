@@ -254,7 +254,61 @@ public class SalesOrderInventoryService {
                 "SELECT COUNT(1) FROM warehouse WHERE company_id = ? AND enabled = 1", Long.class, companyId));
         result.put("productCount", balances.size());
         result.put("balances", balances);
+        result.put("canManualInbound", accessControlService.hasPermission(companyId, "inventory_receive"));
         return result;
+    }
+
+    @Transactional
+    public Map<String, Object> manualInbound(Long warehouseId, String requestId, String name,
+            String specification, String unit, BigDecimal quantity, BigDecimal price, String remark) {
+        long companyId = AuthContext.requireCompanyId();
+        accessControlService.requirePermission(companyId, "inventory_receive");
+        name = safeSpec(name); specification = safeSpec(specification); unit = safeSpec(unit);
+        remark = safeSpec(remark);
+        if (requestId == null || !requestId.matches("[a-zA-Z0-9-]{16,64}"))
+            throw new BusinessException("入库请求标识无效，请重新打开入库表单");
+        if (name.isBlank() || name.length() > 128 || unit.isBlank() || unit.length() > 32
+                || specification.length() > 256 || remark.length() > 500)
+            throw new BusinessException("请填写商品名称、单位，并检查内容长度");
+        if (quantity == null || quantity.signum() <= 0 || quantity.scale() > 4
+                || quantity.compareTo(new BigDecimal("99999999999999")) > 0
+                || price == null || price.signum() < 0 || price.scale() > 4
+                || price.compareTo(new BigDecimal("99999999999999")) > 0)
+            throw new BusinessException("数量须大于零，单价不能为负，最多四位小数");
+        BigDecimal amount = quantity.multiply(price).setScale(2, RoundingMode.HALF_UP);
+        if (amount.precision() > 18) throw new BusinessException("入库金额过大");
+        requireWarehouse(companyId, warehouseId);
+        // Serialize submissions to this warehouse, including retries of the same request.
+        jdbc.queryForObject("SELECT id FROM warehouse WHERE id = ? AND company_id = ? FOR UPDATE",
+                Long.class, warehouseId, companyId);
+        List<Long> existing = jdbc.query("SELECT id FROM inventory_manual_entry WHERE company_id = ? AND request_id = ?",
+                (rs, row) -> rs.getLong(1), companyId, requestId);
+        if (!existing.isEmpty()) return Map.of("id", existing.get(0));
+        Long productId = findOrCreateProduct(companyId, name, specification, unit);
+        Long entryId = ApplicationIds.next();
+        jdbc.update("""
+                INSERT INTO inventory_manual_entry
+                (id, company_id, request_id, warehouse_id, product_id, quantity, unit_price, amount, remark, created_by)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, entryId, companyId, requestId, warehouseId, productId, quantity, price, amount, remark, AuthContext.userId());
+        jdbc.update("""
+                INSERT INTO inventory_balance
+                (id, company_id, warehouse_id, product_id, quantity, unit_price, inventory_amount)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE
+                    unit_price = (inventory_amount + VALUES(inventory_amount)) / (quantity + VALUES(quantity)),
+                    inventory_amount = inventory_amount + VALUES(inventory_amount),
+                    quantity = quantity + VALUES(quantity), updated_at = CURRENT_TIMESTAMP
+                """, ApplicationIds.next(), companyId, warehouseId, productId, quantity, price, amount);
+        BigDecimal balance = jdbc.queryForObject("""
+                SELECT quantity FROM inventory_balance WHERE company_id = ? AND warehouse_id = ? AND product_id = ?
+                """, BigDecimal.class, companyId, warehouseId, productId);
+        jdbc.update("""
+                INSERT INTO inventory_transaction
+                (id, company_id, warehouse_id, product_id, biz_type, biz_id, quantity_delta, balance_after, created_by)
+                VALUES (?, ?, ?, ?, 'MANUAL_INBOUND', ?, ?, ?, ?)
+                """, ApplicationIds.next(), companyId, warehouseId, productId, entryId, quantity, balance, AuthContext.userId());
+        return Map.of("id", entryId);
     }
 
     public List<Map<String, Object>> searchProducts(String keyword, Integer limit) {

@@ -79,6 +79,7 @@ Page({
   },
 
   async onShow() {
+    this.startApprovalPolling();
     syncTabBar(this, 0);
     app.restoreStoredSession();
     const locallyLoggedIn = !!app.globalData.token;
@@ -119,7 +120,8 @@ Page({
       showHomeGuide: !this.data.showJoinForm && !wx.getStorageSync('tradepass_home_guide_done')
     });
 
-    if (!this.data.showJoinForm && app.globalData.pendingInvite) {
+    if (loggedIn && user && app.globalData.pendingInvite
+        && (app.globalData.pendingInvite.type === 'member' || !this.data.showJoinForm)) {
       const invite = app.globalData.pendingInvite;
       const member = app.globalData.memberInfo;
       if (invite.type === 'counterparty') {
@@ -146,7 +148,20 @@ Page({
           },
           complete: () => { this._confirmingInvite = false; }
         });
-      } else this.processInvite(invite.code);
+      } else {
+        if (this._confirmingInvite) return;
+        this._confirmingInvite = true;
+        wx.showModal({
+          title: '申请加入企业组织',
+          content: '是否使用当前账号申请加入邀请方企业？提交后需等待管理员审核并分配角色。',
+          confirmText: '申请加入',
+          success: result => {
+            if (result.confirm) this.processInvite(invite.code);
+            else app.globalData.pendingInvite = null;
+          },
+          complete: () => { this._confirmingInvite = false; }
+        });
+      }
       return;
     }
 
@@ -311,10 +326,12 @@ Page({
   },
 
   onHide() {
+    this.stopApprovalPolling();
     this.clearSessionRestoreTimer();
   },
 
   onUnload() {
+    this.stopApprovalPolling();
     this.clearSessionRestoreTimer();
   },
 
@@ -564,6 +581,28 @@ Page({
       }
       return false;
     }
+  },
+
+  startApprovalPolling() {
+    this.stopApprovalPolling();
+    this.approvalPageVisible = true;
+    const generation = this.approvalPollGeneration;
+    const tick = async () => {
+      if (!this.approvalPageVisible || generation !== this.approvalPollGeneration) return;
+      if (app.globalData.token && app.getCurrentCompanyId() && !this.data.showJoinForm) {
+        await this.loadApprovalIndicator();
+      }
+      if (this.approvalPageVisible && generation === this.approvalPollGeneration) this.approvalTimer = setTimeout(tick, 10000);
+    };
+    this.approvalTimer = setTimeout(tick, 10000);
+  },
+
+  stopApprovalPolling() {
+    this.approvalPageVisible = false;
+    this.approvalPollGeneration = (this.approvalPollGeneration || 0) + 1;
+    clearTimeout(this.approvalTimer);
+    this.approvalTimer = null;
+    this.approvalRequestSeq = (this.approvalRequestSeq || 0) + 1;
   },
 
   async loadApprovalIndicator() {
