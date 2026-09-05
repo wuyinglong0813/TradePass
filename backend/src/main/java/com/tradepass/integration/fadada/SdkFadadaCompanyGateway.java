@@ -112,9 +112,10 @@ public class SdkFadadaCompanyGateway implements FadadaCompanyGateway {
         try {
             BaseRes<T> response = call.call();
             if (response == null || !response.isSuccess() || response.getData() == null) {
-                log.warn("Electronic signature {} failed: code={}, requestId={}", action,
+                log.warn("Electronic signature {} failed: code={}, requestId={}, message={}", action,
                         response == null ? "null" : response.getCode(),
-                        response == null ? "" : response.getRequestId());
+                        response == null ? "" : response.getRequestId(),
+                        SdkFadadaUserGateway.safeDiagnosticMessage(response == null ? null : response.getMsg()));
                 throw new BusinessException(action + "失败，请稍后重试");
             }
             return response.getData();
