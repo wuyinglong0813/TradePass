@@ -80,8 +80,7 @@ class FadadaPersonalIdentityServiceTest {
         assertThat(command.getValue().accountName()).isEqualTo("13800000000");
         assertThat(command.getValue().callbackUrl())
                 .isEqualTo("https://tradepass.example.com/api/fadada/callback");
-        assertThat(command.getValue().redirectMiniAppUrl())
-                .isEqualTo("/pages/service-return/service-return?scene=personal");
+        assertThat(command.getValue().redirectMiniAppUrl()).isNull();
     }
 
     @Test
@@ -106,6 +105,22 @@ class FadadaPersonalIdentityServiceTest {
                 ArgumentCaptor.forClass(FadadaUserGateway.AuthUrlCommand.class);
         verify(gateway).createAuthUrl(command.capture());
         assertThat(command.getValue().callbackUrl()).isNull();
+    }
+
+    @Test
+    void rejectsInvalidCallbackBeforeCallingProvider() {
+        SysUser user = new SysUser();
+        user.setId(8L);
+        user.setPhone("13800000000");
+        when(userMapper.selectById(8L)).thenReturn(user);
+        when(identityMapper.selectOne(any(Wrapper.class))).thenReturn(identity("NOT_STARTED"));
+        for (String value : java.util.List.of("/api/fadada/callback", "http://example.test/callback",
+                "https://example.test/callback#fragment", "https://user:pass@example.test/callback")) {
+            properties.setCallbackUrl(value);
+            org.assertj.core.api.Assertions.assertThatThrownBy(service::createAuthUrl)
+                    .hasMessageContaining("认证回调地址配置不正确");
+        }
+        org.mockito.Mockito.verifyNoInteractions(gateway);
     }
 
     @Test

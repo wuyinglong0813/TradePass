@@ -72,10 +72,11 @@ public class FadadaCompanyService {
         Company company = requireCompany(companyId);
         requireCompanyFields(company);
         FadadaCorpIdentity identity = ensure(companyId, AuthContext.userId());
+        // Completion is handled by client polling; do not send an internal page path as a URL.
         String url = gateway.createAuthUrl(new FadadaCompanyGateway.AuthCommand(
                 identity.getClientCorpId(), "tradepass-user-" + AuthContext.userId(),
                 company.getName(), company.getCreditCode(), AUTH_SCOPES, properties.getCallbackUrl(),
-                "/pages/service-return/service-return?scene=company&companyId=" + companyId));
+                null));
         validateUrl(url);
         identity.setLocalStatus("IN_PROGRESS");
         identity.setFailureReason("");

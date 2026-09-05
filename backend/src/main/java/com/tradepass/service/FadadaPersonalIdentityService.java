@@ -86,9 +86,11 @@ public class FadadaPersonalIdentityService {
             throw new BusinessException("请先绑定手机号，再进行个人认证");
         }
         FadadaUserIdentity identity = ensureIdentity(userId);
+        // Internal mini-program routes are not provider return URLs. The client polls
+        // identity status and refreshes on return, so no redirect URL is required here.
         FadadaUserGateway.AuthUrlResult result = gateway.createAuthUrl(new FadadaUserGateway.AuthUrlCommand(
                 identity.getClientUserId(), user.getPhone(), callbackUrl(),
-                null, "/pages/service-return/service-return?scene=personal"));
+                null, null));
         validateAuthUrl(result.authUrl());
         identity.setLocalStatus("IN_PROGRESS");
         identity.setIdentProcessStatus("identifying");
@@ -223,7 +225,18 @@ public class FadadaPersonalIdentityService {
     }
 
     private String callbackUrl() {
-        return hasText(properties.getCallbackUrl()) ? properties.getCallbackUrl() : null;
+        if (!hasText(properties.getCallbackUrl())) return null;
+        String value = properties.getCallbackUrl().trim();
+        try {
+            URI uri = URI.create(value);
+            if (!"https".equalsIgnoreCase(uri.getScheme()) || !hasText(uri.getHost())
+                    || uri.getUserInfo() != null || uri.getFragment() != null) {
+                throw new IllegalArgumentException();
+            }
+            return value;
+        } catch (IllegalArgumentException exception) {
+            throw new BusinessException("认证回调地址配置不正确，请联系管理员检查 HTTPS 地址");
+        }
     }
 
     private void validateAuthUrl(String value) {

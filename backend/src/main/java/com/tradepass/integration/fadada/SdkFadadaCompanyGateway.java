@@ -51,7 +51,7 @@ public class SdkFadadaCompanyGateway implements FadadaCompanyGateway {
         request.setCorpNonEditableInfo(List.of("corpName", "corpIdentNo"));
         request.setAuthScopes(command.authScopes());
         request.setCallbackUrl(command.callbackUrl());
-        request.setRedirectMiniAppUrl(command.redirectMiniAppUrl());
+        if (hasText(command.redirectMiniAppUrl())) request.setRedirectMiniAppUrl(command.redirectMiniAppUrl());
         ECorpAuthUrlRes response = invoke(() -> corpClient.getCorpAuthUrl(request), "获取企业认证地址");
         if (!hasText(response.getAuthUrl())) throw new BusinessException("未获取到企业认证地址，请稍后重试");
         return response.getAuthUrl();
