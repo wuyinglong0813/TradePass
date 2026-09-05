@@ -82,11 +82,8 @@ Page({
   toggleAgree() { this.setData({ agreed: !this.data.agreed }); },
 
   openAgreement(e) {
-    if (e.currentTarget.dataset.type === 'privacy') {
-      wx.navigateTo({ url: '/pages/privacy/privacy' });
-      return;
-    }
-    wx.showToast({ title: '协议内容待法务审核后开放', icon: 'none' });
+    const type = e.currentTarget.dataset.type === 'privacy' ? 'privacy' : 'user';
+    wx.navigateTo({ url: `/pages/legal-document/legal-document?type=${type}` });
   },
 
   async createAndAuthenticate() {

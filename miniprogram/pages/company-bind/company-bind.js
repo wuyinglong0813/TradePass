@@ -2,10 +2,42 @@ const { request } = require('../../utils/request');
 
 Page({
   data: {
+    mode: 'create',
+    companyName: '',
+    creditCode: '',
+    legalPersonName: '',
     keyword: '',
     results: [],
     searched: false,
     selectedCompany: null
+  },
+
+  switchMode(e) {
+    this.setData({ mode: e.currentTarget.dataset.mode, selectedCompany: null });
+  },
+
+  onCompanyInput(e) {
+    const field = e.currentTarget.dataset.field;
+    if (!['companyName', 'creditCode', 'legalPersonName'].includes(field)) return;
+    this.setData({ [field]: e.detail.value });
+  },
+
+  continueCreate() {
+    const companyName = this.data.companyName.trim();
+    const creditCode = this.data.creditCode.trim().toUpperCase();
+    const legalPersonName = this.data.legalPersonName.trim();
+    if (!companyName || !creditCode || !legalPersonName) {
+      wx.showToast({ title: '请完整填写企业信息', icon: 'none' });
+      return;
+    }
+    if (!/^[0-9A-HJ-NPQRTUWXY]{18}$/.test(creditCode) && !/^\d{15}$/.test(creditCode)) {
+      wx.showToast({ title: '请检查信用代码或工商注册号', icon: 'none' });
+      return;
+    }
+    this.setData({ companyName, creditCode, legalPersonName });
+    wx.navigateTo({
+      url: `/pages/company-cert/company-cert?name=${encodeURIComponent(companyName)}&creditCode=${encodeURIComponent(creditCode)}&legalPersonName=${encodeURIComponent(legalPersonName)}`
+    });
   },
 
   onKeywordInput(e) {
@@ -52,7 +84,7 @@ Page({
     if (!c) return;
     wx.showModal({
       title: '企业已入驻',
-      content: `请联系“${c.name}”的企业管理员，通过成员邀请加入。企业认领流程开放后也可在此提交认领申请。`,
+      content: `请联系“${c.name}”的企业管理员，通过成员邀请加入。`,
       showCancel: false
     });
   }

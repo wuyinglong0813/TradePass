@@ -3,8 +3,9 @@ const { USER_ID_KEY } = require('./utils/homeSnapshot');
 
 // 本地后端地址（开发者工具模拟器用）
 const LOCAL_API = 'http://127.0.0.1:9999/api';
-// 云托管公网访问地址（真机/体验版/正式版用）
-const CLOUD_API = 'https://tradepass-274155-4-1446724178.sh.run.tcloudbase.com/api';
+// 生产文件上传地址；需在小程序后台配置 uploadFile 合法域名。
+// 普通业务请求仍通过下方云环境和服务名调用 callContainer。
+const CLOUD_API = 'https://sqt.org.cn/api';
 // 云托管 callContainer 配置；生产请求经微信链路自动注入可信用户信息。
 const CLOUD_ENV = 'prod-d7g9zrn5s7e6aab68';
 const CLOUD_SERVICE = 'tradepass';

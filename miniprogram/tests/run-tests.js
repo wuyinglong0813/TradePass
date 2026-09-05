@@ -272,6 +272,40 @@ test('contract numeric cells clear zero on focus and normalize leading zeros', (
   assert.ok(templateEditor.includes('bindfocus="onNumberCellFocus"'));
 });
 
+test('new company onboarding validates input and reaches confirmation without a search', () => {
+  const page = loadPage('../pages/company-bind/company-bind');
+  assert.strictEqual(page.data.mode, 'create');
+  let navigation;
+  let toast;
+  wx.navigateTo = options => { navigation = options.url; };
+  wx.showToast = options => { toast = options.title; };
+  const context = {
+    data: { companyName: '', creditCode: '', legalPersonName: '' },
+    setData(values) { Object.assign(this.data, values); }
+  };
+  page.continueCreate.call(context);
+  assert.strictEqual(navigation, undefined);
+  assert.strictEqual(toast, '请完整填写企业信息');
+  context.data = { companyName: ' 测试企业 & 商贸 ', creditCode: '123', legalPersonName: ' 张三 ' };
+  page.continueCreate.call(context);
+  assert.strictEqual(navigation, undefined);
+  context.data.creditCode = ' 91130100ma12345678 ';
+  page.continueCreate.call(context);
+  const query = new URL(navigation, 'https://example.test').searchParams;
+  assert.strictEqual(query.get('name'), '测试企业 & 商贸');
+  assert.strictEqual(query.get('creditCode'), '91130100MA12345678');
+  assert.strictEqual(query.get('legalPersonName'), '张三');
+  const cert = loadPage('../pages/company-cert/company-cert');
+  const confirmation = { data: {}, setData(values) { Object.assign(this.data, values); } };
+  cert.onLoad.call(confirmation, {
+    name: encodeURIComponent(query.get('name')),
+    creditCode: query.get('creditCode'),
+    legalPersonName: encodeURIComponent(query.get('legalPersonName'))
+  });
+  assert.strictEqual(confirmation.data.hasCompany, false);
+  assert.strictEqual(confirmation.data.companyName, '测试企业 & 商贸');
+});
+
 test('company search confirmation does not depend on sensitive company fields', () => {
   const companyBind = loadPage('../pages/company-bind/company-bind');
   let modal;
