@@ -6,9 +6,12 @@
 
   <block wx:for="{{roles}}" wx:key="id">
     <view class="role-card card" bindtap="editRole" data-id="{{item.id}}">
-      <view class="role-name">{{item.name}}</view>
+      <view class="role-heading">
+        <view class="role-name">{{item.name}}</view>
+        <view wx:if="{{!item.editable}}" class="system-role-badge">系统角色</view>
+        <view wx:else class="role-arrow">›</view>
+      </view>
       <view class="role-perms">{{item.permsDisplay || item.permissions}}</view>
-      <view class="arrow">{{item.editable ? '›' : '系统角色'}}</view>
     </view>
   </block>
 

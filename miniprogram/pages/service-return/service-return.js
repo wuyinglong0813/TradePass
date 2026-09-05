@@ -15,17 +15,26 @@ Page({
   },
 
   async syncResult() {
+    if (this._syncing) return;
+    this._syncing = true;
+    this.setData({ loading: true });
     const options = this.data.options || {};
     try {
       let result;
       if (options.scene === 'personal') {
-        result = await request({ url: '/fadada/users/me/identity/sync', method: 'POST', withCompany: false });
+        result = await this.readAuthenticationResult('/fadada/users/me/identity', options.scene);
       } else if (options.scene === 'company' || options.scene === 'seal') {
-        result = await request({
-          url: `/fadada/companies/${options.companyId}/identity/sync`, method: 'POST'
-        });
+        result = await this.readAuthenticationResult(
+          `/fadada/companies/${options.companyId}/identity`, options.scene);
       } else if (options.scene === 'contract' || options.scene === 'abolish') {
         result = await request({ url: `/contracts/${options.contractId}/signing/sync`, method: 'POST' });
+      }
+      if (['personal', 'company', 'seal'].includes(options.scene)
+          && !this.authenticationCompleted(result, options.scene)) {
+        this.setData({ loading: false, failed: true,
+          title: result && result.status === 'FAILED' ? '认证未通过' : '处理结果待确认',
+          message: (result && (result.failureReason || result.statusText)) || '结果尚未更新，请稍后刷新' });
+        return;
       }
       this.setData({
         loading: false,
@@ -41,6 +50,30 @@ Page({
         title: '结果同步暂未完成',
         message: error.message || '稍后返回业务页面刷新即可'
       });
+    } finally {
+      this._syncing = false;
+    }
+  },
+
+  authenticationCompleted(result, scene) {
+    return scene === 'seal'
+      ? Number(result && result.enabledSealCount || 0) > 0
+      : !!result && result.status === 'VERIFIED';
+  },
+
+  async readAuthenticationResult(url, scene) {
+    const options = { url, withCompany: scene !== 'personal' };
+    const current = await request(options);
+    if (this.authenticationCompleted(current, scene)) return current;
+    try {
+      return await request({ ...options, url: `${url}/sync`, method: 'POST' });
+    } catch (error) {
+      // A callback or another request may have committed success while this sync failed.
+      try {
+        const latest = await request(options);
+        if (this.authenticationCompleted(latest, scene)) return latest;
+      } catch (readError) {}
+      throw error;
     }
   },
 

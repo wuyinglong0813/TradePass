@@ -233,7 +233,8 @@
             <view class="row-arrow">›</view>
           </view>
         </view>
-        <button class="invite-btn" open-type="share" wx:if="{{isLegalPerson}}" bindtap="addCounterparty">＋ 邀请{{role === 'supplier' ? '客户' : '供应商'}}企业</button>
+        <button class="invite-btn" wx:if="{{isLegalPerson}}" loading="{{preparingInvite}}" disabled="{{preparingInvite}}" bindtap="addCounterparty">＋ 生成{{role === 'supplier' ? '客户' : '供应商'}}企业邀请</button>
+        <button class="invite-btn" open-type="share" data-invite-type="counterparty" wx:if="{{isLegalPerson && counterpartyInviteCode && inviteCompanyId === currentCompanyId && inviteRole === role}}">发送合作邀请给微信好友</button>
       </view>
 
       <view class="section">

@@ -56,7 +56,11 @@ App({
       ? this.refreshSession() : Promise.resolve(null);
   },
 
-  onShow() {
+  onShow(options = {}) {
+    const query = options.query || {};
+    if (query.inviteCode) {
+      this.globalData.pendingInvite = { code: query.inviteCode, type: query.type || 'member' };
+    }
     this.restoreStoredSession();
     if (this.globalData.token) this._sessionReady = this.refreshSession();
   },

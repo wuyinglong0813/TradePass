@@ -819,6 +819,35 @@ test('authentication URL loading ignores concurrent taps and permits retry after
   assert.strictEqual(context._loadingServiceUrl, false);
 });
 
+test('return page reuses verified company state and reconciles a concurrent successful callback', async () => {
+  const page = loadPage('../pages/service-return/service-return');
+  const context = { authenticationCompleted: page.authenticationCompleted };
+  let calls = [];
+  wx.request = options => {
+    calls.push(options.method);
+    options.success({ statusCode: 200, data: { code: 0, data: { status: 'VERIFIED' } } });
+  };
+  const url = '/fadada/companies/123/identity';
+  assert.strictEqual((await page.readAuthenticationResult.call(context, url, 'company')).status, 'VERIFIED');
+  assert.deepStrictEqual(calls, ['GET']);
+  calls = [];
+  wx.request = options => {
+    calls.push(options.method);
+    if (options.method === 'POST') options.fail(new Error('provider busy'));
+    else options.success({ statusCode: 200, data: { code: 0, data: {
+      status: calls.length === 1 ? 'IN_PROGRESS' : 'VERIFIED'
+    } } });
+  };
+  assert.strictEqual((await page.readAuthenticationResult.call(context, url, 'company')).status, 'VERIFIED');
+  assert.deepStrictEqual(calls, ['GET', 'POST', 'GET']);
+  wx.request = options => {
+    if (options.method === 'POST') options.fail(new Error('provider busy'));
+    else options.success({ statusCode: 200, data: { code: 0, data: { status: 'IN_PROGRESS' } } });
+  };
+  await assert.rejects(page.readAuthenticationResult.call(context, url, 'company'), /provider busy/);
+  assert.strictEqual(page.authenticationCompleted({ status: 'VERIFIED', enabledSealCount: 0 }, 'seal'), false);
+});
+
 test('personal auth polling preserves provider page until verified and only reads local state', async () => {
   const page = loadPage('../pages/fadada-auth/fadada-auth');
   let status = 'IN_PROGRESS';
@@ -850,6 +879,35 @@ test('auth completion returns to result synchronization rather than reopening en
   wx.redirectTo = options => { url = options.url; };
   page.openReturnPage.call({ data: { scene: 'personal', options: {} }, stopStatusPolling() {} });
   assert.strictEqual(url, '/pages/service-return/service-return?scene=personal');
+});
+
+test('partner sharing waits for invite creation and rejects stale company context', async () => {
+  const page = loadPage('../pages/index/index');
+  const previousMember = app.globalData.memberInfo;
+  const previousGetter = app.getCurrentCompanyId;
+  app.globalData.memberInfo = { roleCode: 'LEGAL' };
+  app.getCurrentCompanyId = () => '123';
+  let pending;
+  wx.request = options => { pending = options; };
+  wx.showToast = () => {};
+  const context = { data: { role: 'buyer', counterpartyInviteCode: '' },
+    requireLogin: () => true, setData(values) { Object.assign(this.data, values); } };
+  const event = { from: 'button', target: { dataset: { inviteType: 'counterparty' } } };
+  try {
+    const generating = page.addCounterparty.call(context);
+    assert.strictEqual(context.data.preparingInvite, true);
+    assert.strictEqual(page.onShareAppMessage.call(context, event).path, '/pages/index/index');
+    pending.success({ statusCode: 200, data: { code: 0, data: { code: 'test-code' } } });
+    await generating;
+    assert.strictEqual(context.data.preparingInvite, false);
+    assert.strictEqual(page.onShareAppMessage.call(context, event).path,
+      '/pages/index/index?inviteCode=test-code&type=counterparty');
+    context.data.role = 'supplier';
+    assert.strictEqual(page.onShareAppMessage.call(context, event).path, '/pages/index/index');
+  } finally {
+    app.globalData.memberInfo = previousMember;
+    app.getCurrentCompanyId = previousGetter;
+  }
 });
 
 test('request clears session and redirects after unauthorized response', async () => {

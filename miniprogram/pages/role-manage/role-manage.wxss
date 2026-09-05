@@ -1,10 +1,12 @@
 .section-head { align-items: center; display: flex; justify-content: space-between; }
 .title { font-size: 32rpx; font-weight: 700; }
 .add-btn { background: #3498ff; border-radius: 8rpx; color: #fff; font-size: 24rpx; padding: 8rpx 20rpx; }
-.role-card { position: relative; }
-.role-name { font-size: 28rpx; font-weight: 600; margin-bottom: 8rpx; }
-.role-perms { color: #6b7280; font-size: 22rpx; }
-.arrow { color: #9ca3af; font-size: 48rpx; position: absolute; right: 0; top: 50%; transform: translateY(-50%); }
+.role-card { min-width: 0; }
+.role-heading { display: flex; align-items: flex-start; gap: 16rpx; margin-bottom: 12rpx; }
+.role-name { flex: 1; min-width: 0; font-size: 28rpx; font-weight: 600; line-height: 1.5; word-break: break-all; }
+.role-perms { color: #6b7280; font-size: 22rpx; line-height: 1.65; word-break: break-all; }
+.system-role-badge { flex-shrink: 0; padding: 4rpx 12rpx; border-radius: 8rpx; background: #f1f5f9; color: #64748b; font-size: 22rpx; line-height: 1.5; white-space: nowrap; }
+.role-arrow { flex-shrink: 0; color: #9ca3af; font-size: 36rpx; line-height: 1.2; }
 .empty { color: #6b7280; padding: 40rpx 0; text-align: center; }
 .modal-mask { align-items: center; background: rgba(0,0,0,0.45); bottom: 0; display: flex; justify-content: center; left: 0; position: fixed; right: 0; top: 0; z-index: 100; }
 .modal-card { background: #fff; border-radius: 20rpx; max-height: 80vh; overflow-y: auto; margin: 0 40rpx; padding: 40rpx; width: 100%; }

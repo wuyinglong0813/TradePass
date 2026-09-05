@@ -42,6 +42,9 @@ Page({
     companySwitcherListHeight: 0,
     isLegalPerson: false,
     counterpartyInviteCode: '',
+    preparingInvite: false,
+    inviteCompanyId: '',
+    inviteRole: '',
     counterpartyEmptyBtn: '',
     isLoggedIn: false,
     sessionRestoring: false,
@@ -126,11 +129,24 @@ Page({
             content: '接受企业合作邀请需要您是公司的法人。请先在“企业”页面完成企业认证。',
             showCancel: false
           });
-          app.globalData.pendingInvite = null;
           return;
         }
       }
-      this.processInvite(invite.code);
+      if (invite.type === 'counterparty') {
+        if (this._confirmingInvite) return;
+        this._confirmingInvite = true;
+        const company = (app.globalData.companies || []).find(c => String(c.id) === String(app.getCurrentCompanyId()));
+        wx.showModal({
+          title: '接受企业合作邀请',
+          content: `是否以“${company && company.name || '当前企业'}”建立合作关系？如需使用其他企业，请先取消并切换企业，再打开邀请。`,
+          confirmText: '接受邀请',
+          success: result => {
+            if (result.confirm) this.processInvite(invite.code);
+            else app.globalData.pendingInvite = null;
+          },
+          complete: () => { this._confirmingInvite = false; }
+        });
+      } else this.processInvite(invite.code);
       return;
     }
 
@@ -316,8 +332,10 @@ Page({
   },
 
   async processInvite(code) {
+    if (this._processingInvite) return;
     const user = app.globalData.userInfo;
     if (!user || !user.id) return;
+    this._processingInvite = true;
     try {
       const result = await request({
         url: '/companies/join',
@@ -330,7 +348,9 @@ Page({
       await this.onShow();
     } catch (e) {
       wx.showToast({ title: e.message, icon: 'none' });
-      app.globalData.pendingInvite = null;
+      // Keep the invitation available after a transient request failure.
+    } finally {
+      this._processingInvite = false;
     }
   },
 
@@ -642,6 +662,7 @@ Page({
   },
 
   addCounterparty() {
+    if (this.data.preparingInvite) return;
     if (!this.requireLogin()) return;
     const member = app.globalData.memberInfo;
     if (!member || member.roleCode !== 'LEGAL') {
@@ -653,16 +674,18 @@ Page({
       wx.showToast({ title: '请先选择企业', icon: 'none' });
       return;
     }
-    request({
+    const role = this.data.role;
+    this.setData({ preparingInvite: true, counterpartyInviteCode: '' });
+    return request({
       url: '/companies/counterparty-invite',
       method: 'POST',
       data: { companyId: cid, relationRole: this.data.role }
     }).then(result => {
-      this.setData({ counterpartyInviteCode: result.code });
-      wx.showShareMenu({ withShareTicket: true });
+      this.setData({ counterpartyInviteCode: result.code, inviteCompanyId: String(cid), inviteRole: role });
+      wx.showToast({ title: '邀请已生成，请点击发送', icon: 'none' });
     }).catch(e => {
       wx.showToast({ title: e.message, icon: 'none' });
-    });
+    }).finally(() => this.setData({ preparingInvite: false }));
   },
 
   // ===== 隐私协议弹窗 =====
@@ -695,12 +718,15 @@ Page({
   },
   noop() {},
 
-  onShareAppMessage() {
+  onShareAppMessage(event) {
     const code = this.data.counterpartyInviteCode;
-    if (!code) return { title: '商签通', path: '/pages/index/index' };
+    if (!code || !event || event.from !== 'button'
+        || !event.target || !event.target.dataset || event.target.dataset.inviteType !== 'counterparty'
+        || this.data.inviteCompanyId !== String(app.getCurrentCompanyId())
+        || this.data.inviteRole !== this.data.role) return { title: '商签通', path: '/pages/index/index' };
     return {
       title: '邀请你在商签通建立企业合作关系',
-      path: `/pages/index/index?inviteCode=${code}&type=counterparty`
+      path: `/pages/index/index?inviteCode=${encodeURIComponent(code)}&type=counterparty`
     };
   }
 });
