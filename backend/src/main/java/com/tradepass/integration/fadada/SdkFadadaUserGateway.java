@@ -91,7 +91,8 @@ public class SdkFadadaUserGateway implements FadadaUserGateway {
             if (response == null || !response.isSuccess() || response.getData() == null) {
                 String requestId = response == null ? "" : response.getRequestId();
                 String code = response == null ? "null" : response.getCode();
-                log.warn("Fadada {} failed: code={}, requestId={}", action, code, requestId);
+                log.warn("Fadada {} failed: code={}, requestId={}, message={}", action, code, requestId,
+                        safeDiagnosticMessage(response == null ? null : response.getMsg()));
                 throw new BusinessException(action + "失败，请稍后重试");
             }
             return response.getData();
@@ -103,6 +104,16 @@ public class SdkFadadaUserGateway implements FadadaUserGateway {
 
     private static boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    // Retain provider diagnostics on the server without exposing identifiers or URLs.
+    static String safeDiagnosticMessage(String message) {
+        if (message == null) return "";
+        String safe = message.replaceAll("[\\r\\n\\t]", " ")
+                .replaceAll("https?://\\S+", "[url]")
+                .replaceAll("[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+", "[email]")
+                .replaceAll("[A-Za-z0-9_-]*[0-9][A-Za-z0-9_-]{10,}", "[identifier]");
+        return safe.substring(0, Math.min(safe.length(), 300));
     }
 
     private String firstText(String... values) {

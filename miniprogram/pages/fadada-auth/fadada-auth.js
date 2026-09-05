@@ -36,6 +36,8 @@ Page({
   onUnload() { this.stopStatusPolling(); },
 
   async loadServiceUrl() {
+    if (this._loadingServiceUrl) return;
+    this._loadingServiceUrl = true;
     const { scene, options } = this.data;
     const config = SCENES[scene];
     this.setData({ loading: true, serviceUrl: '', errorMessage: '' });
@@ -60,6 +62,7 @@ Page({
     } catch (error) {
       this.setData({ errorMessage: error.message || '服务页面加载失败' });
     } finally {
+      this._loadingServiceUrl = false;
       this.setData({ loading: false });
     }
   },

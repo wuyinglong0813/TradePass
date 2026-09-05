@@ -796,6 +796,29 @@ test('request exposes business and network failures', async () => {
   await assert.rejects(request({ url: '/orders' }), /offline/);
 });
 
+test('authentication URL loading ignores concurrent taps and permits retry after failure', async () => {
+  const page = loadPage('../pages/fadada-auth/fadada-auth');
+  let calls = 0;
+  let pending;
+  wx.request = options => { calls += 1; pending = options; };
+  const context = {
+    data: { scene: 'personal', options: {} },
+    setData(values) { Object.assign(this.data, values); }
+  };
+  const first = page.loadServiceUrl.call(context);
+  await page.loadServiceUrl.call(context);
+  assert.strictEqual(calls, 1);
+  pending.success({ statusCode: 400, data: { code: 400, message: '认证暂不可用' } });
+  await first;
+  assert.strictEqual(context.data.errorMessage, '认证暂不可用');
+  assert.strictEqual(context.data.loading, false);
+  const retry = page.loadServiceUrl.call(context);
+  assert.strictEqual(calls, 2);
+  pending.fail(new Error('offline'));
+  await retry;
+  assert.strictEqual(context._loadingServiceUrl, false);
+});
+
 test('request clears session and redirects after unauthorized response', async () => {
   const removedKeys = [];
   let redirectUrl;

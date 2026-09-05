@@ -8,6 +8,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 class SdkFadadaUserGatewayTest {
 
     @Test
+    void diagnosticMessageRetainsReasonWithoutContactDetailsOrLongIdentifiers() {
+        assertThat(SdkFadadaUserGateway.safeDiagnosticMessage(
+                "clientUserId长度超过限制\ntradepass-user-1234567890123456789 13800138000 https://example.test/?token=secret user@example.test"))
+                .isEqualTo("clientUserId长度超过限制 [identifier] [identifier] [url] [email]");
+        assertThat(SdkFadadaUserGateway.safeDiagnosticMessage(null)).isEmpty();
+    }
+
+    @Test
     void queriesProviderWithOnlyOneUserIdentifier() {
         GetUserReq verifiedRequest = new GetUserReq();
         SdkFadadaUserGateway.applyUserLookup(
