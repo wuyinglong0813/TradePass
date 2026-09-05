@@ -61,8 +61,7 @@ public class SdkFadadaCompanyGateway implements FadadaCompanyGateway {
     public CompanyAccount getCompany(String clientCorpId, String openCorpId) {
         GetCorpReq request = new GetCorpReq();
         request.setAccessToken(tokenProvider.get());
-        if (hasText(clientCorpId)) request.setClientCorpId(clientCorpId);
-        if (hasText(openCorpId)) request.setOpenCorpId(openCorpId);
+        applyCompanyLookup(request, clientCorpId, openCorpId);
         CorpRes response = invoke(() -> corpClient.get(request), "查询企业认证状态");
         return new CompanyAccount(response.getClientCorpId(), response.getOpenCorpId(),
                 response.getBindingStatus(), response.getIdentStatus(), response.getAvailableStatus(),
@@ -108,6 +107,12 @@ public class SdkFadadaCompanyGateway implements FadadaCompanyGateway {
         return response.getResourceUrl();
     }
 
+    static void applyCompanyLookup(GetCorpReq request, String clientCorpId, String openCorpId) {
+        if (hasText(openCorpId)) request.setOpenCorpId(openCorpId);
+        else if (hasText(clientCorpId)) request.setClientCorpId(clientCorpId);
+        else throw new BusinessException("企业认证标识缺失");
+    }
+
     private <T> T invoke(ApiCall<T> call, String action) {
         try {
             BaseRes<T> response = call.call();
@@ -125,7 +130,7 @@ public class SdkFadadaCompanyGateway implements FadadaCompanyGateway {
         }
     }
 
-    private boolean hasText(String value) { return value != null && !value.isBlank(); }
+    private static boolean hasText(String value) { return value != null && !value.isBlank(); }
 
     @FunctionalInterface
     private interface ApiCall<T> { BaseRes<T> call() throws ApiException; }

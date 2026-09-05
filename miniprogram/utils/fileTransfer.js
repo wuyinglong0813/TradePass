@@ -173,7 +173,22 @@ function uploadMultipartApiFile(url, filePath, data = {}, fileFieldName = 'file'
   });
 }
 
+async function uploadSignatureApiFile(url, filePath, data = {}) {
+  const fs = wx.getFileSystemManager();
+  const stat = fs.statSync(filePath);
+  if (!stat || !stat.size || stat.size > 500 * 1024) {
+    throw new Error('签名图片为空或过大，请重新签名');
+  }
+  const signatureBase64 = await new Promise((resolve, reject) => {
+    fs.readFile({ filePath, encoding: 'base64',
+      success: result => resolve(result.data),
+      fail: () => reject(new Error('签名图片读取失败，请重新签名')) });
+  });
+  return request({ url, method: 'POST', data: { ...data, signatureBase64 }, timeout: 60000 });
+}
+
 module.exports = {
+  uploadSignatureApiFile,
   downloadApiFile,
   downloadChunkedApiFile,
   localFileReady,

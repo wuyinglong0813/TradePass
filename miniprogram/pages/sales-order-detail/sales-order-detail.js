@@ -1,5 +1,5 @@
 const { request } = require('../../utils/request');
-const { downloadApiFile, uploadMultipartApiFile } = require('../../utils/fileTransfer');
+const { downloadApiFile, uploadSignatureApiFile } = require('../../utils/fileTransfer');
 
 Page({
   data: {
@@ -666,14 +666,13 @@ Page({
       this.setData({ receiving: true });
       wx.showLoading({ title: '正在确认...' });
       const filePath = await this.signatureTempFile();
-      const detail = await uploadMultipartApiFile(
+      const detail = await uploadSignatureApiFile(
         `/trade-documents/${this.data.id}/receive`,
         filePath,
         {
           decision: this.data.signatureDecision,
           warehouseId: this.data.signatureWarehouseId
-        },
-        'signature'
+        }
       );
       this.signatureCanvas = null;
       this.signatureContext = null;

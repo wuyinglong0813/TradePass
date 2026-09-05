@@ -401,6 +401,31 @@ const {
 } = require('../utils/homeSnapshot');
 const { setTabBarHidden, syncTabBar, tabIndicatorTransform } = require('../utils/tabBar');
 
+test('signature upload uses authenticated API transport and bounds image size', async () => {
+  const { uploadSignatureApiFile } = require('../utils/fileTransfer');
+  const oldFs = wx.getFileSystemManager;
+  const oldCloud = wx.cloud;
+  const app = getApp();
+  const oldLocal = app.globalData.isLocalDevelopment;
+  app.globalData.isLocalDevelopment = false;
+  let captured;
+  wx.getFileSystemManager = () => ({
+    statSync: () => ({ size: 3 }),
+    readFile: o => o.success({ data: 'AQID' })
+  });
+  wx.cloud = { callContainer: o => { captured = o; o.success({ statusCode: 200, data: { code: 0, data: { status: 'APPROVED' } } }); } };
+  try {
+    const result = await uploadSignatureApiFile('/trade-documents/7/receive', '/tmp/sign.png', { decision: 'APPROVE' });
+    assert.strictEqual(result.status, 'APPROVED');
+    assert.strictEqual(captured.path, '/api/trade-documents/7/receive');
+    assert.strictEqual(captured.header.Authorization, 'token-1');
+    assert.strictEqual(captured.header['X-Company-Id'], 'company-3');
+    assert.deepStrictEqual(captured.data, { decision: 'APPROVE', signatureBase64: 'AQID' });
+    wx.getFileSystemManager = () => ({ statSync: () => ({ size: 600 * 1024 }) });
+    await assert.rejects(uploadSignatureApiFile('/trade-documents/7/receive', '/tmp/sign.png'), /过大/);
+  } finally { wx.getFileSystemManager = oldFs; wx.cloud = oldCloud; app.globalData.isLocalDevelopment = oldLocal; }
+});
+
 test('multipart upload sends auth, tenant and form fields without base64 packaging', async () => {
   let captured;
   wx.getStorageSync = () => '';

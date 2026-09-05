@@ -33,19 +33,23 @@ public class InventoryController {
     @PostMapping(value = "/sales-orders/{id}/receive", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ApiResponse<Map<String, Object>> receive(@PathVariable Long id,
                                                     @RequestBody Map<String, Object> body) {
+        byte[] signature = decodeSignature(body.get("signatureBase64"));
         return ApiResponse.ok(inventoryService.receive(id,
                 String.valueOf(body.getOrDefault("decision", "")),
                 longValue(body.get("warehouseId")),
-                String.valueOf(body.getOrDefault("reason", ""))));
+                String.valueOf(body.getOrDefault("reason", "")),
+                signature == null ? null : "signature.png", signature));
     }
 
     @PostMapping(value = "/trade-documents/{id}/receive", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ApiResponse<Map<String, Object>> confirmDocument(@PathVariable Long id,
                                                             @RequestBody Map<String, Object> body) {
+        byte[] signature = decodeSignature(body.get("signatureBase64"));
         return ApiResponse.ok(inventoryService.receive(id,
                 String.valueOf(body.getOrDefault("decision", "")),
                 longValue(body.get("warehouseId")),
-                String.valueOf(body.getOrDefault("reason", ""))));
+                String.valueOf(body.getOrDefault("reason", "")),
+                signature == null ? null : "signature.png", signature));
     }
 
     @PostMapping(value = "/sales-orders/{id}/receive", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -77,6 +81,18 @@ public class InventoryController {
             throw exception;
         } catch (Exception exception) {
             throw new BusinessException("签名图片读取失败，请重新签名");
+        }
+    }
+
+    static byte[] decodeSignature(Object value) {
+        if (value == null) return null;
+        if (!(value instanceof String encoded) || encoded.isBlank() || encoded.length() > 700000) {
+            throw new BusinessException("签名图片为空或过大，请重新签名");
+        }
+        try {
+            return java.util.Base64.getDecoder().decode(encoded);
+        } catch (IllegalArgumentException exception) {
+            throw new BusinessException("签名图片格式不正确，请重新签名");
         }
     }
 

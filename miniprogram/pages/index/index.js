@@ -726,6 +726,7 @@ Page({
         || this.data.inviteRole !== this.data.role) return { title: '商签通', path: '/pages/index/index' };
     return {
       title: '邀请你在商签通建立企业合作关系',
+      imageUrl: '/images/company-invite-cover.png',
       path: `/pages/index/index?inviteCode=${encodeURIComponent(code)}&type=counterparty`
     };
   }
