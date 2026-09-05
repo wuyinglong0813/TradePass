@@ -72,8 +72,9 @@ Page({
       });
       if (notify) {
         wx.showToast({
-          title: status === 'VERIFIED' ? '认证结果已更新' : '认证状态已刷新',
-          icon: 'success'
+          title: status === 'VERIFIED' ? '认证结果已更新'
+            : (identity && identity.failureReason ? '请查看页面上的认证提示' : '认证状态已刷新'),
+          icon: identity && identity.failureReason ? 'none' : 'success'
         });
       }
     } catch (error) {

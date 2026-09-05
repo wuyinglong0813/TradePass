@@ -57,10 +57,24 @@ public class FadadaPersonalIdentityService {
     @Transactional
     public PersonalIdentityPayload syncCurrent() {
         requireReady();
-        FadadaUserIdentity identity = findByUserId(AuthContext.userId());
+        FadadaUserIdentity identity = identityMapper.selectOne(new LambdaQueryWrapper<FadadaUserIdentity>()
+                .eq(FadadaUserIdentity::getUserId, AuthContext.userId()).last("LIMIT 1 FOR UPDATE"));
         if (identity == null) return toPayload(null);
         if ("VERIFIED".equals(identity.getLocalStatus())) return toPayload(identity);
-        return toPayload(sync(identity));
+        if (identity.getLastSyncAt() != null
+                && identity.getLastSyncAt().isAfter(LocalDateTime.now().minusSeconds(30))) {
+            return toPayload(identity);
+        }
+        try {
+            return toPayload(sync(identity));
+        } catch (com.tradepass.integration.fadada.FadadaUserQueryException exception) {
+            // Missing authorization and throttling are not successful verification.
+            // Persist the retry interval so concurrent clients cannot hammer the provider.
+            identity.setLastSyncAt(LocalDateTime.now());
+            identity.setFailureReason(exception.getMessage());
+            identityMapper.updateById(identity);
+            return toPayload(identity);
+        }
     }
 
     @Transactional
@@ -133,6 +147,12 @@ public class FadadaPersonalIdentityService {
     private FadadaUserIdentity sync(FadadaUserIdentity identity) {
         FadadaUserGateway.UserAccountResult account = gateway.getUser(
                 identity.getClientUserId(), identity.getOpenUserId());
+        if (java.util.List.of(
+                new com.tradepass.integration.fadada.FadadaUserQueryException("210022").getMessage(),
+                new com.tradepass.integration.fadada.FadadaUserQueryException("100020").getMessage())
+                .contains(identity.getFailureReason() == null ? "" : identity.getFailureReason())) {
+            identity.setFailureReason("");
+        }
         if (hasText(account.clientUserId()) && !identity.getClientUserId().equals(account.clientUserId())) {
             throw new BusinessException("认证服务用户绑定与当前账号不一致");
         }

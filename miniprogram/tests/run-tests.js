@@ -819,6 +819,39 @@ test('authentication URL loading ignores concurrent taps and permits retry after
   assert.strictEqual(context._loadingServiceUrl, false);
 });
 
+test('personal auth polling preserves provider page until verified and only reads local state', async () => {
+  const page = loadPage('../pages/fadada-auth/fadada-auth');
+  let status = 'IN_PROGRESS';
+  let returned = 0;
+  const calls = [];
+  wx.request = options => {
+    calls.push(options);
+    options.success({ statusCode: 200, data: { code: 0, data: { status } } });
+  };
+  const context = {
+    data: { scene: 'personal', options: {}, serviceUrl: 'https://example.test/auth' },
+    scheduleStatusPoll() {},
+    openReturnPage() { returned += 1; }
+  };
+  await page.pollStatus.call(context);
+  assert.strictEqual(returned, 0);
+  assert.strictEqual(context.data.serviceUrl, 'https://example.test/auth');
+  assert.ok(calls[0].url.endsWith('/fadada/users/me/identity'));
+  assert.strictEqual(calls[0].method, 'GET');
+  status = 'VERIFIED';
+  await page.pollStatus.call(context);
+  assert.strictEqual(returned, 1);
+  assert.strictEqual(context.data.serviceUrl, 'https://example.test/auth');
+});
+
+test('auth completion returns to result synchronization rather than reopening enrollment', () => {
+  const page = loadPage('../pages/fadada-auth/fadada-auth');
+  let url;
+  wx.redirectTo = options => { url = options.url; };
+  page.openReturnPage.call({ data: { scene: 'personal', options: {} }, stopStatusPolling() {} });
+  assert.strictEqual(url, '/pages/service-return/service-return?scene=personal');
+});
+
 test('request clears session and redirects after unauthorized response', async () => {
   const removedKeys = [];
   let redirectUrl;

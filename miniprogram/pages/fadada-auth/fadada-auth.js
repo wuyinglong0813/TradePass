@@ -97,7 +97,7 @@ Page({
       let result;
       if (scene === 'personal') {
         result = await request({
-          url: '/fadada/users/me/identity/sync', method: 'POST', withCompany: false,
+          url: '/fadada/users/me/identity', withCompany: false,
           timeout: 15000
         });
       } else {
@@ -114,8 +114,7 @@ Page({
         return;
       }
     } catch (error) {
-      // The account may not exist at the provider while the user is still filling the form.
-      // Keep polling and let the provider page remain interactive.
+      // Personal auth reads callback-updated local state; explicit refresh/return syncs the provider.
     }
     this.pollAttempts = (this.pollAttempts || 0) + 1;
     this.scheduleStatusPoll();

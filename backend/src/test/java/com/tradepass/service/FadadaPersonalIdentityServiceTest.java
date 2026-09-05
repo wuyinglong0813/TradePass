@@ -124,6 +124,22 @@ class FadadaPersonalIdentityServiceTest {
     }
 
     @Test
+    void missingAccountAndRateLimitRemainUnverifiedAndUseCooldown() {
+        for (String code : java.util.List.of("210022", "100020")) {
+            org.mockito.Mockito.reset(gateway);
+            FadadaUserIdentity identity = identity("IN_PROGRESS");
+            when(identityMapper.selectOne(any(Wrapper.class))).thenReturn(identity);
+            when(gateway.getUser("tradepass-user-8", null)).thenThrow(
+                    new com.tradepass.integration.fadada.FadadaUserQueryException(code));
+            assertThat(service.syncCurrent().status()).isEqualTo("IN_PROGRESS");
+            assertThat(identity.getFailureReason()).isNotBlank();
+            assertThat(service.syncCurrent().status()).isEqualTo("IN_PROGRESS");
+            verify(gateway, org.mockito.Mockito.times(1)).getUser("tradepass-user-8", null);
+            org.mockito.Mockito.verify(gateway, org.mockito.Mockito.never()).getIdentityInfo(any());
+        }
+    }
+
+    @Test
     void synchronizesAuthoritativeProviderStatusAndVerifiedName() {
         FadadaUserIdentity identity = identity("IN_PROGRESS");
         when(identityMapper.selectOne(any(Wrapper.class))).thenReturn(identity);
