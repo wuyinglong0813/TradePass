@@ -30,4 +30,5 @@ for x,label,sub in ([(134,'加入组织','连接团队'),(391,'分配角色','�
 d.rounded_rectangle((100,603,900,678),radius=18,fill='#2385e6')
 text(304,623,'查看邀请 · 申请加入' if MEMBER else '查看邀请 · 建立合作',30,'#ffffff')
 text(303,701,'提交加入申请，等待管理员审核' if MEMBER else '以各自企业身份，开启合作',22,'#8a9db2')
-im.save(ROOT/('miniprogram/images/member-invite-cover.png' if MEMBER else 'miniprogram/images/company-invite-cover.png'),optimize=True)
+# Indexed PNG keeps bundled share covers small without reducing dimensions.
+im.quantize(colors=256, method=Image.Quantize.MEDIANCUT).save(ROOT/('miniprogram/images/member-invite-cover.png' if MEMBER else 'miniprogram/images/company-invite-cover.png'),optimize=True)
