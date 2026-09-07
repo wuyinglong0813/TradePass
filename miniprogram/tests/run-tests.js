@@ -932,6 +932,23 @@ function pageInstance(page) {
     setData(values) { Object.assign(this.data, values); } };
 }
 
+test('member invitation prepares on entry and ready button opens native sharing', async () => {
+  const page = loadPage('../pages/auth-manage/auth-manage');
+  const oldReady = app.ensureSessionReady; const oldGetter = app.getCurrentCompanyId;
+  app.ensureSessionReady = async () => {}; app.getCurrentCompanyId = () => '123';
+  const context = pageInstance(page); let prepared = 0;
+  context.shareInvite = () => { prepared++; };
+  context.loadMembers = () => {}; context.loadRoles = () => {};
+  try {
+    await context.onShow(); assert.strictEqual(prepared, 1);
+    await context.onShow(); assert.strictEqual(prepared, 2);
+    const template = fs.readFileSync(path.join(__dirname, '../pages/auth-manage/auth-manage.wxml'), 'utf8');
+    assert.ok(template.includes('wx:if="{{inviteCode && !preparingInvite}}" open-type="share"'));
+    assert.ok(!template.includes('生成成员邀请'));
+    assert.ok(!template.includes('发送成员邀请给微信好友'));
+  } finally { app.ensureSessionReady = oldReady; app.getCurrentCompanyId = oldGetter; }
+});
+
 test('member invitation waits for a code and cannot share across companies', async () => {
   const page = loadPage('../pages/auth-manage/auth-manage');
   const previousGetter = app.getCurrentCompanyId;

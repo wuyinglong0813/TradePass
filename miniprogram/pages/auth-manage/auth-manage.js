@@ -108,6 +108,7 @@ Page({
       companyName,
       companyAbbr: companyName.length > 4 ? companyName.slice(0, 2) : companyName
     });
+    this.shareInvite();
     this.loadMembers(true);
     this.loadRoles();
   },
@@ -193,7 +194,6 @@ Page({
       if (String(cid) !== String(app.getCurrentCompanyId())) return;
       if (!result || !result.code) throw new Error('邀请生成失败，请重试');
       this.setData({ inviteCode: result.code, inviteCompanyId: String(cid) });
-      wx.showToast({ title: '已生成，请点击发送给微信好友', icon: 'none' });
     } catch (e) { wx.showToast({ title: e.message || '邀请生成失败', icon: 'none' }); }
     finally { this.setData({ preparingInvite: false }); }
   },
