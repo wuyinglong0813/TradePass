@@ -13,10 +13,15 @@ Page({
     showModal: false,
     editRoleId: '',
     roleName: '',
+    systemRole: false,
+    deletable: false,
+    saving: false,
     allPerms: []
   },
 
   onShow() { this.loadRoles(); },
+
+  onLoad(options = {}) { this._copyRoleId = options.copyRoleId || ''; },
 
   async loadRoles() {
     const cid = currentCompanyId();
@@ -32,6 +37,11 @@ Page({
         ...r,
         permsDisplay: this.formatPerms(r.permissions)
       })) });
+      if (this._copyRoleId) {
+        const id = this._copyRoleId;
+        this._copyRoleId = '';
+        this.copyRole({ currentTarget: { dataset: { id } } });
+      }
     } catch (e) {}
   },
 
@@ -53,7 +63,7 @@ Page({
   showAddRole() {
     const defs = this._permDefs || [];
     this.setData({
-      showModal: true, editRoleId: '', roleName: '',
+      showModal: true, editRoleId: '', roleName: '', systemRole: false, deletable: false,
       allPerms: defs.map(p => ({ code: p.code, label: p.label, checked: false }))
     });
   },
@@ -65,12 +75,21 @@ Page({
     const selected = role.permissions || [];
     const defs = this._permDefs || [];
     this.setData({
-      showModal: true, editRoleId: id, roleName: role.name,
+      showModal: true, editRoleId: id, roleName: role.name, systemRole: role.systemRole, deletable: role.deletable,
       allPerms: defs.map(p => ({ code: p.code, label: p.label, checked: selected.includes(p.code) }))
     });
   },
 
-  hideModal() { this.setData({ showModal: false }); },
+  copyRole(e) {
+    const role = this.data.roles.find(item => String(item.id) === String(e.currentTarget.dataset.id));
+    if (!role || !role.editable) return;
+    this.setData({
+      showModal: true, editRoleId: '', roleName: `${role.name}副本`, systemRole: false, deletable: false,
+      allPerms: (this._permDefs || []).map(p => ({ ...p, checked: (role.permissions || []).includes(p.code) }))
+    });
+  },
+
+  hideModal() { if (!this.data.saving) this.setData({ showModal: false }); },
   noop() {},
 
   onNameInput(e) { this.setData({ roleName: e.detail.value }); },
@@ -84,11 +103,13 @@ Page({
   },
 
   async saveRole() {
+    if (this.data.saving) return;
     const name = this.data.roleName.trim();
     if (!name) { wx.showToast({ title: '请输入角色名', icon: 'none' }); return; }
     const perms = this.data.allPerms.filter(p => p.checked).map(p => p.code);
     const cid = currentCompanyId();
     if (!cid) return;
+    this.setData({ saving: true });
     try {
       if (this.data.editRoleId) {
         await request({ url: `/roles/${this.data.editRoleId}`, method: 'PUT', data: { companyId: cid, name, permissions: perms } });
@@ -96,12 +117,15 @@ Page({
         await request({ url: '/roles', method: 'POST', data: { companyId: cid, name, permissions: perms } });
       }
       wx.showToast({ title: '已保存', icon: 'success' });
-      this.hideModal();
-      this.loadRoles();
+      this.setData({ showModal: false });
+      await app.refreshSession();
+      await this.loadRoles();
     } catch (e) { wx.showToast({ title: e.message, icon: 'none' }); }
+    finally { this.setData({ saving: false }); }
   },
 
   async deleteRole() {
+    if (!this.data.deletable || this.data.saving) return;
     const res = await new Promise(r => wx.showModal({ title: '确认删除', content: '删除后不可恢复', success: r }));
     if (!res.confirm) return;
     try {

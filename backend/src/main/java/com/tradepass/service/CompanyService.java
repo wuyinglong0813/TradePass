@@ -378,6 +378,37 @@ public class CompanyService {
         auditLogService.log(cid, "COMPANY_MEMBER", id, "REJECT", "拒绝成员加入申请");
     }
 
+    public void updateMemberRole(String id, ApproveRequest req, String companyId) {
+        long cid = parseId(companyId);
+        accessControlService.requireManager(cid);
+        long memberId = parseId(id);
+        CompanyMember target = companyMemberMapper.selectOne(new LambdaQueryWrapper<CompanyMember>()
+                .eq(CompanyMember::getId, memberId)
+                .eq(CompanyMember::getCompanyId, cid)
+                .eq(CompanyMember::getStatus, "ACTIVE")
+                .last("LIMIT 1"));
+        if (target == null) throw new BusinessException("成员不存在或状态已变化");
+        if (Boolean.TRUE.equals(target.getIsLegalPerson()) || "LEGAL".equals(target.getRoleCode())) {
+            throw new BusinessException("法人只能通过法人变更流程移交");
+        }
+        RoleDef role = requireAssignableRole(cid, req.roleCode());
+        validateGrantablePermissions(cid, parsePermissions(role.getPermissions()));
+        if (req.customPermissions() != null && !req.customPermissions().isEmpty()) {
+            throw new BusinessException("请通过角色管理配置权限后再分配");
+        }
+        int updated = companyMemberMapper.update(new LambdaUpdateWrapper<CompanyMember>()
+                .eq(CompanyMember::getId, memberId)
+                .eq(CompanyMember::getCompanyId, cid)
+                .eq(CompanyMember::getStatus, "ACTIVE")
+                .eq(CompanyMember::getRoleCode, target.getRoleCode())
+                .and(q -> q.eq(CompanyMember::getIsLegalPerson, false).or().isNull(CompanyMember::getIsLegalPerson))
+                .set(CompanyMember::getRoleCode, role.getCode())
+                .set(CompanyMember::getIsAdministrator, "ADMIN".equals(role.getCode()))
+                .set(CompanyMember::getCustomPermissions, null));
+        if (updated != 1) throw new BusinessException("成员状态已变化，请刷新后重试");
+        auditLogService.log(cid, "COMPANY_MEMBER", memberId, "UPDATE_ROLE", "调整角色 " + role.getCode());
+    }
+
     public void removeMember(String id, String companyId) {
         long cid = parseId(companyId);
         accessControlService.requireManager(cid);
@@ -394,13 +425,6 @@ public class CompanyService {
         }
         if (Boolean.TRUE.equals(target.getIsLegalPerson()) || "LEGAL".equals(target.getRoleCode())) {
             throw new BusinessException("法人只能通过法人变更流程移交");
-        }
-        if ("ADMIN".equals(target.getRoleCode()) && companyMemberMapper.selectCount(
-                new LambdaQueryWrapper<CompanyMember>()
-                        .eq(CompanyMember::getCompanyId, cid)
-                        .eq(CompanyMember::getRoleCode, "ADMIN")
-                        .eq(CompanyMember::getStatus, "ACTIVE")) <= 1) {
-            throw new BusinessException("企业至少需要保留一名管理员");
         }
         int deleted = companyMemberMapper.delete(new LambdaQueryWrapper<CompanyMember>()
                 .eq(CompanyMember::getId, memberId)
@@ -444,14 +468,14 @@ public class CompanyService {
         if (existing == null || existing.getCompanyId() != companyId) {
             throw new BusinessException("角色不存在");
         }
-        if (Boolean.TRUE.equals(existing.getSystemRole())) {
-            throw new BusinessException("系统角色不可编辑");
+        if (isProtectedRole(existing)) {
+            throw new BusinessException("法人及认证身份角色不可编辑");
         }
         validateGrantablePermissions(companyId, req.permissions());
         int updated = roleDefMapper.update(new LambdaUpdateWrapper<RoleDef>()
                 .eq(RoleDef::getId, existing.getId())
                 .eq(RoleDef::getCompanyId, companyId)
-                .set(RoleDef::getName, req.name())
+                .set(RoleDef::getName, Boolean.TRUE.equals(existing.getSystemRole()) ? existing.getName() : req.name().trim())
                 .set(RoleDef::getPermissions, toJson(req.permissions())));
         if (updated != 1) {
             throw new BusinessException("角色状态已变化，请刷新后重试");
@@ -465,7 +489,7 @@ public class CompanyService {
             return;
         }
         accessControlService.requireManager(role.getCompanyId());
-        if (Boolean.TRUE.equals(role.getSystemRole())) {
+        if (Boolean.TRUE.equals(role.getSystemRole()) || isProtectedRole(role)) {
             throw new BusinessException("系统角色不可删除");
         }
         if (companyMemberMapper.selectCount(new LambdaQueryWrapper<CompanyMember>()
@@ -561,7 +585,7 @@ public class CompanyService {
     }
 
     private RoleDef requireAssignableRole(long companyId, String roleCode) {
-        if (roleCode == null || roleCode.isBlank() || "LEGAL".equals(roleCode)) {
+        if (roleCode == null || roleCode.isBlank() || "LEGAL".equals(roleCode) || "LEGAL_CANDIDATE".equals(roleCode)) {
             throw new BusinessException("该角色不能通过成员审批分配");
         }
         RoleDef role = roleDefMapper.selectOne(new LambdaQueryWrapper<RoleDef>()
@@ -575,8 +599,8 @@ public class CompanyService {
     }
 
     private void validateGrantablePermissions(long companyId, List<String> permissions) {
-        if (permissions == null || permissions.isEmpty()) {
-            throw new BusinessException("角色至少需要一个权限");
+        if (permissions == null) {
+            throw new BusinessException("请选择角色权限");
         }
         Set<String> unique = new LinkedHashSet<>();
         for (String permission : permissions) {
@@ -610,7 +634,11 @@ public class CompanyService {
     private RolePayload toRolePayload(RoleDef role) {
         boolean systemRole = Boolean.TRUE.equals(role.getSystemRole());
         return new RolePayload(String.valueOf(role.getId()), role.getCode(), role.getName(),
-                parsePermissions(role.getPermissions()), systemRole, !systemRole, !systemRole);
+                parsePermissions(role.getPermissions()), systemRole, !isProtectedRole(role), !systemRole && !isProtectedRole(role));
+    }
+
+    private boolean isProtectedRole(RoleDef role) {
+        return "LEGAL".equals(role.getCode()) || "LEGAL_CANDIDATE".equals(role.getCode());
     }
 
     private void requireVerificationProvider() {

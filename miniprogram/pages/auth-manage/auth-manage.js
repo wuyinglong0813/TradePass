@@ -47,7 +47,7 @@ function decorateMembers(list) {
       avatarText: memberInitial(member.memberName),
       avatarTone: `tone-${index % 5}`,
       maskedPhone: maskPhone(member.phone),
-      roleLabel: meta.label,
+      roleLabel: member.roleText || meta.label,
       roleTone: meta.tone,
       statusText: pending ? '待审批' : '正常',
       canRemove: !pending && member.roleCode !== 'LEGAL'
@@ -74,6 +74,9 @@ Page({
     approveTargetName: '',
     approveRoles: [],
     approveCode: '',
+    selectedRole: null,
+    editingMember: false,
+    savingRole: false,
     inviteCode: '',
     inviteCompanyId: '',
     preparingInvite: false,
@@ -121,19 +124,27 @@ Page({
     const cid = currentCompanyId();
     if (!cid) return;
     try {
-      const list = await request({ url: `/roles?companyId=${cid}` });
+      const [list, permissions] = await Promise.all([
+        request({ url: `/roles?companyId=${cid}` }), request({ url: '/permissions' })
+      ]);
       this.setData({
-        approveRoles: (list || []).filter(r => r.code !== 'LEGAL').map(r => {
+        approveRoles: (list || []).filter(r => !['LEGAL', 'LEGAL_CANDIDATE'].includes(r.code)).map(r => {
           const meta = roleMeta(r.code, r.name);
           return {
-            label: meta.label,
+            id: r.id,
+            label: r.name || meta.label,
             value: r.code,
             code: r.code,
-            description: meta.description,
+            description: (r.permissions || []).length ? `已配置 ${r.permissions.length} 项权限` : '无业务权限',
+            permissions: (r.permissions || []).map(code => {
+              const def = (permissions || []).find(p => p.code === code);
+              return { code, label: def ? def.label : code };
+            }),
             tone: meta.tone
           };
         })
       });
+      this.setData({ selectedRole: this.data.approveRoles.find(r => r.code === this.data.approveCode) || null });
     } catch (e) {}
   },
 
@@ -213,27 +224,53 @@ Page({
   },
 
   showApproveModal(e) {
+    const member = this.data.authorizations.find(item => String(item.id) === String(e.currentTarget.dataset.id));
+    const editingMember = !!member && member.status === 'ACTIVE';
+    const approveCode = editingMember ? member.roleCode : '';
     this.setData({
       showApproveModal: true,
+      editingMember,
+      approveCode,
+      selectedRole: this.data.approveRoles.find(r => r.code === approveCode) || null,
       approveTargetId: e.currentTarget.dataset.id,
       approveTargetName: e.currentTarget.dataset.name || '该成员'
     });
   },
   hideApproveModal() {
+    if (this.data.savingRole) return;
     this.setData({ showApproveModal: false, approveTargetId: '', approveTargetName: '' });
   },
 
-  async confirmApprove(e) {
-    const roleCode = e.currentTarget.dataset.role;
+  selectRole(e) {
+    if (this.data.savingRole) return;
+    const approveCode = e.currentTarget.dataset.role;
+    this.setData({ approveCode, selectedRole: this.data.approveRoles.find(r => r.code === approveCode) || null });
+  },
+
+  manageRoles() { wx.navigateTo({ url: '/pages/role-manage/role-manage' }); },
+
+  copySelectedRole() {
+    const role = this.data.selectedRole;
+    if (role) wx.navigateTo({ url: `/pages/role-manage/role-manage?copyRoleId=${role.id}` });
+  },
+
+  async confirmApprove() {
+    if (this.data.savingRole) return;
+    const roleCode = this.data.approveCode;
+    if (!roleCode || !this.data.selectedRole) { wx.showToast({ title: '请先选择角色', icon: 'none' }); return; }
     const memberId = this.data.approveTargetId;
     const cid = currentCompanyId();
     if (!cid) return;
+    const editing = this.data.editingMember;
+    this.setData({ savingRole: true });
     try {
-      await request({ url: `/authorizations/${memberId}/approve?companyId=${cid}`, method: 'POST', data: { roleCode, customPermissions: [] } });
-      wx.showToast({ title: '已通过', icon: 'success' });
-      this.hideApproveModal();
-      this.loadMembers(true);
+      await request({ url: `/authorizations/${memberId}/${editing ? 'role' : 'approve'}?companyId=${cid}`, method: editing ? 'PUT' : 'POST', data: { roleCode, customPermissions: [] } });
+      wx.showToast({ title: editing ? '权限已更新' : '已通过', icon: 'success' });
+      this.setData({ showApproveModal: false, approveTargetId: '', approveTargetName: '' });
+      await app.refreshSession();
+      await this.loadMembers(true);
     } catch (e) { wx.showToast({ title: e.message, icon: 'none' }); }
+    finally { this.setData({ savingRole: false }); }
   },
 
   async rejectMember(e) {

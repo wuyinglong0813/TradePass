@@ -126,18 +126,17 @@
             <view class="row-copy"><view class="row-title">我的企业</view><view class="row-desc">{{company.name}} · 共 {{companies.length}} 家企业</view></view>
             <view class="state-pill">当前</view><view class="row-arrow">›</view>
           </view>
-          <block wx:if="{{canManage}}">
-            <view class="list-row" bindtap="goCert">
+            <view class="list-row" wx:if="{{canCompanyManage}}" bindtap="goCert">
               <view class="row-icon"><image src="/images/icons/company.svg" mode="aspectFit"/></view>
               <view class="row-copy"><view class="row-title">企业认证</view><view class="row-desc">主体信息、实名与电子签章</view></view>
               <view class="state-pill {{certCompleted ? '' : 'pending'}}">{{certBadge.text}}</view><view class="row-arrow">›</view>
             </view>
-            <view class="list-row" bindtap="goAuthManage">
+            <view class="list-row" wx:if="{{canManage}}" bindtap="goAuthManage">
               <view class="row-icon"><image src="/images/icons/team.svg" mode="aspectFit"/></view>
               <view class="row-copy"><view class="row-title">组织成员</view><view class="row-desc">成员审批、部门与邀请管理</view></view>
               <view class="state-pill muted">{{memberCount}}</view><view class="row-arrow">›</view>
             </view>
-            <view class="list-row" bindtap="goRoleManage">
+            <view class="list-row" wx:if="{{canManage}}" bindtap="goRoleManage">
               <view class="row-icon"><image src="/images/icons/role.svg" mode="aspectFit"/></view>
               <view class="row-copy"><view class="row-title">角色权限</view><view class="row-desc">角色配置与数据访问范围</view></view>
               <view class="state-pill muted">{{roleCount}}</view><view class="row-arrow">›</view>
@@ -147,7 +146,6 @@
               <view class="row-copy"><view class="row-title">模板中心</view><view class="row-desc">合同、销售单与退货单统一管理</view></view>
               <view class="state-pill muted">{{templateCount}}</view><view class="row-arrow">›</view>
             </view>
-          </block>
           <view class="list-row" wx:if="{{canInventory}}" bindtap="goInventory">
             <view class="row-icon"><image src="/images/icons/inventory.svg" mode="aspectFit"/></view>
             <view class="row-copy"><view class="row-title">库存管理</view><view class="row-desc">仓库、商品库存与销售单入库</view></view>
@@ -162,7 +160,7 @@
 
         <view class="readonly-card management-readonly" wx:if="{{!canManage}}">
           <image src="/images/icons/role.svg" mode="aspectFit"/>
-          <view><view class="row-title">当前为{{member.roleText}}</view><view class="row-desc">企业管理功能由法人或管理员操作</view></view>
+          <view><view class="row-title">当前为{{member.roleText}}</view><view class="row-desc">可用功能由企业分配的角色权限决定</view></view>
         </view>
 
         <view class="page-end">商签通 · 企业可信协作平台</view>

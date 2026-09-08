@@ -135,6 +135,13 @@ public class CompanyController {
         return ApiResponse.ok(null);
     }
 
+    @PutMapping("/authorizations/{id}/role")
+    public ApiResponse<Void> updateMemberRole(@PathVariable String id, @Valid @RequestBody ApproveRequest request,
+                                               @RequestParam String companyId) {
+        companyService.updateMemberRole(id, request, companyId);
+        return ApiResponse.ok(null);
+    }
+
     @GetMapping("/roles")
     public ApiResponse<List<RolePayload>> listRoles(@RequestParam String companyId) {
         return ApiResponse.ok(companyService.listRoles(companyId));

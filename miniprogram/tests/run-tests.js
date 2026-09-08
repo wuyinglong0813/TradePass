@@ -932,6 +932,66 @@ function pageInstance(page) {
     setData(values) { Object.assign(this.data, values); } };
 }
 
+test('member role selection previews permissions before approval and supports later changes', async () => {
+  const context = pageInstance(loadPage('../pages/auth-manage/auth-manage'));
+  const oldGetter = app.getCurrentCompanyId; const oldRefresh = app.refreshSession; const oldRequest = wx.request;
+  app.getCurrentCompanyId = () => '123'; app.refreshSession = async () => {};
+  const calls = [];
+  wx.request = options => { calls.push(options); options.success({ statusCode: 200, data: { code: 0, data: null } }); };
+  context.loadMembers = async () => {};
+  context.data.authorizations = [{ id: '12', status: 'PENDING' }, { id: '13', status: 'ACTIVE', roleCode: 'ADMIN' }];
+  context.data.approveRoles = [{ code: 'ADMIN', permissions: [{ code: 'member_manage' }] }, { code: 'CUSTOM_A', permissions: [] }];
+  try {
+    context.showApproveModal({ currentTarget: { dataset: { id: '12' } } });
+    context.selectRole({ currentTarget: { dataset: { role: 'ADMIN' } } });
+    assert.strictEqual(calls.length, 0);
+    assert.strictEqual(context.data.selectedRole.permissions[0].code, 'member_manage');
+    await context.confirmApprove();
+    assert.ok(calls[0].url.endsWith('/authorizations/12/approve?companyId=123'));
+    assert.strictEqual(calls[0].method, 'POST');
+    context.showApproveModal({ currentTarget: { dataset: { id: '13' } } });
+    context.selectRole({ currentTarget: { dataset: { role: 'CUSTOM_A' } } });
+    await context.confirmApprove();
+    assert.ok(calls[1].url.endsWith('/authorizations/13/role?companyId=123'));
+    assert.strictEqual(calls[1].method, 'PUT');
+    assert.deepStrictEqual(calls[1].data, { roleCode: 'CUSTOM_A', customPermissions: [] });
+  } finally { app.getCurrentCompanyId = oldGetter; app.refreshSession = oldRefresh; wx.request = oldRequest; }
+});
+
+test('default roles can be copied with reduced permissions without changing the source', () => {
+  const context = pageInstance(loadPage('../pages/role-manage/role-manage'));
+  context._permDefs = [{ code: 'order_view', label: '订单查看' }, { code: 'order_create', label: '订单创建' }];
+  context.data.roles = [{ id: '1', name: '销售员', editable: true, systemRole: true, deletable: false, permissions: ['order_view', 'order_create'] }];
+  context.editRole({ currentTarget: { dataset: { id: '1' } } });
+  assert.strictEqual(context.data.systemRole, true);
+  assert.strictEqual(context.data.deletable, false);
+  context.copyRole({ currentTarget: { dataset: { id: '1' } } });
+  context.togglePerm({ currentTarget: { dataset: { code: 'order_create' } } });
+  assert.strictEqual(context.data.editRoleId, '');
+  assert.strictEqual(context.data.systemRole, false);
+  assert.deepStrictEqual(context.data.allPerms.filter(p => p.checked).map(p => p.code), ['order_view']);
+  assert.deepStrictEqual(context.data.roles[0].permissions, ['order_view', 'order_create']);
+});
+
+test('enterprise management entries follow effective permissions including custom roles', async () => {
+  const context = pageInstance(loadPage('../pages/company/company'));
+  const previousRequest = wx.request; const previousApply = app.applyMePayload;
+  let member = { roleCode: 'CUSTOM_MANAGER', permissions: ['member_manage'] };
+  app.applyMePayload = () => {};
+  context.loadTodos = async () => {}; context.loadEnterpriseMetrics = async () => {};
+  wx.request = options => options.success({ statusCode: 200, data: { code: 0, data: options.url.endsWith('/me')
+    ? { member, companies: [{ companyId: '123' }], user: { currentCompanyId: '123' } } : [] } });
+  try {
+    await context.loadData();
+    assert.strictEqual(context.data.canManage, true);
+    assert.strictEqual(context.data.canCompanyManage, false);
+    member = { roleCode: 'ADMIN', permissions: ['contract_template'] };
+    await context.loadData();
+    assert.strictEqual(context.data.canManage, false);
+    assert.strictEqual(context.data.canContractTemplate, true);
+  } finally { wx.request = previousRequest; app.applyMePayload = previousApply; }
+});
+
 test('member invitation prepares on entry and ready button opens native sharing', async () => {
   const page = loadPage('../pages/auth-manage/auth-manage');
   const oldReady = app.ensureSessionReady; const oldGetter = app.getCurrentCompanyId;

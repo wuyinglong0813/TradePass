@@ -67,7 +67,7 @@
         <view class="list-title">{{activeStatusFilter === 'PENDING' ? '待审批成员' : '成员列表'}}</view>
         <view class="list-desc">成员身份、角色与状态统一管理</view>
       </view>
-      <view class="result-count">显示 {{filtered.length}} 位</view>
+      <view class="manage-roles" bindtap="manageRoles">角色与权限 ›</view>
     </view>
 
     <view class="member-skeleton" wx:if="{{loading && authorizations.length === 0}}">
@@ -108,6 +108,8 @@
         <view wx:elif="{{item.roleCode === 'LEGAL'}}" class="owner-mark">主体负责人</view>
       </view>
 
+      <view class="member-role-action" wx:if="{{item.status === 'ACTIVE' && item.roleCode !== 'LEGAL'}}" data-id="{{item.id}}" data-name="{{item.memberName}}" bindtap="showApproveModal">调整角色与权限 ›</view>
+
       <view class="approval-zone" wx:if="{{item.status === 'PENDING'}}">
         <view class="approval-copy">
           <view class="approval-title">申请加入当前组织</view>
@@ -141,24 +143,35 @@
     <view class="sheet-handle"></view>
     <view class="sheet-heading">
       <view>
-        <view class="sheet-title">分配企业角色</view>
-        <view class="sheet-desc">为 {{approveTargetName}} 选择加入后的职责权限</view>
+        <view class="sheet-title">{{editingMember ? '调整角色与权限' : '分配企业角色'}}</view>
+        <view class="sheet-desc">为 {{approveTargetName}} 选择角色，确认权限后保存</view>
       </view>
       <view class="sheet-close" bindtap="hideApproveModal">×</view>
     </view>
     <view
       wx:for="{{approveRoles}}"
       wx:key="value"
-      class="role-option"
+      class="role-option {{approveCode === item.value ? 'role-selected' : ''}}"
       data-role="{{item.value}}"
-      bindtap="confirmApprove">
+      bindtap="selectRole">
       <view class="role-option-icon role-{{item.tone}}">{{item.label[0]}}</view>
       <view class="role-option-copy">
         <view class="role-option-name">{{item.label}}</view>
         <view class="role-option-desc">{{item.description}}</view>
       </view>
-      <view class="role-arrow">›</view>
+      <view class="role-arrow">{{approveCode === item.value ? '✓' : '›'}}</view>
     </view>
+    <view class="permission-preview" wx:if="{{selectedRole}}">
+      <view class="preview-title">{{selectedRole.label}} · 实际角色权限</view>
+      <view class="preview-permissions">
+        <text class="permission-tag" wx:for="{{selectedRole.permissions}}" wx:key="code">{{item.label}}</text>
+        <text wx:if="{{selectedRole.permissions.length === 0}}" class="sheet-desc">无业务权限</text>
+      </view>
+      <view class="sheet-desc">需要为该成员增减权限？复制角色并调整后，返回选择新角色。</view>
+      <view class="manage-roles" bindtap="copySelectedRole">复制此角色并调整权限 ›</view>
+    </view>
+    <view class="manage-roles" bindtap="manageRoles">管理所有角色与权限 ›</view>
+    <button class="confirm-role" bindtap="confirmApprove" loading="{{savingRole}}" disabled="{{savingRole || !selectedRole}}">{{editingMember ? '保存角色与权限' : '确认通过并分配'}}</button>
     <view class="sheet-safe-area"></view>
   </view>
 </view>

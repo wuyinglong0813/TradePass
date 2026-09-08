@@ -138,6 +138,21 @@ class AccessControlServiceTest {
                 .hasMessage("无权访问企业敏感资料");
     }
 
+    @Test
+    void editedDefaultRoleRemovesOldPermissionsAndAddsNewOnNextCheck() {
+        when(memberMapper.selectOne(any(Wrapper.class))).thenReturn(activeMember("ADMIN", null));
+        RoleDef role = new RoleDef();
+        role.setName("管理员");
+        role.setPermissions("[\"member_manage\",\"order_view\"]");
+        when(roleMapper.selectOne(any(Wrapper.class))).thenReturn(role);
+        assertThat(service.hasPermission(3L, "member_manage")).isTrue();
+        assertThat(service.hasPermission(3L, "order_view")).isTrue();
+        assertThat(service.hasPermission(3L, "seal_manage")).isFalse();
+        role.setPermissions("[]");
+        assertThat(service.hasPermission(3L, "member_manage")).isFalse();
+        assertThatThrownBy(() -> service.requireManager(3L)).hasMessage("无权执行该操作");
+    }
+
     private CompanyMember activeMember(String role, String customPermissions) {
         CompanyMember member = new CompanyMember();
         member.setRoleCode(role);

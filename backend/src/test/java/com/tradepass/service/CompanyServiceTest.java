@@ -529,7 +529,7 @@ class CompanyServiceTest {
     }
 
     @Test
-    void blocksDirectLegalAssignmentAndSystemRoleMutation() {
+    void protectsLegalIdentityWhileAllowingDefaultRolePermissionChanges() {
         CompanyMember pending = new CompanyMember();
         pending.setId(12L);
         pending.setCompanyId(3L);
@@ -547,8 +547,95 @@ class CompanyServiceTest {
         systemRole.setSystemRole(true);
         when(roleMapper.selectById(2L)).thenReturn(systemRole);
         RoleRequest request = new RoleRequest("3", "管理员", List.of("member_manage"));
-        assertThatThrownBy(() -> service.updateRole("2", request)).hasMessage("系统角色不可编辑");
+        service.updateRole("2", request);
+        verify(roleMapper).update(any(Wrapper.class));
+        systemRole.setCode("LEGAL");
+        assertThatThrownBy(() -> service.updateRole("2", request)).hasMessage("法人及认证身份角色不可编辑");
         assertThatThrownBy(() -> service.deleteRole("2")).hasMessage("系统角色不可删除");
+    }
+
+    @Test
+    void removesLastAdministratorButProtectsLegalAndCurrentMember() {
+        CompanyMember member = new CompanyMember();
+        member.setId(12L);
+        member.setCompanyId(3L);
+        member.setUserId(8L);
+        member.setStatus("ACTIVE");
+        member.setRoleCode("ADMIN");
+        when(memberMapper.selectOne(any(Wrapper.class))).thenReturn(member);
+        when(memberMapper.selectCount(any(Wrapper.class))).thenReturn(1L);
+        service.removeMember("12", "3");
+        verify(memberMapper).delete(any(Wrapper.class));
+        verify(memberMapper, org.mockito.Mockito.never()).selectCount(any(Wrapper.class));
+        member.setIsLegalPerson(true);
+        assertThatThrownBy(() -> service.removeMember("12", "3"))
+                .hasMessage("法人只能通过法人变更流程移交");
+        member.setIsLegalPerson(false);
+        member.setUserId(7L);
+        assertThatThrownBy(() -> service.removeMember("12", "3"))
+                .hasMessage("不能移除当前登录成员");
+    }
+
+    @Test
+    void changesAdministratorToEmptyCustomRoleAndClearsLegacyGrants() {
+        CompanyMember member = new CompanyMember();
+        member.setId(12L);
+        member.setCompanyId(3L);
+        member.setUserId(8L);
+        member.setStatus("ACTIVE");
+        member.setRoleCode("ADMIN");
+        member.setCustomPermissions("[\"member_manage\"]");
+        when(memberMapper.selectOne(any(Wrapper.class))).thenReturn(member);
+        RoleDef role = new RoleDef();
+        role.setCompanyId(3L);
+        role.setCode("CUSTOM_READONLY");
+        role.setPermissions("[]");
+        when(roleMapper.selectOne(any(Wrapper.class))).thenReturn(role);
+        service.updateMemberRole("12", new ApproveRequest("CUSTOM_READONLY", List.of()), "3");
+        ArgumentCaptor<Wrapper> update = ArgumentCaptor.forClass(Wrapper.class);
+        verify(memberMapper).update(update.capture());
+        assertThat(update.getValue().getSqlSet()).contains("custom_permissions=", "is_administrator=", "role_code=");
+        verify(accessControl).requireManager(3L);
+        when(memberMapper.update(any(Wrapper.class))).thenReturn(0);
+        assertThatThrownBy(() -> service.updateMemberRole("12", new ApproveRequest("CUSTOM_READONLY", List.of()), "3"))
+                .hasMessage("成员状态已变化，请刷新后重试");
+        member.setIsLegalPerson(true);
+        assertThatThrownBy(() -> service.updateMemberRole("12", new ApproveRequest("CUSTOM_READONLY", List.of()), "3"))
+                .hasMessage("法人只能通过法人变更流程移交");
+        member.setIsLegalPerson(false);
+        assertThatThrownBy(() -> service.updateMemberRole("12", new ApproveRequest("LEGAL", List.of()), "3"))
+                .hasMessage("该角色不能通过成员审批分配");
+        when(memberMapper.selectOne(any(Wrapper.class))).thenReturn(null);
+        assertThatThrownBy(() -> service.updateMemberRole("12", new ApproveRequest("CUSTOM_READONLY", List.of()), "3"))
+                .hasMessage("成员不存在或状态已变化");
+    }
+
+    @Test
+    void allowsEmptyRolePermissionsButRejectsUnknownAndUnauthorizedGrants() {
+        RoleDef role = new RoleDef();
+        role.setId(2L);
+        role.setCompanyId(3L);
+        role.setCode("SALES");
+        role.setName("销售员");
+        role.setSystemRole(true);
+        role.setPermissions("[]");
+        when(roleMapper.selectById(2L)).thenReturn(role);
+        service.updateRole("2", new RoleRequest("3", "销售员", List.of()));
+        when(accessControl.hasPermission(3L, "order_create")).thenReturn(false);
+        assertThatThrownBy(() -> service.updateRole("2", new RoleRequest("3", "销售员", List.of("order_create"))))
+                .hasMessage("不能授予当前操作者不具备的权限 order_create");
+        when(permMapper.selectById("unknown")).thenReturn(null);
+        assertThatThrownBy(() -> service.updateRole("2", new RoleRequest("3", "销售员", List.of("unknown"))))
+                .hasMessage("未知权限 unknown");
+        assertThatThrownBy(() -> service.updateRole("2", new RoleRequest("3", "销售员", List.of("all"))))
+                .hasMessage("不能配置保留权限 all");
+        assertThatThrownBy(() -> service.updateRole("2", new RoleRequest("4", "销售员", List.of())))
+                .hasMessage("角色不存在");
+        when(accessControl.resolveCompanyId("3")).thenReturn(3L);
+        when(roleMapper.selectList(any(Wrapper.class))).thenReturn(List.of(role));
+        RolePayload payload = service.listRoles("3").get(0);
+        assertThat(payload.editable()).isTrue();
+        assertThat(payload.deletable()).isFalse();
     }
 
     private Company company(long id, String name) {

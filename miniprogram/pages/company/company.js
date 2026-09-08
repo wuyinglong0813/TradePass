@@ -34,6 +34,7 @@ Page({
     certCompleted: false,
     member: {},
     canManage: false,
+    canCompanyManage: false,
     canContractTemplate: false,
     canInventory: false,
     memberCount: 0,
@@ -75,10 +76,11 @@ Page({
       const member = payload.member || {};
       const companies = payload.companies || [];
       const hasCompany = !!(member && member.roleCode && member.roleCode !== 'GUEST') && companies.length > 0;
-      const canManage = member.roleCode === 'LEGAL' || member.roleCode === 'ADMIN';
       const certStatus = company.certificationStatus || '';
       const permissions = member.permissions || [];
-      const canContractTemplate = canManage && (permissions.includes('all') || permissions.includes('contract_template') || hasPerm('contract_template'));
+      const canManage = permissions.includes('all') || permissions.includes('member_manage') || permissions.includes('auth_manage');
+      const canCompanyManage = permissions.includes('all') || permissions.includes('company_manage');
+      const canContractTemplate = permissions.includes('all') || permissions.includes('contract_template');
       const canInventory = permissions.includes('all') || permissions.includes('inventory_view') || hasPerm('inventory_view');
       const currentCompanyId = (payload.user && payload.user.currentCompanyId) || '';
       const companyItems = companies.map(item => ({ ...item, initial: companyAbbr(item.companyName) }));
@@ -94,6 +96,7 @@ Page({
         certCompleted: certStatus === 'VERIFIED',
         member,
         canManage,
+        canCompanyManage,
         companies: companyItems,
         certificationApplications: (certificationApplications || []).map(item => ({
           ...item,
@@ -109,14 +112,14 @@ Page({
   },
 
   async loadEnterpriseMetrics(companyId, canManage, canContractTemplate) {
-    if (!companyId || !canManage) {
+    if (!companyId) {
       this.setData({ memberCount: 0, roleCount: 0, templateCount: 0 });
       return;
     }
     const safe = (promise, fallback) => promise.catch(() => fallback);
     const [members, roles, templates] = await Promise.all([
-      safe(request({ url: `/authorizations?companyId=${companyId}&status=ACTIVE&page=1&size=1` }), { total: 0 }),
-      safe(request({ url: `/roles?companyId=${companyId}` }), []),
+      canManage ? safe(request({ url: `/authorizations?companyId=${companyId}&status=ACTIVE&page=1&size=1` }), { total: 0 }) : Promise.resolve({ total: 0 }),
+      canManage ? safe(request({ url: `/roles?companyId=${companyId}` }), []) : Promise.resolve([]),
       canContractTemplate ? safe(request({ url: '/contract-templates?page=1&size=1' }), { total: 0 }) : Promise.resolve({ total: 0 })
     ]);
     this.setData({
