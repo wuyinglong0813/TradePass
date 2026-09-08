@@ -141,10 +141,10 @@ public class TenantBootstrapService {
     private static Map<String, SeedRole> standardRoles() {
         Map<String, SeedRole> roles = new LinkedHashMap<>();
         roles.put("LEGAL", new SeedRole("法人", List.of("all")));
-        roles.put("ADMIN", new SeedRole("管理员", List.of("member_manage", "auth_manage", "company_manage", "seal_manage", "contract_template")));
-        roles.put("SALES", new SeedRole("销售员", List.of("supplier_view", "counterparty_manage", "order_view", "order_create", "contract_sign", "contract_view", "reconciliation", "contract_attachment_upload")));
-        roles.put("PURCHASER", new SeedRole("采购员", List.of("buyer_view", "order_create", "contract_view", "order_view", "contract_sign", "reconciliation", "contract_attachment_upload", "sales_order_receive", "inventory_view", "inventory_receive")));
-        roles.put("FINANCE", new SeedRole("财务", List.of("invoice_view", "reconciliation", "contract_attachment_upload")));
+        roles.put("ADMIN", new SeedRole("管理员", List.of("member_manage", "auth_manage", "company_manage", "seal_manage", "contract_template", "counterparty_view")));
+        roles.put("SALES", new SeedRole("销售员", List.of("supplier_view", "counterparty_manage", "order_view", "order_create", "contract_sign", "contract_view", "reconciliation", "contract_attachment_upload", "counterparty_view")));
+        roles.put("PURCHASER", new SeedRole("采购员", List.of("buyer_view", "order_create", "contract_view", "order_view", "contract_sign", "reconciliation", "contract_attachment_upload", "sales_order_receive", "inventory_view", "inventory_receive", "counterparty_view")));
+        roles.put("FINANCE", new SeedRole("财务", List.of("invoice_view", "reconciliation", "contract_attachment_upload", "counterparty_view")));
         return Map.copyOf(roles);
     }
 

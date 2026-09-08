@@ -135,6 +135,40 @@ class TradeServiceTest {
     }
 
     @Test
+    void administratorReadsCompanyBindingsAcrossMembersButStillHonorsPermissionsAndTenant() {
+        var memberMapper = mock(com.tradepass.mapper.CompanyMemberMapper.class);
+        var roleMapper = mock(com.tradepass.mapper.RoleDefMapper.class);
+        var acl = new AccessControlService(memberMapper, relationMapper, roleMapper,
+                new RolePermissionService(), new com.fasterxml.jackson.databind.ObjectMapper());
+        service = new TradeService(orderMapper, relationMapper, categoryMapper, templateMapper,
+                contractMapper, companyMapper, acl, auditLogService, rankingCache, contractArchiveService);
+        var member = new com.tradepass.entity.CompanyMember();
+        member.setRoleCode("ADMIN");
+        member.setStatus("ACTIVE");
+        when(memberMapper.selectCount(any(Wrapper.class))).thenReturn(1L);
+        when(memberMapper.selectOne(any(Wrapper.class))).thenReturn(member);
+        var role = new com.tradepass.entity.RoleDef();
+        role.setCode("ADMIN");
+        role.setPermissions("[\"member_manage\",\"counterparty_view\"]");
+        when(roleMapper.selectOne(any(Wrapper.class))).thenReturn(role);
+        when(relationMapper.selectSupplierCounterparties(3L)).thenReturn(List.of(
+                Map.of("id", 5L, "counterpartyCompanyId", 9L, "counterpartyName", "B公司", "relationType", "CUSTOMER", "status", "ACTIVE")));
+        when(relationMapper.selectBuyerCounterparties(3L)).thenReturn(List.of(
+                Map.of("id", 6L, "counterpartyCompanyId", 10L, "counterpartyName", "C公司", "relationType", "SUPPLIER", "status", "ACTIVE")));
+        for (long userId : List.of(7L, 8L)) {
+            AuthContext.set(userId, 3L);
+            assertThat(service.listCounterparties("3", "supplier")).extracting(CounterpartyRelation::counterpartyName).containsExactly("B公司");
+            assertThat(service.listCounterparties("3", "buyer")).extracting(CounterpartyRelation::counterpartyName).containsExactly("C公司");
+        }
+        role.setPermissions("[\"member_manage\"]");
+        assertThatThrownBy(() -> service.listCounterparties("3", "supplier")).hasMessage("无权执行该操作");
+        assertThatThrownBy(() -> service.listCounterparties("3", "buyer")).hasMessage("无权执行该操作");
+        when(memberMapper.selectCount(any(Wrapper.class))).thenReturn(0L);
+        assertThatThrownBy(() -> service.listCounterparties("9", "buyer")).hasMessage("你不是该企业的有效成员");
+        verify(relationMapper, org.mockito.Mockito.never()).selectBuyerCounterparties(9L);
+    }
+
+    @Test
     @SuppressWarnings("unchecked")
     void pagesTenantOrdersContractsAndTemplates() {
         TradeOrder order = new TradeOrder();

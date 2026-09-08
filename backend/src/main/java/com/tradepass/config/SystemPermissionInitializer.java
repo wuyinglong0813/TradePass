@@ -38,7 +38,8 @@ public class SystemPermissionInitializer implements ApplicationRunner {
                 new String[]{"seal_manage", "电子章管理"},
                 new String[]{"contract_attachment_upload", "合同资料上传"},
                 new String[]{"sales_order_receive", "销售单接收"},
-                new String[]{"inventory_receive", "销售单入库"});
+                new String[]{"inventory_receive", "销售单入库"},
+                new String[]{"counterparty_view", "合作企业查看"});
         for (int i = 0; i < permissions.size(); i++) {
             String[] permission = permissions.get(i);
             jdbc.update("INSERT IGNORE INTO perm_def (code, label, sort_order) VALUES (?, ?, ?)",

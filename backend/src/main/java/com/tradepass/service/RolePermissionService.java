@@ -12,13 +12,13 @@ public class RolePermissionService {
 
     private static final Map<String, RoleDef> ROLES = Map.of(
             "LEGAL", new RoleDef("法人", List.of("all")),
-            "ADMIN", new RoleDef("管理员", List.of("member_manage", "auth_manage", "company_manage", "seal_manage", "contract_template")),
+            "ADMIN", new RoleDef("管理员", List.of("member_manage", "auth_manage", "company_manage", "seal_manage", "contract_template", "counterparty_view")),
             "SALES", new RoleDef("销售员", List.of("supplier_view", "counterparty_manage", "order_view",
-                    "order_create", "contract_sign", "contract_view", "reconciliation", "contract_attachment_upload")),
+                    "order_create", "contract_sign", "contract_view", "reconciliation", "contract_attachment_upload", "counterparty_view")),
             "PURCHASER", new RoleDef("采购员", List.of("buyer_view", "order_create", "contract_view",
                     "order_view", "contract_sign", "reconciliation", "contract_attachment_upload",
-                    "sales_order_receive", "inventory_view", "inventory_receive")),
-            "FINANCE", new RoleDef("财务", List.of("invoice_view", "reconciliation", "contract_attachment_upload")),
+                    "sales_order_receive", "inventory_view", "inventory_receive", "counterparty_view")),
+            "FINANCE", new RoleDef("财务", List.of("invoice_view", "reconciliation", "contract_attachment_upload", "counterparty_view")),
             "GUEST", new RoleDef("访客", List.of()),
             "LEGAL_CANDIDATE", new RoleDef("法人认证待审核", List.of())
     );

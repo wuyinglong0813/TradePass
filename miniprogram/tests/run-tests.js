@@ -992,6 +992,28 @@ test('enterprise management entries follow effective permissions including custo
   } finally { wx.request = previousRequest; app.applyMePayload = previousApply; }
 });
 
+test('partner loading distinguishes failures from empty company bindings and can retry', async () => {
+  const context = pageInstance(loadPage('../pages/index/index'));
+  const oldGetter = app.getCurrentCompanyId; const oldRequest = wx.request;
+  app.getCurrentCompanyId = () => '123';
+  let fail = true;
+  wx.request = options => options.success({ statusCode: 200, data: fail
+    ? { code: 400, message: '无权执行该操作' }
+    : { code: 0, data: [{ id: '1', counterpartyCompanyId: '456', counterpartyName: 'B公司', status: 'ACTIVE' }] } });
+  try {
+    context.data.homeHasSnapshot = true;
+    context.data.relationCounterparties = [{ id: 'old', counterpartyCompanyId: '789', counterpartyName: '旧企业' }];
+    assert.strictEqual(await context.loadCounterparties(), false);
+    assert.strictEqual(context.data.counterpartiesError, '无权执行该操作');
+    assert.deepStrictEqual(context.data.partnerCompanies, []);
+    assert.strictEqual(context.data.counterpartiesLoading, false);
+    fail = false;
+    assert.strictEqual(await context.loadCounterparties(), true);
+    assert.strictEqual(context.data.counterpartiesError, '');
+    assert.strictEqual(context.data.partnerCompanies[0].counterpartyName, 'B公司');
+  } finally { app.getCurrentCompanyId = oldGetter; wx.request = oldRequest; }
+});
+
 test('member invitation prepares on entry and ready button opens native sharing', async () => {
   const page = loadPage('../pages/auth-manage/auth-manage');
   const oldReady = app.ensureSessionReady; const oldGetter = app.getCurrentCompanyId;

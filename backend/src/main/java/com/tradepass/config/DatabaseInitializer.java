@@ -76,13 +76,13 @@ public class DatabaseInitializer {
         List.of(1L, 2L).forEach(companyId -> {
             seedRole(companyId, "法人", List.of("all"));
             seedRole(companyId, "管理员", List.of("member_manage", "auth_manage", "company_manage",
-                    "seal_manage", "contract_template"));
+                    "seal_manage", "contract_template", "counterparty_view"));
             seedRole(companyId, "销售员", List.of("supplier_view", "counterparty_manage", "order_view", "order_create",
-                    "contract_sign", "contract_view", "reconciliation", "contract_attachment_upload"));
+                    "contract_sign", "contract_view", "reconciliation", "contract_attachment_upload", "counterparty_view"));
             seedRole(companyId, "采购员", List.of("buyer_view", "order_create", "contract_view", "order_view",
                     "contract_sign", "reconciliation", "contract_attachment_upload", "sales_order_receive",
-                    "inventory_view", "inventory_receive"));
-            seedRole(companyId, "财务", List.of("invoice_view", "reconciliation", "contract_attachment_upload"));
+                    "inventory_view", "inventory_receive", "counterparty_view"));
+            seedRole(companyId, "财务", List.of("invoice_view", "reconciliation", "contract_attachment_upload", "counterparty_view"));
         });
     }
 

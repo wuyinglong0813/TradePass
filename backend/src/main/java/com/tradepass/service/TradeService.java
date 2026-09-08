@@ -196,9 +196,9 @@ public class TradeService {
     public List<CounterpartyRelation> listCounterparties(String companyId, String role) {
         long cid = accessControlService.resolveCompanyId(companyId);
         if ("supplier".equalsIgnoreCase(role)) {
-            accessControlService.requireAnyPermission(cid, "supplier_view", "counterparty_manage", "contract_sign");
+            accessControlService.requireAnyPermission(cid, "counterparty_view", "supplier_view", "counterparty_manage", "contract_sign");
         } else {
-            accessControlService.requireAnyPermission(cid, "buyer_view", "order_create", "contract_sign");
+            accessControlService.requireAnyPermission(cid, "counterparty_view", "buyer_view", "order_create", "contract_sign");
         }
         List<Map<String, Object>> rows = "supplier".equalsIgnoreCase(role)
                 ? counterpartyRelationMapper.selectSupplierCounterparties(cid)

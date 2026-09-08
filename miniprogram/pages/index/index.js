@@ -31,6 +31,8 @@ Page({
     counterparties: [],
     relationCounterparties: [],
     partnerCompanies: [],
+    counterpartiesLoading: false,
+    counterpartiesError: '',
     showJoinForm: false,
     showHomeGuide: false,
     joinCompanyId: '',
@@ -214,6 +216,7 @@ Page({
           counterparties: [],
           relationCounterparties: [],
           partnerCompanies: [],
+          counterpartiesError: '',
           stats: { totalAmount: 0, totalOrders: 0, counterpartyCount: 0 },
           approvalHasMessage: false,
           homeHasSnapshot: false,
@@ -283,7 +286,7 @@ Page({
     if (identity !== snapshotKey(this.homeSnapshotContext())) return;
     const coreUpdated = results[0] === true;
     const fullyUpdated = results.every(result => result === true);
-    if (coreUpdated) this.saveHomeSnapshot();
+    if (coreUpdated && results[1] === true) this.saveHomeSnapshot();
     this.setData({
       homeRefreshing: false,
       homeUsingSnapshot: !fullyUpdated && this.data.homeHasSnapshot,
@@ -566,6 +569,7 @@ Page({
     if (!companyId) return false;
     this.counterpartyRequestSeq = (this.counterpartyRequestSeq || 0) + 1;
     const requestSeq = this.counterpartyRequestSeq;
+    this.setData({ counterpartiesLoading: true, counterpartiesError: '' });
     try {
       const list = await request({ url: `/counterparties?companyId=${companyId}&role=${role}` });
       if (requestSeq !== this.counterpartyRequestSeq || role !== this.data.role
@@ -574,12 +578,14 @@ Page({
       this.refreshPartnerCompanies();
       return true;
     } catch (error) {
-      if (requestSeq !== this.counterpartyRequestSeq || role !== this.data.role) return false;
-      if (!this.data.homeHasSnapshot) {
-        this.setData({ counterparties: [], relationCounterparties: [] });
-        this.refreshPartnerCompanies();
-      }
+      if (requestSeq !== this.counterpartyRequestSeq || role !== this.data.role
+        || String(companyId) !== String(app.getCurrentCompanyId())) return false;
+      this.setData({ counterparties: [], relationCounterparties: [],
+        counterpartiesError: error.message || '合作企业加载失败，请重试' });
+      this.refreshPartnerCompanies();
       return false;
+    } finally {
+      if (requestSeq === this.counterpartyRequestSeq) this.setData({ counterpartiesLoading: false });
     }
   },
 
