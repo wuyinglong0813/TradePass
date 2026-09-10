@@ -575,6 +575,10 @@ public class CompanyService {
         String displayName = name != null && !name.isBlank() && !"新用户".equals(name)
                 ? name
                 : (phone != null && !phone.isBlank() ? "用户" + phone.substring(phone.length() - 4) : "微信用户");
+        String verifiedName = string(row.get("verifiedName"));
+        if (verifiedName != null && !verifiedName.isBlank()) {
+            displayName = verifiedName.trim();
+        }
         String status = string(row.get("status"));
         AccessControlService.EffectiveRole effective = "ACTIVE".equals(status)
                 ? accessControlService.effectiveRole(parseId(companyId), parseId(string(row.get("userId"))))
