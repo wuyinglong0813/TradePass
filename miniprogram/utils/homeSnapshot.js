@@ -84,6 +84,17 @@ function writeHomeSnapshot(context, payload, now = Date.now()) {
   }
 }
 
+function clearCompanyHomeSnapshots(userId, companyId) {
+  try {
+    const keys = wx.getStorageSync(SNAPSHOT_INDEX_KEY);
+    (Array.isArray(keys) ? keys : []).forEach(key => {
+      const snapshot = wx.getStorageSync(key);
+      if (snapshot && String(snapshot.userId) === String(userId)
+        && String(snapshot.companyId) === String(companyId)) removeSnapshotKey(key);
+    });
+  } catch (error) {}
+}
+
 function clearHomeSnapshots() {
   try {
     const keys = wx.getStorageSync(SNAPSHOT_INDEX_KEY);
@@ -96,6 +107,7 @@ function clearHomeSnapshots() {
 
 module.exports = {
   USER_ID_KEY,
+  clearCompanyHomeSnapshots,
   clearHomeSnapshots,
   normalizeContext,
   readHomeSnapshot,

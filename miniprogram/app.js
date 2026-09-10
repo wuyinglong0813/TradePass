@@ -1,5 +1,5 @@
 const { request, clearSession } = require('./utils/request');
-const { USER_ID_KEY } = require('./utils/homeSnapshot');
+const { USER_ID_KEY, clearCompanyHomeSnapshots } = require('./utils/homeSnapshot');
 
 // 本地后端地址（开发者工具模拟器用）
 const LOCAL_API = 'http://127.0.0.1:9999/api';
@@ -126,7 +126,7 @@ App({
     const cid = session.user && session.user.currentCompanyId;
     const userId = session.user && session.user.id;
     if (userId) wx.setStorageSync(USER_ID_KEY, String(userId));
-    if (cid) this.setCurrentCompany(cid);
+    this.setCurrentCompany(cid || '');
     this._sessionReady = this.loadMe();
     await this._sessionReady;
     return session;
@@ -176,8 +176,101 @@ App({
 
   async loadMe() {
     if (!this.globalData.token) return null;
-    const payload = await request({ url: '/me' });
-    return this.applyMePayload(payload);
+    const token = this.globalData.token;
+    const companyId = this.getCurrentCompanyId();
+    let generation = this._companyAccessGeneration || 0;
+    let payload;
+    let recovered = false;
+    try {
+      payload = await request({ url: '/me', token, handleCompanyForbidden: false });
+    } catch (error) {
+      if (token !== this.globalData.token) return null;
+      if (!companyId || (error.statusCode !== 403 && error.code !== 403)) throw error;
+      this.invalidateCompanyAccess(companyId);
+      generation = this._companyAccessGeneration || 0;
+      recovered = true;
+      try {
+        payload = await request({ url: '/me', token, withCompany: false });
+      } catch (restoreError) {
+        if (token === this.globalData.token) wx.reLaunch({ url: '/pages/index/index' });
+        throw restoreError;
+      }
+    }
+    if (token !== this.globalData.token || generation !== (this._companyAccessGeneration || 0)) return null;
+    this.applyMePayload(payload);
+    if (recovered) wx.reLaunch({ url: '/pages/index/index' });
+    this.checkMembershipNotices();
+    return payload;
+  },
+
+  invalidateCompanyAccess(companyId) {
+    const userId = (this.globalData.userInfo && this.globalData.userInfo.id) || wx.getStorageSync(USER_ID_KEY);
+    clearCompanyHomeSnapshots(userId, companyId);
+    this.globalData.companies = this.globalData.companies.filter(item => String(item.companyId) !== String(companyId));
+    if (String(companyId) === String(this.getCurrentCompanyId())) {
+      this._companyAccessGeneration = (this._companyAccessGeneration || 0) + 1;
+      this.setCurrentCompany('');
+      this.globalData.memberInfo = null;
+      if (this.globalData.userInfo) {
+        this.globalData.userInfo = { ...this.globalData.userInfo, currentCompanyId: null, currentRole: 'GUEST' };
+      }
+    }
+  },
+
+  handleCompanyAccessLost(companyId) {
+    if (String(companyId) !== String(this.getCurrentCompanyId()) || this._companyAccessRecovery) return;
+    const token = this.globalData.token;
+    this.invalidateCompanyAccess(companyId);
+    const recovery = Promise.resolve(this._sessionRefresh)
+      .then(() => token === this.globalData.token ? this.loadMe() : null)
+      .catch(() => null).finally(() => {
+      if (this._companyAccessRecovery === recovery) this._companyAccessRecovery = null;
+      if (token === this.globalData.token) wx.reLaunch({ url: '/pages/index/index' });
+    });
+    this._companyAccessRecovery = recovery;
+  },
+
+  checkMembershipNotices() {
+    if (!this.globalData.token) return Promise.resolve();
+    if (this._membershipNoticeCheck) return this._membershipNoticeCheck;
+    const token = this.globalData.token;
+    const check = this.showMembershipNotices(token).catch(() => {}).finally(() => {
+      if (this._membershipNoticeCheck === check) this._membershipNoticeCheck = null;
+    });
+    this._membershipNoticeCheck = check;
+    return check;
+  },
+
+  async showMembershipNotices(token) {
+    const notices = await request({ url: '/me/membership-notices', token, withCompany: false });
+    if (token !== this.globalData.token || !Array.isArray(notices) || !notices.length) return;
+    const lostCurrentCompany = notices.some(notice => String(notice.companyId) === String(this.getCurrentCompanyId()));
+    notices.forEach(notice => this.invalidateCompanyAccess(notice.companyId));
+    if (lostCurrentCompany) {
+      try {
+        const payload = await request({ url: '/me', token, withCompany: false });
+        if (token !== this.globalData.token) return;
+        this.applyMePayload(payload);
+      } catch (error) {
+        // The revoked company stays cleared even if restoring another company fails.
+      }
+      if (token !== this.globalData.token) return;
+      wx.reLaunch({ url: '/pages/index/index' });
+    }
+    const names = notices.map(notice => `「${notice.companyName}」`).join('、');
+    const target = notices.length === 1 ? '该企业' : '这些企业';
+    const result = await new Promise(resolve => wx.showModal({
+      title: '企业成员变更提醒',
+      content: `你已被管理员移出${names}，无法再访问${target}的数据。如有疑问，请联系对应企业管理员。`,
+      showCancel: false,
+      confirmText: '我知道了',
+      success: resolve,
+      fail: () => resolve({ confirm: false })
+    }));
+    if (result.confirm && token === this.globalData.token) {
+      await request({ url: '/me/membership-notices/acknowledge', method: 'POST',
+        token, withCompany: false, data: { ids: notices.map(notice => notice.id) } });
+    }
   },
 
   async switchCompany(companyId) {

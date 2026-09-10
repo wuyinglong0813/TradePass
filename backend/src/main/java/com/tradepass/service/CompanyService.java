@@ -58,6 +58,7 @@ public class CompanyService {
     private final CompanySearchRateLimiter companySearchRateLimiter;
     private final RolePermissionService rolePermissionService;
     private final AuditLogService auditLogService;
+    private final MemberRemovalNoticeService memberRemovalNoticeService;
     private final boolean caMockEnabled;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private FadadaPersonalIdentityService personalIdentityService;
@@ -72,6 +73,7 @@ public class CompanyService {
                           CompanySearchRateLimiter companySearchRateLimiter,
                           RolePermissionService rolePermissionService,
                           AuditLogService auditLogService,
+                          MemberRemovalNoticeService memberRemovalNoticeService,
                           @Value("${tradepass.ca.mock-enabled:false}") boolean caMockEnabled) {
         this.companyMapper = companyMapper;
         this.companyMemberMapper = companyMemberMapper;
@@ -83,6 +85,7 @@ public class CompanyService {
         this.companySearchRateLimiter = companySearchRateLimiter;
         this.rolePermissionService = rolePermissionService;
         this.auditLogService = auditLogService;
+        this.memberRemovalNoticeService = memberRemovalNoticeService;
         this.caMockEnabled = caMockEnabled;
     }
 
@@ -422,6 +425,7 @@ public class CompanyService {
         auditLogService.log(cid, "COMPANY_MEMBER", memberId, "UPDATE_ROLE", "调整角色 " + String.join("、", roleCodes));
     }
 
+    @Transactional
     public void removeMember(String id, String companyId) {
         long cid = parseId(companyId);
         accessControlService.requireManager(cid);
@@ -446,6 +450,7 @@ public class CompanyService {
         if (deleted != 1) {
             throw new BusinessException("成员状态已变化，请刷新后重试");
         }
+        memberRemovalNoticeService.recordRemoval(target.getUserId(), cid);
         auditLogService.log(cid, "COMPANY_MEMBER", memberId, "REMOVE", "移除企业成员");
     }
 

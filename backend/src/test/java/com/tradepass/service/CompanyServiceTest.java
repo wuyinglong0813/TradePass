@@ -58,6 +58,7 @@ class CompanyServiceTest {
     private AccessControlService accessControl;
     private CompanySearchRateLimiter searchRateLimiter;
     private AuditLogService auditLogService;
+    private MemberRemovalNoticeService removalNoticeService;
     private CompanyService service;
 
     @BeforeEach
@@ -72,9 +73,10 @@ class CompanyServiceTest {
         accessControl = mock(AccessControlService.class);
         searchRateLimiter = mock(CompanySearchRateLimiter.class);
         auditLogService = mock(AuditLogService.class);
+        removalNoticeService = mock(MemberRemovalNoticeService.class);
         service = new CompanyService(companyMapper, memberMapper, inviteMapper, relationMapper,
                 roleMapper, permMapper, accessControl, searchRateLimiter, new RolePermissionService(),
-                auditLogService, true);
+                auditLogService, removalNoticeService, true);
         when(accessControl.requireCompanyProfileAccess(anyLong()))
                 .thenReturn(AccessControlService.CompanyProfileAccess.SENSITIVE_OWNER);
         when(accessControl.hasPermission(anyLong(), any())).thenReturn(true);
@@ -313,7 +315,7 @@ class CompanyServiceTest {
     void refusesSimulatedVerificationWhenProviderIsDisabled() {
         CompanyService productionService = new CompanyService(companyMapper, memberMapper, inviteMapper, relationMapper,
                 roleMapper, permMapper, accessControl, searchRateLimiter, new RolePermissionService(),
-                auditLogService, false);
+                auditLogService, removalNoticeService, false);
 
         assertThatThrownBy(() -> productionService.verifyRealName(new VerificationRequest("3")))
                 .isInstanceOf(BusinessException.class)
@@ -566,6 +568,7 @@ class CompanyServiceTest {
         when(memberMapper.selectCount(any(Wrapper.class))).thenReturn(1L);
         service.removeMember("12", "3");
         verify(memberMapper).delete(any(Wrapper.class));
+        verify(removalNoticeService).recordRemoval(8L, 3L);
         verify(memberMapper, org.mockito.Mockito.never()).selectCount(any(Wrapper.class));
         member.setIsLegalPerson(true);
         assertThatThrownBy(() -> service.removeMember("12", "3"))

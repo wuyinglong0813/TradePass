@@ -1253,6 +1253,123 @@ test('app switchCompany sends target tenant header and updates global profile', 
   assert.strictEqual(result.member.roleCode, 'ADMIN');
 });
 
+test('removed company session recovers, clears only its snapshots and acknowledges notice after confirmation', async () => {
+  const instance = appInstance(loadAppDefinition());
+  const previousApp = global.getApp; const previousRequest = wx.request; const previousModal = wx.showModal;
+  const previousGet = wx.getStorageSync; const previousSet = wx.setStorageSync;
+  const previousRemove = wx.removeStorageSync; const previousLaunch = wx.reLaunch;
+  const storage = { tradepass_token: 'token', tradepass_company_id: '8', tradepass_user_id: '7' };
+  wx.getStorageSync = key => storage[key] || '';
+  wx.setStorageSync = (key, value) => { storage[key] = value; };
+  wx.removeStorageSync = key => { delete storage[key]; };
+  global.getApp = () => instance;
+  instance.globalData.token = 'token';
+  instance.globalData.currentCompanyId = '8';
+  instance.globalData.userInfo = { id: '7', currentCompanyId: '8' };
+  instance.globalData.companies = [{ companyId: '8' }, { companyId: '9' }];
+  const snapshots = require('../utils/homeSnapshot');
+  const removedContext = { userId: '7', companyId: '8' };
+  const keptContext = { userId: '7', companyId: '9' };
+  snapshots.writeHomeSnapshot(removedContext, { companyName: '被移除企业' });
+  snapshots.writeHomeSnapshot(keptContext, { companyName: '仍所属企业' });
+  let modal; let modalCount = 0; let ackCount = 0; let relaunch;
+  wx.showModal = options => { modal = options; modalCount += 1; };
+  wx.reLaunch = options => { relaunch = options.url; };
+  wx.request = options => {
+    let data;
+    if (options.url.endsWith('/me') && options.header['X-Company-Id'] === '8') {
+      options.success({ statusCode: 403, data: { code: 403, message: '无权访问指定企业' } });
+      return;
+    }
+    assert.strictEqual(options.header['X-Company-Id'], undefined);
+    if (options.url.endsWith('/me')) data = {
+      user: { id: '7', currentCompanyId: '9' }, member: { roleCode: 'SALES' }, companies: [{ companyId: '9' }]
+    };
+    else if (options.url.endsWith('/acknowledge')) {
+      assert.deepStrictEqual(options.data.ids, ['9007199254740993']);
+      ackCount += 1; data = null;
+    } else data = ackCount ? [] : [{ id: '9007199254740993', companyId: '8', companyName: '被移除企业' }];
+    options.success({ statusCode: 200, data: { code: 0, data } });
+  };
+  try {
+    await instance.loadMe();
+    await Promise.resolve();
+    assert.strictEqual(instance.globalData.currentCompanyId, '9');
+    assert.deepStrictEqual(instance.globalData.companies, [{ companyId: '9' }]);
+    assert.strictEqual(snapshots.readHomeSnapshot(removedContext), null);
+    assert.ok(snapshots.readHomeSnapshot(keptContext));
+    assert.strictEqual(relaunch, '/pages/index/index');
+    assert.ok(modal.content.includes('被移除企业'));
+    assert.strictEqual(modal.showCancel, false);
+    assert.strictEqual(ackCount, 0);
+    const pending = instance.checkMembershipNotices();
+    assert.strictEqual(modalCount, 1);
+    modal.success({ confirm: true });
+    await pending;
+    assert.strictEqual(ackCount, 1);
+    await instance.checkMembershipNotices();
+    assert.strictEqual(modalCount, 1);
+  } finally {
+    global.getApp = previousApp; wx.request = previousRequest; wx.showModal = previousModal;
+    wx.getStorageSync = previousGet; wx.setStorageSync = previousSet;
+    wx.removeStorageSync = previousRemove; wx.reLaunch = previousLaunch;
+  }
+});
+
+test('forbidden business request removes old company and restores an unbound account without logging out', async () => {
+  const instance = appInstance(loadAppDefinition());
+  const previousApp = global.getApp; const previousRequest = wx.request; const previousLaunch = wx.reLaunch;
+  const previousGet = wx.getStorageSync; const previousSet = wx.setStorageSync; const previousRemove = wx.removeStorageSync;
+  global.getApp = () => instance;
+  wx.getStorageSync = () => ''; wx.setStorageSync = () => {}; wx.removeStorageSync = () => {};
+  let launched = false;
+  wx.reLaunch = () => { launched = true; };
+  instance.globalData.token = 'token';
+  instance.globalData.currentCompanyId = '8';
+  instance.globalData.userInfo = { id: '7', currentCompanyId: '8' };
+  instance.globalData.memberInfo = { roleCode: 'SALES' };
+  instance.globalData.companies = [{ companyId: '8' }];
+  wx.request = options => {
+    if (options.url.endsWith('/contracts')) {
+      options.success({ statusCode: 403, data: { code: 403, message: '无权访问指定企业' } });
+    } else {
+      assert.strictEqual(options.header['X-Company-Id'], undefined);
+      const data = options.url.endsWith('/me')
+        ? { user: { id: '7', currentCompanyId: null, currentRole: 'GUEST' }, member: null, companies: [] } : [];
+      options.success({ statusCode: 200, data: { code: 0, data } });
+    }
+  };
+  try {
+    await assert.rejects(request({ url: '/contracts' }), /无权访问指定企业/);
+    await instance._companyAccessRecovery;
+    assert.strictEqual(instance.globalData.token, 'token');
+    assert.strictEqual(instance.getCurrentCompanyId(), '');
+    assert.strictEqual(instance.globalData.memberInfo, null);
+    assert.deepStrictEqual(instance.globalData.companies, []);
+    assert.strictEqual(launched, true);
+  } finally {
+    global.getApp = previousApp; wx.request = previousRequest; wx.reLaunch = previousLaunch;
+    wx.getStorageSync = previousGet; wx.setStorageSync = previousSet; wx.removeStorageSync = previousRemove;
+  }
+});
+
+test('membership notices from a previous login cannot be shown or acknowledged by the new account', async () => {
+  const instance = appInstance(loadAppDefinition());
+  const previousApp = global.getApp; const previousRequest = wx.request; const previousModal = wx.showModal;
+  global.getApp = () => instance;
+  instance.globalData.token = 'old-token';
+  let respond; let modalCount = 0;
+  wx.request = options => { respond = options.success; };
+  wx.showModal = () => { modalCount += 1; };
+  try {
+    const pending = instance.checkMembershipNotices();
+    instance.globalData.token = 'new-token';
+    respond({ statusCode: 200, data: { code: 0, data: [{ id: '1', companyId: '8', companyName: '旧账号企业' }] } });
+    await pending;
+    assert.strictEqual(modalCount, 0);
+  } finally { global.getApp = previousApp; wx.request = previousRequest; wx.showModal = previousModal; }
+});
+
 test('contract sales documents only show records bound to the current contract', () => {
   const pageDir = path.join(__dirname, '..', 'pages', 'contract-preview');
   const script = fs.readFileSync(path.join(pageDir, 'contract-preview.js'), 'utf8');

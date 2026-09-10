@@ -49,7 +49,15 @@ function request(options) {
           resolve(data.data);
           return;
         }
-        reject(new Error((data && data.message) || `请求失败（${statusCode || '未知状态'}）`));
+        const error = new Error((data && data.message) || `请求失败（${statusCode || '未知状态'}）`);
+        error.statusCode = statusCode;
+        error.code = data && data.code;
+        if ((statusCode === 403 || error.code === 403) && options.withCompany !== false
+          && options.handleCompanyForbidden !== false && companyId
+          && token === app.globalData.token && typeof app.handleCompanyAccessLost === 'function') {
+          app.handleCompanyAccessLost(companyId);
+        }
+        reject(error);
       },
       fail: error => reject(new Error((error && error.errMsg) || (error && error.message) || '网络请求失败'))
     };

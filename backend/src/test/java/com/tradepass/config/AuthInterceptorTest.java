@@ -98,6 +98,24 @@ class AuthInterceptorTest {
     }
 
     @Test
+    void removedMemberCannotReuseTokenForOldCompanyButCanReadPersonalNotices() throws Exception {
+        when(sessionService.resolveUserId("token")).thenReturn(7L);
+        when(memberMapper.selectCount(any(Wrapper.class))).thenReturn(0L);
+        when(memberMapper.selectList(any(Wrapper.class))).thenReturn(List.of());
+        MockHttpServletRequest business = new MockHttpServletRequest("GET", "/api/contracts");
+        business.addHeader("Authorization", "token");
+        business.addHeader("X-Company-Id", "3");
+        MockHttpServletResponse denied = new MockHttpServletResponse();
+        assertThat(interceptor.preHandle(business, denied, new Object())).isFalse();
+        assertThat(denied.getStatus()).isEqualTo(403);
+        MockHttpServletRequest notices = new MockHttpServletRequest("GET", "/api/me/membership-notices");
+        notices.addHeader("Authorization", "token");
+        assertThat(interceptor.preHandle(notices, new MockHttpServletResponse(), new Object())).isTrue();
+        assertThat(AuthContext.userId()).isEqualTo(7L);
+        assertThat(AuthContext.companyId()).isNull();
+    }
+
+    @Test
     @SuppressWarnings("unchecked")
     void toleratesMembershipLookupFailureWithoutLeakingAnotherTenant() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest();
