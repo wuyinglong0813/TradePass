@@ -340,15 +340,13 @@ page {
 
 .member-title-row {
   min-width: 0;
-  flex-wrap: wrap;
-  row-gap: 8rpx;
 }
 
 .member-name {
   color: #17263a;
   font-size: 27rpx;
   font-weight: 690;
-  max-width: 250rpx;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -358,15 +356,20 @@ page {
   border-radius: 14rpx;
   flex-shrink: 0;
   font-size: 18rpx;
-  margin-left: 10rpx;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   padding: 4rpx 9rpx;
 }
 
 .identity-chip {
+  align-self: flex-start;
   border-radius: 14rpx;
   flex-shrink: 0;
   font-size: 18rpx;
-  margin-left: 10rpx;
+  margin-left: 16rpx;
+  margin-top: 2rpx;
   padding: 4rpx 9rpx;
 }
 
@@ -411,6 +414,7 @@ page {
 }
 
 .member-subline {
+  flex-wrap: wrap;
   color: #8b97a7;
   font-size: 20rpx;
   margin-top: 8rpx;
@@ -443,13 +447,35 @@ page {
   background: #efae42;
 }
 
+.member-footer {
+  align-items: center;
+  border-top: 1rpx solid #eaf0f6;
+  display: flex;
+  gap: 16rpx;
+  justify-content: space-between;
+  margin-top: 22rpx;
+  padding-top: 16rpx;
+}
+
+.member-permissions {
+  align-items: center;
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: 12rpx 18rpx;
+  min-width: 0;
+}
+
+.member-role-action {
+  color: #2478df;
+  font-size: 22rpx;
+  padding: 7rpx 0;
+}
+
 .remove-action {
-  background: #f2f5f8;
-  border-radius: 15rpx;
-  color: #7c8999;
+  color: #d94343;
   flex-shrink: 0;
-  font-size: 19rpx;
-  margin-left: 12rpx;
+  font-size: 22rpx;
   padding: 7rpx 12rpx;
 }
 
@@ -457,7 +483,6 @@ page {
   color: #8391a2;
   flex-shrink: 0;
   font-size: 18rpx;
-  margin-left: 12rpx;
 }
 
 .approval-zone {
@@ -675,7 +700,6 @@ page {
 }
 
 .manage-roles { color: #2478df; font-size: 23rpx; padding: 14rpx 0; }
-.member-role-action { color: #2478df; font-size: 22rpx; text-align: right; border-top: 1rpx solid #eaf0f6; margin-top: 18rpx; padding-top: 16rpx; }
 .role-selected { background: #eef6ff; border-radius: 16rpx; }
 .permission-preview { background: #f5f8fc; border-radius: 20rpx; padding: 24rpx; margin-top: 20rpx; }
 .preview-title { color: #17263a; font-size: 25rpx; font-weight: 600; }

@@ -219,15 +219,12 @@
           <view class="section-link">全部 ›</view>
         </view>
         <view class="partner-list">
-          <view class="empty-state" wx:if="{{counterpartiesLoading && partnerCompanies.length === 0}}">
-            <view class="empty-title">正在加载企业合作关系</view>
-          </view>
-          <view class="empty-state" wx:elif="{{counterpartiesError}}">
+          <view class="empty-state" wx:if="{{counterpartiesError}}">
             <view class="empty-title">合作企业暂未加载</view>
             <view class="empty-desc">{{counterpartiesError}}。如缺少权限，请联系法人配置“合作企业查看”。</view>
             <view class="section-link" bindtap="loadCounterparties">重新加载 ›</view>
           </view>
-          <view class="empty-state" wx:elif="{{partnerCompanies.length === 0}}">
+          <view class="empty-state" wx:elif="{{counterpartiesLoaded && partnerCompanies.length === 0}}">
             <image src="/images/icons/company.svg" mode="aspectFit"/>
             <view class="empty-title">{{role === 'supplier' ? '还没有客户企业' : '还没有供应商企业'}}</view>
             <view class="empty-desc">{{isLegalPerson ? '可切换业务视角查看另一类合作企业，或邀请新合作方' : '可切换业务视角查看另一类合作企业；已有企业绑定由成员共享，无需重新邀请'}}</view>

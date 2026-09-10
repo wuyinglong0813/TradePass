@@ -32,6 +32,7 @@ Page({
     relationCounterparties: [],
     partnerCompanies: [],
     counterpartiesLoading: false,
+    counterpartiesLoaded: false,
     counterpartiesError: '',
     showJoinForm: false,
     showHomeGuide: false,
@@ -216,6 +217,7 @@ Page({
           counterparties: [],
           relationCounterparties: [],
           partnerCompanies: [],
+          counterpartiesLoaded: false,
           counterpartiesError: '',
           stats: { totalAmount: 0, totalOrders: 0, counterpartyCount: 0 },
           approvalHasMessage: false,
@@ -242,6 +244,7 @@ Page({
       relationCounterparties: Array.isArray(payload.relationCounterparties)
         ? payload.relationCounterparties : [],
       partnerCompanies: Array.isArray(payload.partnerCompanies) ? payload.partnerCompanies : [],
+      counterpartiesLoaded: true,
       approvalHasMessage: !!payload.approvalHasMessage,
       loading: false,
       showJoinForm: false,
@@ -574,7 +577,7 @@ Page({
       const list = await request({ url: `/counterparties?companyId=${companyId}&role=${role}` });
       if (requestSeq !== this.counterpartyRequestSeq || role !== this.data.role
         || String(companyId) !== String(app.getCurrentCompanyId())) return false;
-      this.setData({ counterparties: list || [], relationCounterparties: list || [] });
+      this.setData({ counterparties: list || [], relationCounterparties: list || [], counterpartiesLoaded: true });
       this.refreshPartnerCompanies();
       return true;
     } catch (error) {
