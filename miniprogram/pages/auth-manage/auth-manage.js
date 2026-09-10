@@ -41,13 +41,17 @@ function maskPhone(phone) {
 function decorateMembers(list) {
   return (list || []).map((member, index) => {
     const meta = roleMeta(member.roleCode, member.roleText);
+    const roles = (member.roles && member.roles.length ? member.roles
+      : [{ code: member.roleCode, name: member.roleText || meta.label }])
+      .map(role => ({ code: role.code, label: role.name || roleMeta(role.code).label, tone: roleMeta(role.code).tone }));
     const pending = member.status === 'PENDING';
     return {
       ...member,
       avatarText: memberInitial(member.memberName),
       avatarTone: `tone-${index % 5}`,
       maskedPhone: maskPhone(member.phone),
-      roleLabel: member.roleText || meta.label,
+      roleLabel: roles.map(role => role.label).join('、'),
+      roles,
       roleTone: meta.tone,
       statusText: pending ? '待审批' : '正常',
       canRemove: !pending && member.roleCode !== 'LEGAL'
@@ -73,8 +77,9 @@ Page({
     approveTargetId: '',
     approveTargetName: '',
     approveRoles: [],
-    approveCode: '',
-    selectedRole: null,
+    selectedRoleCodes: [],
+    selectedRoles: [],
+    combinedPermissions: [],
     editingMember: false,
     savingRole: false,
     inviteCode: '',
@@ -127,6 +132,7 @@ Page({
       const [list, permissions] = await Promise.all([
         request({ url: `/roles?companyId=${cid}` }), request({ url: '/permissions' })
       ]);
+      if (String(cid) !== String(app.getCurrentCompanyId())) return;
       this.setData({
         approveRoles: (list || []).filter(r => !['LEGAL', 'LEGAL_CANDIDATE'].includes(r.code)).map(r => {
           const meta = roleMeta(r.code, r.name);
@@ -144,7 +150,7 @@ Page({
           };
         })
       });
-      this.setData({ selectedRole: this.data.approveRoles.find(r => r.code === this.data.approveCode) || null });
+      this.refreshSelectedRoles();
     } catch (e) {}
   },
 
@@ -174,7 +180,8 @@ Page({
     const normalizedKeyword = String(keyword || '').trim().toLowerCase();
     const active = authorizations.filter(member => member.status === 'ACTIVE').length;
     const pending = authorizations.filter(member => member.status === 'PENDING').length;
-    const managers = authorizations.filter(member => member.roleCode === 'LEGAL' || member.roleCode === 'ADMIN').length;
+    const managers = authorizations.filter(member => (member.roles || [{ code: member.roleCode }])
+      .some(role => role.code === 'LEGAL' || role.code === 'ADMIN')).length;
     const filtered = authorizations.filter(member => {
       const statusMatched = status === 'ALL' || member.status === status;
       const keywordMatched = !normalizedKeyword
@@ -226,15 +233,16 @@ Page({
   showApproveModal(e) {
     const member = this.data.authorizations.find(item => String(item.id) === String(e.currentTarget.dataset.id));
     const editingMember = !!member && member.status === 'ACTIVE';
-    const approveCode = editingMember ? member.roleCode : '';
+    const selectedRoleCodes = editingMember
+      ? (member.roles && member.roles.length ? member.roles.map(role => role.code) : [member.roleCode]) : [];
     this.setData({
       showApproveModal: true,
       editingMember,
-      approveCode,
-      selectedRole: this.data.approveRoles.find(r => r.code === approveCode) || null,
+      selectedRoleCodes,
       approveTargetId: e.currentTarget.dataset.id,
       approveTargetName: e.currentTarget.dataset.name || '该成员'
     });
+    this.refreshSelectedRoles();
   },
   hideApproveModal() {
     if (this.data.savingRole) return;
@@ -243,28 +251,39 @@ Page({
 
   selectRole(e) {
     if (this.data.savingRole) return;
-    const approveCode = e.currentTarget.dataset.role;
-    this.setData({ approveCode, selectedRole: this.data.approveRoles.find(r => r.code === approveCode) || null });
+    const code = e.currentTarget.dataset.role;
+    if (!this.data.approveRoles.some(role => role.code === code)) return;
+    const selectedRoleCodes = this.data.selectedRoleCodes.includes(code)
+      ? this.data.selectedRoleCodes.filter(value => value !== code) : [...this.data.selectedRoleCodes, code];
+    this.setData({ selectedRoleCodes });
+    this.refreshSelectedRoles();
+  },
+
+  refreshSelectedRoles() {
+    const codes = this.data.selectedRoleCodes;
+    const approveRoles = this.data.approveRoles.map(role => ({ ...role, selected: codes.includes(role.code) }));
+    const selectedRoles = codes.map(code => approveRoles.find(role => role.code === code)).filter(Boolean);
+    const permissions = new Map();
+    selectedRoles.forEach(role => (role.permissions || []).forEach(permission => permissions.set(permission.code, permission)));
+    const combinedPermissions = permissions.has('all')
+      ? [{ code: 'all', label: '全部权限' }] : Array.from(permissions.values());
+    this.setData({ approveRoles, selectedRoles, combinedPermissions });
   },
 
   manageRoles() { wx.navigateTo({ url: '/pages/role-manage/role-manage' }); },
 
-  copySelectedRole() {
-    const role = this.data.selectedRole;
-    if (role) wx.navigateTo({ url: `/pages/role-manage/role-manage?copyRoleId=${role.id}` });
-  },
-
   async confirmApprove() {
     if (this.data.savingRole) return;
-    const roleCode = this.data.approveCode;
-    if (!roleCode || !this.data.selectedRole) { wx.showToast({ title: '请先选择角色', icon: 'none' }); return; }
+    const roleCodes = this.data.selectedRoleCodes;
+    if (!roleCodes.length) { wx.showToast({ title: '请至少选择一个角色', icon: 'none' }); return; }
+    if (this.data.selectedRoles.length !== roleCodes.length) { wx.showToast({ title: '角色信息已变化，请重新打开后选择', icon: 'none' }); return; }
     const memberId = this.data.approveTargetId;
     const cid = currentCompanyId();
     if (!cid) return;
     const editing = this.data.editingMember;
     this.setData({ savingRole: true });
     try {
-      await request({ url: `/authorizations/${memberId}/${editing ? 'role' : 'approve'}?companyId=${cid}`, method: editing ? 'PUT' : 'POST', data: { roleCode, customPermissions: [] } });
+      await request({ url: `/authorizations/${memberId}/${editing ? 'role' : 'approve'}?companyId=${cid}`, method: editing ? 'PUT' : 'POST', data: { roleCode: roleCodes[0], roleCodes, customPermissions: [] } });
       wx.showToast({ title: editing ? '权限已更新' : '已通过', icon: 'success' });
       this.setData({ showApproveModal: false, approveTargetId: '', approveTargetName: '' });
       await app.refreshSession();

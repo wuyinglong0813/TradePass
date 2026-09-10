@@ -76,7 +76,7 @@
     </view>
 
     <view class="empty-wrap" wx:elif="{{filtered.length === 0}}">
-      <empty-state text="{{keyword ? '没有匹配的成员' : (activeStatusFilter === 'PENDING' ? '暂无待审批成员' : '暂无成员，邀请同事加入组织')}}"/>
+      <empty-state image-src="/images/logo.png" text="{{keyword ? '没有匹配的成员' : (activeStatusFilter === 'PENDING' ? '暂无待审批成员' : '暂无成员，邀请同事加入组织')}}"/>
     </view>
 
     <view
@@ -88,6 +88,7 @@
         <view class="member-copy">
           <view class="member-title-row">
             <view class="member-name">{{item.memberName}}</view>
+            <view wx:for="{{item.roles}}" wx:for-item="memberRole" wx:key="code" class="role-chip role-{{memberRole.tone}}">{{memberRole.label}}</view>
           </view>
           <view class="member-subline">
             <text>{{item.maskedPhone}}</text>
@@ -100,9 +101,8 @@
         <view class="identity-chip {{item.realNameVerified ? 'identity-verified' : 'identity-unverified'}}">{{item.realNameVerified ? '已实名' : '未实名'}}</view>
       </view>
 
-      <view class="member-footer">
+      <view class="member-footer" wx:if="{{item.status === 'ACTIVE'}}">
         <view class="member-permissions">
-          <view class="role-chip role-{{item.roleTone}}">{{item.roleLabel}}</view>
           <view class="member-role-action" wx:if="{{item.status === 'ACTIVE' && item.roleCode !== 'LEGAL'}}" data-id="{{item.id}}" data-name="{{item.memberName}}" bindtap="showApproveModal">调整角色与权限 ›</view>
         </view>
         <view
@@ -149,14 +149,14 @@
     <view class="sheet-heading">
       <view>
         <view class="sheet-title">{{editingMember ? '调整角色与权限' : '分配企业角色'}}</view>
-        <view class="sheet-desc">为 {{approveTargetName}} 选择角色，确认权限后保存</view>
+        <view class="sheet-desc">为 {{approveTargetName}} 多选角色，权限自动合并；再次点击可取消</view>
       </view>
       <view class="sheet-close" bindtap="hideApproveModal">×</view>
     </view>
     <view
       wx:for="{{approveRoles}}"
       wx:key="value"
-      class="role-option {{approveCode === item.value ? 'role-selected' : ''}}"
+      class="role-option {{item.selected ? 'role-selected' : ''}}"
       data-role="{{item.value}}"
       bindtap="selectRole">
       <view class="role-option-icon role-{{item.tone}}">{{item.label[0]}}</view>
@@ -164,19 +164,18 @@
         <view class="role-option-name">{{item.label}}</view>
         <view class="role-option-desc">{{item.description}}</view>
       </view>
-      <view class="role-arrow">{{approveCode === item.value ? '✓' : '›'}}</view>
+      <view class="role-checkbox {{item.selected ? 'checked' : ''}}">{{item.selected ? '✓' : ''}}</view>
     </view>
-    <view class="permission-preview" wx:if="{{selectedRole}}">
-      <view class="preview-title">{{selectedRole.label}} · 实际角色权限</view>
+    <view class="permission-preview" wx:if="{{selectedRoles.length}}">
+      <view class="preview-title">已选 {{selectedRoles.length}} 个角色 · 合并权限</view>
       <view class="preview-permissions">
-        <text class="permission-tag" wx:for="{{selectedRole.permissions}}" wx:key="code">{{item.label}}</text>
-        <text wx:if="{{selectedRole.permissions.length === 0}}" class="sheet-desc">无业务权限</text>
+        <text class="permission-tag" wx:for="{{combinedPermissions}}" wx:key="code">{{item.label}}</text>
+        <text wx:if="{{combinedPermissions.length === 0}}" class="sheet-desc">无业务权限</text>
       </view>
-      <view class="sheet-desc">需要为该成员增减权限？复制角色并调整后，返回选择新角色。</view>
-      <view class="manage-roles" bindtap="copySelectedRole">复制此角色并调整权限 ›</view>
+      <view class="sheet-desc">拥有所选角色的全部权限；取消一个角色后，其他角色共有的权限仍保留。</view>
     </view>
     <view class="manage-roles" bindtap="manageRoles">管理所有角色与权限 ›</view>
-    <button class="confirm-role" bindtap="confirmApprove" loading="{{savingRole}}" disabled="{{savingRole || !selectedRole}}">{{editingMember ? '保存角色与权限' : '确认通过并分配'}}</button>
+    <button class="confirm-role" bindtap="confirmApprove" loading="{{savingRole}}" disabled="{{savingRole || selectedRoles.length === 0}}">{{editingMember ? '保存角色与权限' : '确认通过并分配'}}</button>
     <view class="sheet-safe-area"></view>
   </view>
 </view>

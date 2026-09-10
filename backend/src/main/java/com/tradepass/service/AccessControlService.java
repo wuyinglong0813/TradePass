@@ -3,6 +3,7 @@ package com.tradepass.service;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.tradepass.common.AuthContext;
 import com.tradepass.common.BusinessException;
+import com.tradepass.common.TradePassDtos.MemberRole;
 import com.tradepass.entity.CompanyMember;
 import com.tradepass.entity.RoleDef;
 import com.tradepass.mapper.CompanyMemberMapper;
@@ -17,10 +18,14 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
+import java.util.LinkedHashSet;
 
 @Service
 public class AccessControlService {
-    public record EffectiveRole(String code, String name, List<String> permissions) {
+    public record EffectiveRole(String code, String name, List<String> permissions, List<MemberRole> roles) {
+        public EffectiveRole(String code, String name, List<String> permissions) {
+            this(code, name, permissions, List.of(new MemberRole(code, name)));
+        }
     }
     public enum CompanyProfileAccess {
         SENSITIVE_OWNER,
@@ -168,20 +173,25 @@ public class AccessControlService {
         }
 
         Set<String> effective = new HashSet<>();
-        RoleDef role = roleDefMapper.selectOne(new LambdaQueryWrapper<RoleDef>()
-                .eq(RoleDef::getCompanyId, companyId)
-                .eq(RoleDef::getCode, member.getRoleCode())
-                .last("LIMIT 1"));
-        if (role != null) {
-            effective.addAll(parsePermissions(role.getPermissions()));
-        } else {
-            effective.addAll(rolePermissionService.role(member.getRoleCode()).permissions());
+        Set<String> codes = new LinkedHashSet<>();
+        codes.add(member.getRoleCode());
+        codes.addAll(parsePermissions(member.getRoleCodes()));
+        List<MemberRole> assignedRoles = new ArrayList<>();
+        for (String code : codes) {
+            RoleDef role = roleDefMapper.selectOne(new LambdaQueryWrapper<RoleDef>()
+                    .eq(RoleDef::getCompanyId, companyId)
+                    .eq(RoleDef::getCode, code)
+                    .last("LIMIT 1"));
+            effective.addAll(role == null ? rolePermissionService.role(code).permissions()
+                    : parsePermissions(role.getPermissions()));
+            assignedRoles.add(new MemberRole(code, role == null || role.getName() == null
+                    ? rolePermissionService.roleText(code) : role.getName()));
         }
         effective.addAll(parsePermissions(member.getCustomPermissions()));
         List<String> permissions = new ArrayList<>(effective);
         Collections.sort(permissions);
-        String name = role == null ? rolePermissionService.roleText(member.getRoleCode()) : role.getName();
-        return new EffectiveRole(member.getRoleCode(), name, List.copyOf(permissions));
+        String name = String.join("、", assignedRoles.stream().map(MemberRole::name).toList());
+        return new EffectiveRole(member.getRoleCode(), name, List.copyOf(permissions), List.copyOf(assignedRoles));
     }
 
     private List<String> parsePermissions(String json) {

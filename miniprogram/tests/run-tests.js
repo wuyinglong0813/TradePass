@@ -932,29 +932,40 @@ function pageInstance(page) {
     setData(values) { Object.assign(this.data, values); } };
 }
 
-test('member role selection previews permissions before approval and supports later changes', async () => {
+test('member roles support multiple selections, permission union and removing one role', async () => {
   const context = pageInstance(loadPage('../pages/auth-manage/auth-manage'));
   const oldGetter = app.getCurrentCompanyId; const oldRefresh = app.refreshSession; const oldRequest = wx.request;
   app.getCurrentCompanyId = () => '123'; app.refreshSession = async () => {};
   const calls = [];
   wx.request = options => { calls.push(options); options.success({ statusCode: 200, data: { code: 0, data: null } }); };
   context.loadMembers = async () => {};
-  context.data.authorizations = [{ id: '12', status: 'PENDING' }, { id: '13', status: 'ACTIVE', roleCode: 'ADMIN' }];
-  context.data.approveRoles = [{ code: 'ADMIN', permissions: [{ code: 'member_manage' }] }, { code: 'CUSTOM_A', permissions: [] }];
+  context.data.authorizations = [{ id: '12', status: 'PENDING' },
+    { id: '13', status: 'ACTIVE', roleCode: 'SALES', roles: [{ code: 'SALES' }, { code: 'FINANCE' }] }];
+  context.data.approveRoles = [
+    { code: 'SALES', permissions: [{ code: 'order_create' }, { code: 'contract_view' }] },
+    { code: 'FINANCE', permissions: [{ code: 'invoice_view' }, { code: 'contract_view' }] }
+  ];
   try {
     context.showApproveModal({ currentTarget: { dataset: { id: '12' } } });
-    context.selectRole({ currentTarget: { dataset: { role: 'ADMIN' } } });
+    context.selectRole({ currentTarget: { dataset: { role: 'SALES' } } });
+    context.selectRole({ currentTarget: { dataset: { role: 'FINANCE' } } });
     assert.strictEqual(calls.length, 0);
-    assert.strictEqual(context.data.selectedRole.permissions[0].code, 'member_manage');
+    assert.deepStrictEqual(context.data.combinedPermissions.map(p => p.code), ['order_create', 'contract_view', 'invoice_view']);
     await context.confirmApprove();
     assert.ok(calls[0].url.endsWith('/authorizations/12/approve?companyId=123'));
     assert.strictEqual(calls[0].method, 'POST');
+    assert.deepStrictEqual(calls[0].data.roleCodes, ['SALES', 'FINANCE']);
     context.showApproveModal({ currentTarget: { dataset: { id: '13' } } });
-    context.selectRole({ currentTarget: { dataset: { role: 'CUSTOM_A' } } });
+    assert.deepStrictEqual(context.data.selectedRoleCodes, ['SALES', 'FINANCE']);
+    context.selectRole({ currentTarget: { dataset: { role: 'SALES' } } });
+    assert.deepStrictEqual(context.data.combinedPermissions.map(p => p.code), ['invoice_view', 'contract_view']);
     await context.confirmApprove();
     assert.ok(calls[1].url.endsWith('/authorizations/13/role?companyId=123'));
     assert.strictEqual(calls[1].method, 'PUT');
-    assert.deepStrictEqual(calls[1].data, { roleCode: 'CUSTOM_A', customPermissions: [] });
+    assert.deepStrictEqual(calls[1].data, { roleCode: 'FINANCE', roleCodes: ['FINANCE'], customPermissions: [] });
+    context.selectRole({ currentTarget: { dataset: { role: 'FINANCE' } } });
+    await context.confirmApprove();
+    assert.strictEqual(calls.length, 2);
   } finally { app.getCurrentCompanyId = oldGetter; app.refreshSession = oldRefresh; wx.request = oldRequest; }
 });
 

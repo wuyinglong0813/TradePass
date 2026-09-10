@@ -307,7 +307,9 @@ public class AuthService {
                 .map(row -> {
                     String roleCode = string(row.get("roleCode"));
                     return new CompanyRole(String.valueOf(row.get("companyId")), string(row.get("companyName")),
-                            roleCode, row.get("roleName") == null
+                            roleCode, row.get("roleCodes") != null
+                                    ? accessControlService.effectiveRole(parseId(String.valueOf(row.get("companyId"))), userId).name()
+                                    : row.get("roleName") == null
                                     ? rolePermissionService.roleText(roleCode)
                                     : string(row.get("roleName")));
                 })

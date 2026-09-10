@@ -9,6 +9,7 @@ import com.tradepass.entity.RoleDef;
 import com.tradepass.mapper.CompanyMemberMapper;
 import com.tradepass.mapper.CounterpartyRelationMapper;
 import com.tradepass.mapper.RoleDefMapper;
+import com.tradepass.support.MybatisTestSupport;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -151,6 +152,37 @@ class AccessControlServiceTest {
         role.setPermissions("[]");
         assertThat(service.hasPermission(3L, "member_manage")).isFalse();
         assertThatThrownBy(() -> service.requireManager(3L)).hasMessage("无权执行该操作");
+    }
+
+    @Test
+    void unionsAssignedRolesAndRevokesOnlyPermissionsNoLongerGranted() {
+        MybatisTestSupport.initialize(CompanyMember.class, RoleDef.class);
+        CompanyMember member = activeMember("SALES", null);
+        member.setRoleCodes("[\"SALES\",\"FINANCE\"]");
+        when(memberMapper.selectOne(any(Wrapper.class))).thenReturn(member);
+        RoleDef sales = new RoleDef();
+        sales.setName("销售员");
+        sales.setPermissions("[\"order_create\",\"contract_view\"]");
+        RoleDef finance = new RoleDef();
+        finance.setName("财务");
+        finance.setPermissions("[\"invoice_view\",\"contract_view\"]");
+        when(roleMapper.selectOne(any(Wrapper.class))).thenAnswer(invocation -> {
+            var query = (com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<RoleDef>) invocation.getArgument(0);
+            query.getSqlSegment();
+            assertThat(query.getParamNameValuePairs().values()).contains(3L);
+            return query.getParamNameValuePairs().containsValue("SALES") ? sales : finance;
+        });
+        var effective = service.effectiveRole(3L, 7L);
+        assertThat(effective.name()).isEqualTo("销售员、财务");
+        assertThat(effective.permissions()).containsExactly("contract_view", "invoice_view", "order_create");
+        member.setRoleCode("FINANCE");
+        member.setRoleCodes("[\"FINANCE\"]");
+        assertThat(service.hasPermission(3L, "order_create")).isFalse();
+        assertThat(service.hasPermission(3L, "contract_view")).isTrue();
+        finance.setPermissions("[]");
+        assertThat(service.hasPermission(3L, "invoice_view")).isFalse();
+        when(memberMapper.selectOne(any(Wrapper.class))).thenReturn(null);
+        assertThat(service.effectiveRole(3L, 7L).permissions()).isEmpty();
     }
 
     private CompanyMember activeMember(String role, String customPermissions) {

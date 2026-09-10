@@ -340,6 +340,8 @@ page {
 
 .member-title-row {
   min-width: 0;
+  flex-wrap: wrap;
+  gap: 8rpx 10rpx;
 }
 
 .member-name {
@@ -690,9 +692,22 @@ page {
   margin-top: 5rpx;
 }
 
-.role-arrow {
-  color: #a7b2bf;
-  font-size: 36rpx;
+.role-checkbox {
+  align-items: center;
+  border: 2rpx solid #c6d4e4;
+  border-radius: 8rpx;
+  display: flex;
+  flex-shrink: 0;
+  height: 34rpx;
+  justify-content: center;
+  width: 34rpx;
+  font-size: 24rpx;
+}
+
+.role-checkbox.checked {
+  background: #2478df;
+  border-color: #2478df;
+  color: #fff;
 }
 
 .sheet-safe-area {

@@ -7,6 +7,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.tradepass.common.AuthContext;
 import com.tradepass.common.BusinessException;
 import com.tradepass.common.TradePassDtos.AuthorizationRecord;
+import com.tradepass.common.TradePassDtos.MemberRole;
 import com.tradepass.common.TradePassDtos.CompanyProfile;
 import com.tradepass.common.TradePassDtos.CompanySearchSummary;
 import com.tradepass.common.TradePassDtos.SealRecord;
@@ -336,8 +337,11 @@ public class CompanyService {
         if (target == null) {
             throw new BusinessException("成员申请不存在或状态已变化");
         }
-        RoleDef role = requireAssignableRole(cid, req.roleCode());
-        List<String> rolePermissions = parsePermissions(role.getPermissions());
+        List<RoleDef> roles = requireAssignableRoles(cid, req);
+        RoleDef role = roles.get(0);
+        List<String> roleCodes = roles.stream().map(RoleDef::getCode).toList();
+        List<String> rolePermissions = roles.stream().flatMap(item -> parsePermissions(item.getPermissions()).stream())
+                .distinct().toList();
         List<String> customPermissions = req.customPermissions() == null ? List.of() : req.customPermissions();
         validateGrantablePermissions(cid, rolePermissions);
         if (!customPermissions.isEmpty()) {
@@ -351,6 +355,7 @@ public class CompanyService {
                 .eq(CompanyMember::getCompanyId, cid)
                 .eq(CompanyMember::getStatus, "PENDING")
                 .set(CompanyMember::getRoleCode, role.getCode())
+                .set(CompanyMember::getRoleCodes, toJson(roleCodes))
                 .set(CompanyMember::getCustomPermissions, perms)
                 .set(CompanyMember::getIsLegalPerson, false)
                 .set(CompanyMember::getIsAdministrator, "ADMIN".equals(role.getCode()))
@@ -360,9 +365,10 @@ public class CompanyService {
         }
         Set<String> effective = new LinkedHashSet<>(rolePermissions);
         effective.addAll(customPermissions);
-        auditLogService.log(cid, "COMPANY_MEMBER", memberId, "APPROVE", "分配角色 " + role.getCode());
+        auditLogService.log(cid, "COMPANY_MEMBER", memberId, "APPROVE", "分配角色 " + String.join("、", roleCodes));
         return new AuthorizationRecord(id, companyId, String.valueOf(target.getUserId()), "", role.getCode(),
-                role.getName(), List.copyOf(effective), "ACTIVE", "", null);
+                String.join("、", memberRoles(roles).stream().map(MemberRole::name).toList()),
+                List.copyOf(effective), "ACTIVE", "", null, memberRoles(roles));
     }
 
     public void rejectMember(String id, String companyId) {
@@ -391,8 +397,12 @@ public class CompanyService {
         if (Boolean.TRUE.equals(target.getIsLegalPerson()) || "LEGAL".equals(target.getRoleCode())) {
             throw new BusinessException("法人只能通过法人变更流程移交");
         }
-        RoleDef role = requireAssignableRole(cid, req.roleCode());
-        validateGrantablePermissions(cid, parsePermissions(role.getPermissions()));
+        List<RoleDef> roles = requireAssignableRoles(cid, req);
+        RoleDef role = roles.get(0);
+        List<String> roleCodes = roles.stream().map(RoleDef::getCode).toList();
+        for (RoleDef assignedRole : roles) {
+            validateGrantablePermissions(cid, parsePermissions(assignedRole.getPermissions()));
+        }
         if (req.customPermissions() != null && !req.customPermissions().isEmpty()) {
             throw new BusinessException("请通过角色管理配置权限后再分配");
         }
@@ -401,12 +411,15 @@ public class CompanyService {
                 .eq(CompanyMember::getCompanyId, cid)
                 .eq(CompanyMember::getStatus, "ACTIVE")
                 .eq(CompanyMember::getRoleCode, target.getRoleCode())
+                .apply("COALESCE(role_codes, JSON_ARRAY()) = CAST({0} AS JSON)",
+                        target.getRoleCodes() == null ? "[]" : target.getRoleCodes())
                 .and(q -> q.eq(CompanyMember::getIsLegalPerson, false).or().isNull(CompanyMember::getIsLegalPerson))
                 .set(CompanyMember::getRoleCode, role.getCode())
+                .set(CompanyMember::getRoleCodes, toJson(roleCodes))
                 .set(CompanyMember::getIsAdministrator, "ADMIN".equals(role.getCode()))
                 .set(CompanyMember::getCustomPermissions, null));
         if (updated != 1) throw new BusinessException("成员状态已变化，请刷新后重试");
-        auditLogService.log(cid, "COMPANY_MEMBER", memberId, "UPDATE_ROLE", "调整角色 " + role.getCode());
+        auditLogService.log(cid, "COMPANY_MEMBER", memberId, "UPDATE_ROLE", "调整角色 " + String.join("、", roleCodes));
     }
 
     public void removeMember(String id, String companyId) {
@@ -494,7 +507,8 @@ public class CompanyService {
         }
         if (companyMemberMapper.selectCount(new LambdaQueryWrapper<CompanyMember>()
                 .eq(CompanyMember::getCompanyId, role.getCompanyId())
-                .eq(CompanyMember::getRoleCode, role.getCode())) > 0) {
+                .and(q -> q.eq(CompanyMember::getRoleCode, role.getCode())
+                        .or().apply("JSON_CONTAINS(role_codes, JSON_QUOTE({0}))", role.getCode()))) > 0) {
             throw new BusinessException("角色仍有成员使用，请先迁移成员角色");
         }
         roleDefMapper.deleteById(role.getId());
@@ -585,7 +599,24 @@ public class CompanyService {
                 : new AccessControlService.EffectiveRole(roleCode, rolePermissionService.roleText(roleCode), List.of());
         return new AuthorizationRecord(String.valueOf(row.get("id")), companyId, String.valueOf(row.get("userId")),
                 displayName, effective.code(), effective.name(), effective.permissions(), status,
-                phone != null ? phone : "", "VERIFIED".equals(string(row.get("identityStatus"))));
+                phone != null ? phone : "", "VERIFIED".equals(string(row.get("identityStatus"))), effective.roles());
+    }
+
+    private List<MemberRole> memberRoles(List<RoleDef> roles) {
+        return roles.stream().map(role -> new MemberRole(role.getCode(),
+                role.getName() == null ? rolePermissionService.roleText(role.getCode()) : role.getName())).toList();
+    }
+
+    private List<RoleDef> requireAssignableRoles(long companyId, ApproveRequest req) {
+        List<String> requested = req.roleCodes() == null
+                ? (req.roleCode() == null ? List.of() : List.of(req.roleCode())) : req.roleCodes();
+        if (requested.isEmpty()) throw new BusinessException("请至少选择一个角色");
+        if (requested.size() > 30) throw new BusinessException("一次最多分配30个角色");
+        List<RoleDef> roles = requested.stream().distinct()
+                .map(code -> requireAssignableRole(companyId, code)).toList();
+        // Keep existing clients' administrator and guest checks consistent with the assigned roles.
+        return roles.stream().sorted(java.util.Comparator.comparingInt(role ->
+                "ADMIN".equals(role.getCode()) ? 0 : "GUEST".equals(role.getCode()) ? 2 : 1)).toList();
     }
 
     private RoleDef requireAssignableRole(long companyId, String roleCode) {

@@ -64,7 +64,10 @@ public final class TradePassDtos {
     public record SealRecord(String id, String companyId, String fileUrl, String usage, String status) {
     }
 
-    public record AuthorizationRecord(String id, String companyId, String userId, String memberName, String roleCode, String roleText, List<String> permissions, String status, String phone, Boolean realNameVerified) {
+    public record MemberRole(String code, String name) {
+    }
+
+    public record AuthorizationRecord(String id, String companyId, String userId, String memberName, String roleCode, String roleText, List<String> permissions, String status, String phone, Boolean realNameVerified, List<MemberRole> roles) {
     }
 
     /** dev 用户切换列表项 */

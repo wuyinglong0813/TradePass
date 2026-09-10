@@ -638,6 +638,57 @@ class CompanyServiceTest {
         assertThat(payload.deletable()).isFalse();
     }
 
+    @Test
+    void assignsMultipleRolesAndValidatesEveryRoleBeforeWriting() {
+        CompanyMember target = new CompanyMember();
+        target.setId(12L);
+        target.setUserId(8L);
+        target.setCompanyId(3L);
+        target.setStatus("PENDING");
+        target.setRoleCode("GUEST");
+        when(memberMapper.selectOne(any(Wrapper.class))).thenReturn(target);
+        RoleDef sales = new RoleDef();
+        sales.setCode("SALES");
+        sales.setName("销售员");
+        sales.setPermissions("[\"order_create\",\"contract_view\"]");
+        RoleDef finance = new RoleDef();
+        finance.setCode("FINANCE");
+        finance.setName("财务");
+        finance.setPermissions("[\"invoice_view\",\"contract_view\"]");
+        when(roleMapper.selectOne(any(Wrapper.class))).thenAnswer(invocation -> {
+            var query = (com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<RoleDef>) invocation.getArgument(0);
+            query.getSqlSegment();
+            assertThat(query.getParamNameValuePairs().values()).contains(3L);
+            if (query.getParamNameValuePairs().containsValue("SALES")) return sales;
+            if (query.getParamNameValuePairs().containsValue("FINANCE")) return finance;
+            return null;
+        });
+        var request = new ApproveRequest(null, List.of(), List.of("SALES", "FINANCE", "SALES"));
+        AuthorizationRecord approved = service.approveMember("12", request, "3");
+        assertThat(approved.roles()).extracting(com.tradepass.common.TradePassDtos.MemberRole::code)
+                .containsExactly("SALES", "FINANCE");
+        assertThat(approved.permissions()).containsExactlyInAnyOrder("order_create", "contract_view", "invoice_view");
+        target.setStatus("ACTIVE");
+        target.setRoleCode("SALES");
+        target.setRoleCodes("[\"SALES\",\"FINANCE\"]");
+        service.updateMemberRole("12", new ApproveRequest(null, List.of(), List.of("FINANCE")), "3");
+        ArgumentCaptor<Wrapper> updates = ArgumentCaptor.forClass(Wrapper.class);
+        verify(memberMapper, org.mockito.Mockito.times(2)).update(updates.capture());
+        var update = (com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<CompanyMember>) updates.getAllValues().get(1);
+        assertThat(update.getSqlSet()).contains("role_codes=");
+        assertThat(update.getParamNameValuePairs().values()).contains("[\"FINANCE\"]");
+        assertThatThrownBy(() -> service.updateMemberRole("12", new ApproveRequest(null, List.of(), List.of()), "3"))
+                .hasMessage("请至少选择一个角色");
+        assertThatThrownBy(() -> service.updateMemberRole("12", new ApproveRequest(null, List.of(), List.of("SALES", "LEGAL")), "3"))
+                .hasMessage("该角色不能通过成员审批分配");
+        assertThatThrownBy(() -> service.updateMemberRole("12", new ApproveRequest(null, List.of(), List.of("SALES", "OTHER_COMPANY_ROLE")), "3"))
+                .hasMessage("角色不存在或不属于当前企业");
+        when(accessControl.hasPermission(3L, "invoice_view")).thenReturn(false);
+        assertThatThrownBy(() -> service.updateMemberRole("12", request, "3"))
+                .hasMessage("不能授予当前操作者不具备的权限 invoice_view");
+        verify(memberMapper, org.mockito.Mockito.times(2)).update(any(Wrapper.class));
+    }
+
     private Company company(long id, String name) {
         Company company = new Company();
         company.setId(id);

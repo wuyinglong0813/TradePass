@@ -32,6 +32,7 @@ public interface CompanyMemberMapper extends BaseMapper<CompanyMember> {
 
     @Select("""
         SELECT c.id AS companyId, c.name AS companyName, m.role_code AS roleCode,
+               m.role_codes AS roleCodes,
                COALESCE(r.name, m.role_code) AS roleName
         FROM company c
         JOIN company_member m ON c.id = m.company_id

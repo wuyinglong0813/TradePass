@@ -13,6 +13,7 @@ public class CompanyMember {
     private Long companyId;
     private Long userId;
     private String roleCode;
+    private String roleCodes;
     private Boolean isLegalPerson;
     private Boolean isAdministrator;
     private String status;
@@ -27,6 +28,8 @@ public class CompanyMember {
     public void setUserId(Long userId) { this.userId = userId; }
     public String getRoleCode() { return roleCode; }
     public void setRoleCode(String roleCode) { this.roleCode = roleCode; }
+    public String getRoleCodes() { return roleCodes; }
+    public void setRoleCodes(String roleCodes) { this.roleCodes = roleCodes; }
     public Boolean getIsLegalPerson() { return isLegalPerson; }
     public void setIsLegalPerson(Boolean isLegalPerson) { this.isLegalPerson = isLegalPerson; }
     public Boolean getIsAdministrator() { return isAdministrator; }
