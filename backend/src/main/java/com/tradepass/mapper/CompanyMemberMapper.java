@@ -44,7 +44,7 @@ public interface CompanyMemberMapper extends BaseMapper<CompanyMember> {
     @Select("""
         SELECT m.id, m.user_id AS userId, m.role_code AS roleCode,
                m.custom_permissions AS customPermissions, m.status, u.nickname, u.phone,
-               i.verified_name AS verifiedName
+               i.verified_name AS verifiedName, i.local_status AS identityStatus
         FROM company_member m
         JOIN sys_user u ON m.user_id = u.id
         LEFT JOIN fadada_user_identity i ON i.user_id = u.id AND i.local_status = 'VERIFIED'
@@ -56,7 +56,7 @@ public interface CompanyMemberMapper extends BaseMapper<CompanyMember> {
     @Select("""
         SELECT m.id, m.user_id AS userId, m.role_code AS roleCode,
                m.custom_permissions AS customPermissions, m.status, u.nickname, u.phone,
-               i.verified_name AS verifiedName
+               i.verified_name AS verifiedName, i.local_status AS identityStatus
         FROM company_member m
         JOIN sys_user u ON m.user_id = u.id
         LEFT JOIN fadada_user_identity i ON i.user_id = u.id AND i.local_status = 'VERIFIED'

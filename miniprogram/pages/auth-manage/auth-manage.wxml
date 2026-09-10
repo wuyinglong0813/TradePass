@@ -89,6 +89,7 @@
           <view class="member-title-row">
             <view class="member-name">{{item.memberName}}</view>
             <view class="role-chip role-{{item.roleTone}}">{{item.roleLabel}}</view>
+            <view class="identity-chip {{item.realNameVerified ? 'identity-verified' : 'identity-unverified'}}">{{item.realNameVerified ? '已实名' : '未实名'}}</view>
           </view>
           <view class="member-subline">
             <text>{{item.maskedPhone}}</text>

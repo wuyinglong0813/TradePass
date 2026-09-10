@@ -362,7 +362,7 @@ public class CompanyService {
         effective.addAll(customPermissions);
         auditLogService.log(cid, "COMPANY_MEMBER", memberId, "APPROVE", "分配角色 " + role.getCode());
         return new AuthorizationRecord(id, companyId, String.valueOf(target.getUserId()), "", role.getCode(),
-                role.getName(), List.copyOf(effective), "ACTIVE", "");
+                role.getName(), List.copyOf(effective), "ACTIVE", "", null);
     }
 
     public void rejectMember(String id, String companyId) {
@@ -585,7 +585,7 @@ public class CompanyService {
                 : new AccessControlService.EffectiveRole(roleCode, rolePermissionService.roleText(roleCode), List.of());
         return new AuthorizationRecord(String.valueOf(row.get("id")), companyId, String.valueOf(row.get("userId")),
                 displayName, effective.code(), effective.name(), effective.permissions(), status,
-                phone != null ? phone : "");
+                phone != null ? phone : "", "VERIFIED".equals(string(row.get("identityStatus"))));
     }
 
     private RoleDef requireAssignableRole(long companyId, String roleCode) {
