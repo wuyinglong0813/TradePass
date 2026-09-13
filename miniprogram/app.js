@@ -280,6 +280,8 @@ App({
       data: { companyId },
       companyId
     });
+    // Ignore older /me responses that were requested before this company switch completed.
+    this._companyAccessGeneration = (this._companyAccessGeneration || 0) + 1;
     return this.applyMePayload(payload);
   },
 

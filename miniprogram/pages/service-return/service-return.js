@@ -14,6 +14,11 @@ Page({
     this.syncResult();
   },
 
+  onUnload() {
+    this._unloaded = true;
+    if (this.returnTimer) clearTimeout(this.returnTimer);
+  },
+
   async syncResult() {
     if (this._syncing) return;
     this._syncing = true;
@@ -24,6 +29,7 @@ Page({
       if (options.scene === 'personal') {
         result = await this.readAuthenticationResult('/fadada/users/me/identity', options.scene);
       } else if (options.scene === 'company' || options.scene === 'seal') {
+        if (!options.companyId) throw new Error('缺少本次认证的企业信息，请返回企业认证页面重试');
         result = await this.readAuthenticationResult(
           `/fadada/companies/${options.companyId}/identity`, options.scene);
       } else if (options.scene === 'contract' || options.scene === 'abolish') {
@@ -36,13 +42,22 @@ Page({
           message: (result && (result.failureReason || result.statusText)) || '结果尚未更新，请稍后刷新' });
         return;
       }
+      if (options.scene === 'company') {
+        if (this._unloaded) return;
+        await getApp().switchCompany(options.companyId);
+        if (this._unloaded) return;
+        this._companyCompleted = true;
+        this.setData({ loading: false, failed: false, title: '企业认证成功', message: '已切换到本次认证企业，正在进入首页' });
+        this.goBusinessPage();
+        return;
+      }
       this.setData({
         loading: false,
         failed: false,
         title: '处理结果已同步',
         message: (result && (result.statusText || result.status)) || '你可以返回业务页面继续操作'
       });
-      setTimeout(() => this.goBusinessPage(), 700);
+      if (!this._unloaded) this.returnTimer = setTimeout(() => this.goBusinessPage(), 700);
     } catch (error) {
       this.setData({
         loading: false,
@@ -62,7 +77,8 @@ Page({
   },
 
   async readAuthenticationResult(url, scene) {
-    const options = { url, withCompany: scene !== 'personal' };
+    // These endpoints authorize the user against the company in the URL, including pending claims.
+    const options = { url, withCompany: false };
     const current = await request(options);
     if (this.authenticationCompleted(current, scene)) return current;
     try {
@@ -78,13 +94,24 @@ Page({
   },
 
   goBusinessPage() {
+    if (this.data.loading || this._unloaded) return;
+    if (this.returnTimer) clearTimeout(this.returnTimer);
     const options = this.data.options || {};
     if (options.scene === 'personal') {
       wx.redirectTo({ url: '/pages/personal-cert/personal-cert' });
       return;
     }
     if (options.scene === 'company' || options.scene === 'seal') {
-      wx.redirectTo({ url: '/pages/company-cert/company-cert' });
+      if (this._companyCompleted) {
+        wx.switchTab({ url: '/pages/index/index' });
+        return;
+      }
+      if (!options.companyId) {
+        wx.switchTab({ url: '/pages/index/index' });
+        return;
+      }
+      const query = `companyId=${encodeURIComponent(options.companyId)}`;
+      wx.redirectTo({ url: `/pages/company-cert/company-cert?${query}${options.scene === 'company' ? '&autoSwitch=1' : ''}` });
       return;
     }
     if (options.contractId) {

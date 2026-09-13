@@ -25,8 +25,9 @@ Page({
       });
       return;
     }
-    this.setData({ hasCompany: true });
-    this.loadCompany(false);
+    this._awaitingCompanyAuth = options.autoSwitch === '1';
+    this.setData({ hasCompany: true, companyId: options.companyId || '' });
+    this.loadCompany(this._awaitingCompanyAuth);
   },
 
   onShow() {
@@ -37,18 +38,23 @@ Page({
     this.loadCompany(true).finally(() => wx.stopPullDownRefresh());
   },
 
+  onUnload() { this._unloaded = true; },
+
   async loadCompany(sync) {
     if (this.data.loading) return;
     this.setData({ loading: true });
     try {
-      const me = await request({ url: '/me' });
-      const company = me.company || {};
-      const companyId = company.id || app.getCurrentCompanyId();
+      const targetCompanyId = this.data.companyId;
+      const company = targetCompanyId
+        ? await request({ url: `/companies/${targetCompanyId}`, withCompany: false })
+        : (await request({ url: '/me' })).company || {};
+      const companyId = targetCompanyId || company.id || app.getCurrentCompanyId();
       if (!companyId) throw new Error('请先选择企业');
-      let identity = await request({ url: `/fadada/companies/${companyId}/identity` });
-      if (sync && identity && identity.status !== 'NOT_STARTED' && identity.enabled) {
+      let identity = await request({ url: `/fadada/companies/${companyId}/identity`, withCompany: false });
+      if (sync && identity && identity.status !== 'NOT_STARTED' && identity.enabled
+          && !(this._awaitingCompanyAuth && identity.status === 'VERIFIED')) {
         identity = await request({
-          url: `/fadada/companies/${companyId}/identity/sync`, method: 'POST'
+          url: `/fadada/companies/${companyId}/identity/sync`, method: 'POST', withCompany: false
         });
       }
       const companyDone = identity && identity.status === 'VERIFIED';
@@ -72,6 +78,12 @@ Page({
           }
         ]
       });
+      if (companyDone && this._awaitingCompanyAuth && !this._unloaded) {
+        await app.switchCompany(companyId);
+        if (this._unloaded) return;
+        this._awaitingCompanyAuth = false;
+        wx.switchTab({ url: '/pages/index/index' });
+      }
     } catch (error) {
       wx.showToast({ title: error.message || '认证状态加载失败', icon: 'none' });
     } finally {
@@ -171,6 +183,7 @@ Page({
   },
 
   openService(scene, companyId) {
+    if (scene === 'company') this._awaitingCompanyAuth = true;
     wx.navigateTo({
       url: `/pages/fadada-auth/fadada-auth?scene=${scene}&companyId=${companyId}`
     });

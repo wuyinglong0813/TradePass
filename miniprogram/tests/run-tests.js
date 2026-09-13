@@ -894,6 +894,171 @@ test('return page reuses verified company state and reconciles a concurrent succ
   assert.strictEqual(page.authenticationCompleted({ status: 'VERIFIED', enabledSealCount: 0 }, 'seal'), false);
 });
 
+test('verified company return switches the exact company before home and ignores a stale session refresh', async () => {
+  const previousApp = global.getApp;
+  const instance = appInstance(loadAppDefinition());
+  instance.globalData.token = 'token';
+  instance.setCurrentCompany('8');
+  instance.checkMembershipNotices = () => {};
+  global.getApp = () => instance;
+  const storage = {};
+  wx.setStorageSync = (key, value) => { storage[key] = value; };
+  let refreshRequest;
+  let switchRequest;
+  const navigations = [];
+  wx.switchTab = options => navigations.push(options.url);
+  wx.redirectTo = options => navigations.push(options.url);
+  wx.request = options => {
+    if (options.url.endsWith('/me')) refreshRequest = options;
+    else if (options.url.endsWith('/me/switch-company')) switchRequest = options;
+    else {
+      assert.ok(options.url.endsWith('/fadada/companies/9/identity'));
+      assert.strictEqual(options.header['X-Company-Id'], undefined);
+      options.success({ statusCode: 200, data: { code: 0, data: { status: 'VERIFIED' } } });
+    }
+  };
+  try {
+    const refresh = instance.loadMe();
+    const page = pageInstance(loadPage('../pages/service-return/service-return'));
+    page.data.options = { scene: 'company', companyId: '9' };
+    const sync = page.syncResult();
+    await Promise.resolve(); await Promise.resolve();
+    page.goBusinessPage();
+    assert.deepStrictEqual(navigations, []);
+    assert.strictEqual(instance.getCurrentCompanyId(), '8');
+    assert.strictEqual(switchRequest.header['X-Company-Id'], '9');
+    assert.strictEqual(switchRequest.data.companyId, '9');
+    switchRequest.success({ statusCode: 200, data: { code: 0, data: {
+      user: { id: '7', currentCompanyId: '9' }, member: { roleCode: 'LEGAL' },
+      companies: [{ companyId: '8' }, { companyId: '9' }]
+    } } });
+    await sync;
+    assert.deepStrictEqual(navigations, ['/pages/index/index']);
+    assert.strictEqual(storage.tradepass_company_id, '9');
+    assert.strictEqual(instance.globalData.memberInfo.roleCode, 'LEGAL');
+    refreshRequest.success({ statusCode: 200, data: { code: 0, data: {
+      user: { id: '7', currentCompanyId: '8' }, member: { roleCode: 'ADMIN' }
+    } } });
+    await refresh;
+    assert.strictEqual(instance.getCurrentCompanyId(), '9');
+    assert.strictEqual(storage.tradepass_company_id, '9');
+    assert.strictEqual(instance.globalData.memberInfo.roleCode, 'LEGAL');
+  } finally { global.getApp = previousApp; }
+});
+
+test('company return keeps the target when pending or failed and retries a failed company switch', async () => {
+  const previousSwitch = app.switchCompany;
+  let switched = 0;
+  let navigation;
+  wx.switchTab = options => { navigation = options.url; };
+  wx.redirectTo = options => { navigation = options.url; };
+  app.switchCompany = async () => { switched++; throw new Error('切换暂不可用'); };
+  try {
+    for (const status of ['IN_PROGRESS', 'FAILED']) {
+      const page = pageInstance(loadPage('../pages/service-return/service-return'));
+      page.data.options = { scene: 'company', companyId: '9' };
+      page.readAuthenticationResult = async () => ({ status });
+      await page.syncResult();
+      assert.strictEqual(switched, 0);
+      assert.strictEqual(page.data.failed, true);
+      page.goBusinessPage();
+      assert.strictEqual(navigation, '/pages/company-cert/company-cert?companyId=9&autoSwitch=1');
+    }
+    navigation = undefined;
+    const page = pageInstance(loadPage('../pages/service-return/service-return'));
+    page.data.options = { scene: 'company', companyId: '9' };
+    page.readAuthenticationResult = async () => ({ status: 'VERIFIED' });
+    await page.syncResult();
+    assert.strictEqual(navigation, undefined);
+    assert.strictEqual(page.data.message, '切换暂不可用');
+    assert.strictEqual(page.data.failed, true);
+    app.switchCompany = async id => { assert.strictEqual(id, '9'); };
+    await page.syncResult();
+    assert.strictEqual(navigation, '/pages/index/index');
+    assert.strictEqual(page.data.failed, false);
+
+    const missing = pageInstance(loadPage('../pages/service-return/service-return'));
+    missing.data.options = { scene: 'company' };
+    missing.readAuthenticationResult = async () => { throw new Error('must not query an unknown company'); };
+    await missing.syncResult();
+    assert.match(missing.data.message, /缺少本次认证的企业信息/);
+  } finally { app.switchCompany = previousSwitch; }
+});
+
+test('company status loads the explicit pending company and switches home once certification completes', async () => {
+  const previousSwitch = app.switchCompany;
+  let status = 'IN_PROGRESS';
+  let switched;
+  let navigation;
+  const calls = [];
+  app.switchCompany = async id => { switched = id; };
+  wx.switchTab = options => { navigation = options.url; };
+  wx.request = options => {
+    calls.push(options.url);
+    assert.strictEqual(options.header['X-Company-Id'], undefined);
+    const data = options.url.endsWith('/companies/9')
+      ? { id: '9', name: '本次认证企业', creditCode: 'NEW-CREDIT', legalPersonName: '张三' }
+      : { status, enabled: true, enabledSealCount: 0 };
+    options.success({ statusCode: 200, data: { code: 0, data } });
+  };
+  try {
+    const page = pageInstance(loadPage('../pages/company-cert/company-cert'));
+    let initialSync;
+    const loadCompany = page.loadCompany;
+    page.loadCompany = sync => { initialSync = loadCompany.call(page, sync); return initialSync; };
+    page.onLoad({ companyId: '9', autoSwitch: '1' });
+    await initialSync;
+    assert.strictEqual(page.data.companyName, '本次认证企业');
+    assert.strictEqual(page.data.companyId, '9');
+    assert.strictEqual(switched, undefined);
+    assert.strictEqual(navigation, undefined);
+    assert.ok(calls.every(url => !url.endsWith('/me')));
+    status = 'VERIFIED';
+    await page.loadCompany(true);
+    assert.strictEqual(switched, '9');
+    assert.strictEqual(navigation, '/pages/index/index');
+  } finally { app.switchCompany = previousSwitch; }
+});
+
+test('seal return preserves its enterprise and a normal verified status refresh still synchronizes seals', async () => {
+  let navigation;
+  wx.redirectTo = options => { navigation = options.url; };
+  const result = pageInstance(loadPage('../pages/service-return/service-return'));
+  result.data.loading = false;
+  result.data.options = { scene: 'seal', companyId: '9' };
+  result.goBusinessPage();
+  assert.strictEqual(navigation, '/pages/company-cert/company-cert?companyId=9');
+  const page = pageInstance(loadPage('../pages/company-cert/company-cert'));
+  page.data.companyId = '9';
+  const calls = [];
+  wx.request = options => {
+    calls.push(options.url);
+    options.success({ statusCode: 200, data: { code: 0, data: options.url.endsWith('/companies/9')
+      ? { id: '9', name: '本次企业' }
+      : { enabled: true, status: 'VERIFIED', enabledSealCount: options.method === 'POST' ? 1 : 0 }
+    } });
+  };
+  await page.loadCompany(true);
+  assert.ok(calls.some(url => url.endsWith('/identity/sync')));
+  assert.strictEqual(page.data.actions[1].done, true);
+  assert.strictEqual(navigation, '/pages/company-cert/company-cert?companyId=9');
+});
+
+test('company auth polling queries the target without the previous tenant and preserves the return ID', async () => {
+  const page = pageInstance(loadPage('../pages/fadada-auth/fadada-auth'));
+  page.data.scene = 'company';
+  page.data.options = { companyId: '9' };
+  let navigation;
+  wx.redirectTo = options => { navigation = options.url; };
+  wx.request = options => {
+    assert.ok(options.url.endsWith('/fadada/companies/9/identity/sync'));
+    assert.strictEqual(options.header['X-Company-Id'], undefined);
+    options.success({ statusCode: 200, data: { code: 0, data: { status: 'VERIFIED' } } });
+  };
+  await page.pollStatus();
+  assert.strictEqual(navigation, '/pages/service-return/service-return?scene=company&companyId=9');
+});
+
 test('personal auth polling preserves provider page until verified and only reads local state', async () => {
   const page = loadPage('../pages/fadada-auth/fadada-auth');
   let status = 'IN_PROGRESS';

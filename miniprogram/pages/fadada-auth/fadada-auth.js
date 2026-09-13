@@ -2,8 +2,8 @@ const { request } = require('../../utils/request');
 
 const SCENES = {
   personal: { title: '个人认证', loading: '正在打开个人认证', endpoint: '/fadada/users/me/auth-url', withCompany: false },
-  company: { title: '企业认证', loading: '正在打开企业认证' },
-  seal: { title: '电子印章', loading: '正在打开印章管理' },
+  company: { title: '企业认证', loading: '正在打开企业认证', withCompany: false },
+  seal: { title: '电子印章', loading: '正在打开印章管理', withCompany: false },
   contract: { title: '合同签署', loading: '正在打开合同签署' },
   abolish: { title: '合同作废签署', loading: '正在打开作废签署' }
 };
@@ -103,6 +103,7 @@ Page({
       } else {
         result = await request({
           url: `/fadada/companies/${options.companyId}/identity/sync`, method: 'POST',
+          withCompany: false,
           timeout: 15000
         });
       }
