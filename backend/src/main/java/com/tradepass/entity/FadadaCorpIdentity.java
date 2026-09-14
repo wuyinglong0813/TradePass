@@ -19,6 +19,8 @@ public class FadadaCorpIdentity {
     private String identStatus;
     private String authScopes;
     private String identMethod;
+    private String operatorType;
+    private String operatorId;
     private String verifiedName;
     private String verifiedCreditCode;
     private String verifiedLegalRepName;
@@ -49,6 +51,10 @@ public class FadadaCorpIdentity {
     public void setAuthScopes(String authScopes) { this.authScopes = authScopes; }
     public String getIdentMethod() { return identMethod; }
     public void setIdentMethod(String identMethod) { this.identMethod = identMethod; }
+    public String getOperatorType() { return operatorType; }
+    public void setOperatorType(String operatorType) { this.operatorType = operatorType; }
+    public String getOperatorId() { return operatorId; }
+    public void setOperatorId(String operatorId) { this.operatorId = operatorId; }
     public String getVerifiedName() { return verifiedName; }
     public void setVerifiedName(String verifiedName) { this.verifiedName = verifiedName; }
     public String getVerifiedCreditCode() { return verifiedCreditCode; }

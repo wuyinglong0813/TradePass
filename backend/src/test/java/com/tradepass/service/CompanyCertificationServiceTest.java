@@ -15,6 +15,7 @@ import com.tradepass.support.MybatisTestSupport;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import com.tradepass.service.CompanyCertificationService.CertifiedApplicantRole;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -90,9 +91,50 @@ class CompanyCertificationServiceTest {
 
         assertThatThrownBy(() -> service.review("bad", approved))
                 .isInstanceOf(BusinessException.class).hasMessage("认证回调凭证无效");
-        assertThat(service.review("callback-secret", approved).status()).isEqualTo("APPROVED");
+        assertThatThrownBy(() -> service.review("callback-secret", approved))
+                .hasMessageContaining("核验经办人身份");
+        service.completeProviderCertification(3L, 7L, "provider-18", "核验通过", CertifiedApplicantRole.ADMIN);
         assertThat(service.review("callback-secret", approved).status()).isEqualTo("APPROVED");
         verify(tenantBootstrapService).initialize(3L, 7L);
+    }
+
+    @Test
+    void authorizedAgentBecomesAdministratorWithoutLegalFlagOrInheritedAllPermissions() {
+        assertAssignedRole(CertifiedApplicantRole.ADMIN, false, true);
+    }
+
+    @Test
+    void verifiedLegalOperatorBecomesLegalRepresentative() {
+        assertAssignedRole(CertifiedApplicantRole.LEGAL, true, false);
+    }
+
+    private void assertAssignedRole(CertifiedApplicantRole role, boolean legal, boolean administrator) {
+        when(companyMapper.selectByIdForUpdate(3L)).thenReturn(company());
+        when(memberMapper.update(any(Wrapper.class))).thenAnswer(invocation -> {
+            var update = (com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<CompanyMember>) invocation.getArgument(0);
+            assertThat(update.getSqlSegment()).contains("role_code", "status");
+            assertThat(update.getSqlSet()).contains("role_code=", "role_codes=", "is_legal_person=", "is_administrator=", "custom_permissions=");
+            var values = update.getParamNameValuePairs();
+            for (String assignment : update.getSqlSet().split(",")) {
+                String key = assignment.substring(assignment.indexOf("MPGENVAL"), assignment.indexOf('}'));
+                Object value = values.get(key);
+                if (assignment.startsWith("role_code=")) assertThat(value).isEqualTo(role.name());
+                if (assignment.startsWith("role_codes=")) assertThat(value).isEqualTo("[\"" + role.name() + "\"]");
+                if (assignment.startsWith("is_legal_person=")) assertThat(value).isEqualTo(legal);
+                if (assignment.startsWith("is_administrator=")) assertThat(value).isEqualTo(administrator);
+                if (assignment.startsWith("custom_permissions=")) assertThat(value).isNull();
+            }
+            return 1;
+        });
+        service(false, "").completeProviderCertification(3L, 7L, "corp-3", "已核验", role);
+        verify(tenantBootstrapService).initialize(3L, 7L);
+    }
+
+    @Test
+    void missingOperatorRoleCannotActivateAnyMembership() {
+        assertThatThrownBy(() -> service(false, "").completeProviderCertification(3L, 7L, "corp-3", "", null))
+                .hasMessageContaining("身份尚未确认");
+        org.mockito.Mockito.verifyNoInteractions(companyMapper, memberMapper, tenantBootstrapService);
     }
 
     @Test

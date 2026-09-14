@@ -53,6 +53,17 @@ class AccessControlServiceTest {
     }
 
     @Test
+    void administratorCanContinueCertificationButCannotUseLegalOnlyActions() {
+        MybatisTestSupport.initialize(CompanyMember.class, RoleDef.class);
+        when(memberMapper.selectOne(any(Wrapper.class))).thenReturn(activeMember("ADMIN", null));
+        assertThatCode(() -> service.requireCertificationOperator(3L)).doesNotThrowAnyException();
+        assertThatCode(() -> service.requirePermission(3L, "seal_manage")).doesNotThrowAnyException();
+        assertThatThrownBy(() -> service.requireLegal(3L)).hasMessage("无权操作：仅法人可执行");
+        assertThat(service.hasPermission(3L, "all")).isFalse();
+        assertThat(service.hasPermission(3L, "contract_sign")).isFalse();
+    }
+
+    @Test
     @SuppressWarnings("unchecked")
     void rejectsMalformedAndUnauthorizedCompanySelection() {
         assertThatThrownBy(() -> service.resolveCompanyId("abc"))

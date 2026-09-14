@@ -16,6 +16,6 @@ public interface FadadaCompanyGateway {
                           String identStatus, String availableStatus, List<String> authScopes) {}
     record CompanyIdentity(String openCorpId, String identStatus, String companyName,
                            String creditCode, String legalRepName, String identMethod,
-                           String submittedAt, String verifiedAt) {}
+                           String submittedAt, String verifiedAt, String operatorType, String operatorId) {}
     record SealInfo(String sealId, String sealName, String categoryType, String status) {}
 }

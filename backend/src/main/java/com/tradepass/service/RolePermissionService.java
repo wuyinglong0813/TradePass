@@ -20,7 +20,7 @@ public class RolePermissionService {
                     "sales_order_receive", "inventory_view", "inventory_receive", "counterparty_view")),
             "FINANCE", new RoleDef("财务", List.of("invoice_view", "reconciliation", "contract_attachment_upload", "counterparty_view")),
             "GUEST", new RoleDef("访客", List.of()),
-            "LEGAL_CANDIDATE", new RoleDef("法人认证待审核", List.of())
+            "LEGAL_CANDIDATE", new RoleDef("企业认证待审核", List.of())
     );
 
     public RoleDef role(String code) {

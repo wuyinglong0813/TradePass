@@ -76,7 +76,7 @@
       <view class="no-company-hero">
         <image src="/images/logo.png" mode="aspectFit"/>
         <view class="nc-title">{{onboardingCompanies.length || companyDraft ? '继续完成企业入驻' : '建立你的企业工作空间'}}</view>
-        <view class="nc-desc">{{onboardingCompanies.length || companyDraft ? '请从待完成企业认证中继续，认证通过后进入企业' : '创建企业成为法人，或通过邀请码加入现有组织'}}</view>
+        <view class="nc-desc">{{onboardingCompanies.length || companyDraft ? '请从待完成企业认证中继续，认证通过后进入企业' : '由法人或授权经办人创建企业，或通过邀请码加入'}}</view>
       </view>
       <view class="nc-actions">
         <button class="primary-button" bindtap="goCreateCompany">创建企业</button>

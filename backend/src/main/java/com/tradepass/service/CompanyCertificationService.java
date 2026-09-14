@@ -24,6 +24,7 @@ import java.util.UUID;
 
 @Service
 public class CompanyCertificationService {
+    public enum CertifiedApplicantRole { LEGAL, ADMIN }
     private final CompanyMapper companyMapper;
     private final CompanyMemberMapper companyMemberMapper;
     private final CompanyCertificationApplicationMapper applicationMapper;
@@ -88,7 +89,7 @@ public class CompanyCertificationService {
         auditLogService.log(companyId, "COMPANY_CERTIFICATION", application.getId(), "SUBMIT", "提交企业认证审核");
 
         if (caMockEnabled) {
-            approve(application, company, "体验测试模拟认证自动审核");
+            approve(application, company, "体验测试模拟认证自动审核", CertifiedApplicantRole.LEGAL);
         }
         return toPayload(application, company.getName());
     }
@@ -117,7 +118,8 @@ public class CompanyCertificationService {
 
     @Transactional
     public void completeProviderCertification(long companyId, long applicantUserId,
-                                              String providerRequestId, String reason) {
+                                              String providerRequestId, String reason, CertifiedApplicantRole role) {
+        if (role == null) throw new BusinessException("企业认证经办人身份尚未确认");
         Company company = requireCompany(companyId);
         if ("VERIFIED".equals(company.getCertificationStatus())) return;
         CompanyCertificationApplication application = applicationMapper.selectOne(
@@ -133,7 +135,10 @@ public class CompanyCertificationService {
             application.setSubmittedAt(LocalDateTime.now());
             applicationMapper.insert(application);
         }
-        if ("SUBMITTED".equals(application.getStatus())) approve(application, company, reason);
+        if (application.getCompanyId() != companyId || application.getApplicantUserId() != applicantUserId) {
+            throw new BusinessException("企业认证申请与本次经办人不一致");
+        }
+        if ("SUBMITTED".equals(application.getStatus())) approve(application, company, reason, role);
     }
 
     @Transactional
@@ -154,7 +159,10 @@ public class CompanyCertificationService {
             throw new BusinessException("认证申请已完成，不能重复变更结果");
         }
         if ("APPROVED".equals(request.decision())) {
-            approve(application, company, request.reason());
+            // This legacy callback carries no operator identity evidence. A shared secret alone
+            // cannot prove that the applicant is the legal representative or an authorized agent.
+            if (!caMockEnabled) throw new BusinessException("请通过企业认证状态同步核验经办人身份后开通企业");
+            approve(application, company, request.reason(), CertifiedApplicantRole.LEGAL);
         } else {
             if (request.reason() == null || request.reason().isBlank()) {
                 throw new BusinessException("驳回认证时必须填写原因");
@@ -164,25 +172,29 @@ public class CompanyCertificationService {
         return toPayload(application, company.getName());
     }
 
-    private void approve(CompanyCertificationApplication application, Company company, String reason) {
+    private void approve(CompanyCertificationApplication application, Company company, String reason,
+                         CertifiedApplicantRole role) {
         long companyId = company.getId();
+        boolean legal = role == CertifiedApplicantRole.LEGAL;
         int memberUpdated = companyMemberMapper.update(new LambdaUpdateWrapper<CompanyMember>()
                 .eq(CompanyMember::getCompanyId, companyId)
                 .eq(CompanyMember::getUserId, application.getApplicantUserId())
                 .eq(CompanyMember::getRoleCode, "LEGAL_CANDIDATE")
                 .eq(CompanyMember::getStatus, "PENDING")
-                .set(CompanyMember::getRoleCode, "LEGAL")
-                .set(CompanyMember::getIsLegalPerson, true)
-                .set(CompanyMember::getIsAdministrator, false)
+                .set(CompanyMember::getRoleCode, role.name())
+                .set(CompanyMember::getRoleCodes, "[\"" + role.name() + "\"]")
+                .set(CompanyMember::getCustomPermissions, null)
+                .set(CompanyMember::getIsLegalPerson, legal)
+                .set(CompanyMember::getIsAdministrator, !legal)
                 .set(CompanyMember::getStatus, "ACTIVE"));
-        boolean alreadyLegal = memberUpdated == 0 && companyMemberMapper.selectCount(
+        boolean alreadyAssigned = memberUpdated == 0 && companyMemberMapper.selectCount(
                 new LambdaQueryWrapper<CompanyMember>()
                         .eq(CompanyMember::getCompanyId, companyId)
                         .eq(CompanyMember::getUserId, application.getApplicantUserId())
-                        .eq(CompanyMember::getRoleCode, "LEGAL")
+                        .eq(CompanyMember::getRoleCode, role.name())
                         .eq(CompanyMember::getStatus, "ACTIVE")) == 1;
-        if (memberUpdated != 1 && !alreadyLegal) {
-            throw new BusinessException("候选法人状态已变化，请人工复核");
+        if (memberUpdated != 1 && !alreadyAssigned) {
+            throw new BusinessException("企业认证申请人状态已变化，请人工复核");
         }
         companyMapper.update(new LambdaUpdateWrapper<Company>()
                 .eq(Company::getId, companyId)

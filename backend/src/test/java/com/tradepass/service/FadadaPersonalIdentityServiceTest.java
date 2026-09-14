@@ -84,6 +84,26 @@ class FadadaPersonalIdentityServiceTest {
     }
 
     @Test
+    void certificationOperatorMatchingRequiresTheApplicantsVerifiedProviderIdentifier() {
+        FadadaUserIdentity identity = new FadadaUserIdentity();
+        identity.setUserId(7L);
+        identity.setLocalStatus("VERIFIED");
+        identity.setOpenUserId("open-user-7");
+        when(identityMapper.selectOne(any(Wrapper.class))).thenAnswer(invocation -> {
+            var query = (com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<FadadaUserIdentity>) invocation.getArgument(0);
+            assertThat(query.getSqlSegment()).contains("user_id");
+            assertThat(query.getParamNameValuePairs().values()).contains(7L).doesNotContain(8L);
+            return identity;
+        });
+        assertThat(service.verifiedOpenUserId(7L)).isEqualTo("open-user-7");
+        identity.setLocalStatus("IN_PROGRESS");
+        assertThatThrownBy(() -> service.verifiedOpenUserId(7L)).isInstanceOf(BusinessException.class);
+        identity.setLocalStatus("VERIFIED"); identity.setOpenUserId("");
+        assertThatThrownBy(() -> service.verifiedOpenUserId(7L)).isInstanceOf(BusinessException.class);
+        verifyNoInteractions(gateway);
+    }
+
+    @Test
     void allowsLocalAuthUrlVerificationBeforePublicCallbackIsConfigured() {
         properties.setCallbackUrl("");
         SysUser user = new SysUser();

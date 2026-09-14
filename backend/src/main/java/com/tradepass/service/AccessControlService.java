@@ -141,6 +141,11 @@ public class AccessControlService {
         }
     }
 
+    public void requireCertificationOperator(long companyId) {
+        if (hasPermission(companyId, "company_manage")) return;
+        requireLegalOrClaim(companyId);
+    }
+
     public void requirePermission(long companyId, String permission) {
         if (!hasPermission(companyId, permission)) {
             throw new BusinessException("无权操作：缺少权限 " + permission);

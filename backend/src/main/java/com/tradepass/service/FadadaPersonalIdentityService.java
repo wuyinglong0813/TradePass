@@ -90,6 +90,16 @@ public class FadadaPersonalIdentityService {
         return toPayload(identity);
     }
 
+    /** Provider identifiers, never names, bind a certification operator to a local applicant. */
+    public String verifiedOpenUserId(long userId) {
+        FadadaUserIdentity identity = findByUserId(userId);
+        if (identity == null || !"VERIFIED".equals(identity.getLocalStatus())
+                || identity.getOpenUserId() == null || identity.getOpenUserId().isBlank()) {
+            throw new BusinessException("企业认证申请人的实名身份尚未确认，请先完成个人认证");
+        }
+        return identity.getOpenUserId();
+    }
+
     @Transactional
     public FadadaAuthUrlPayload createAuthUrl() {
         requireReady();

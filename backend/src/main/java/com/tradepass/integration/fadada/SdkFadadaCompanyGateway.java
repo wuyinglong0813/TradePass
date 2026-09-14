@@ -74,11 +74,16 @@ public class SdkFadadaCompanyGateway implements FadadaCompanyGateway {
         request.setAccessToken(tokenProvider.get());
         request.setOpenCorpId(openCorpId);
         CorpIdentityInfoRes response = invoke(() -> corpClient.getIdentityInfo(request), "查询企业认证信息");
+        return toCompanyIdentity(response);
+    }
+
+    static CompanyIdentity toCompanyIdentity(CorpIdentityInfoRes response) {
         CorpIdentInfo info = response.getCorpIdentInfo();
         return new CompanyIdentity(response.getOpenCorpId(), response.getCorpIdentStatus(),
                 info == null ? null : info.getCorpName(), info == null ? null : info.getCorpIdentNo(),
                 info == null ? null : info.getLegalRepName(), response.getCorpIdentMethod(),
-                response.getIdentSubmitTime(), response.getIdentSuccessTime());
+                response.getIdentSubmitTime(), response.getIdentSuccessTime(),
+                response.getOperatorType(), response.getOperatorId());
     }
 
     @Override
