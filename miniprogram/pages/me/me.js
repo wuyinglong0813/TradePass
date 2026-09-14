@@ -1,4 +1,5 @@
 const { request } = require('../../utils/request');
+const { loadSummary } = require('../../utils/companyOnboarding');
 const dict = require('../../utils/dict');
 const { syncTabBar } = require('../../utils/tabBar');
 const app = getApp();
@@ -24,6 +25,9 @@ Page({
     personalIdentityStatusText: '待实名',
     canManageAuth: false,
     companies: [],
+    hasOnboarding: false,
+    onboardingName: '',
+    onboardingStatus: '',
     currentCompanyId: '',
     devUsers: [{ label: '加载中...' }],
     devUserIndex: 0,
@@ -65,6 +69,7 @@ Page({
       const member = payload.member || {};
       const canManage = member.roleCode === 'LEGAL' || member.roleCode === 'ADMIN';
       const companies = payload.companies || [];
+      const onboarding = companies.length ? { hasOnboarding: false } : await loadSummary();
       const user = payload.user || {};
       const nickname = user.nickname || '用户';
       const phone = user.phone || '';
@@ -78,6 +83,7 @@ Page({
       }
 
       this.setData({
+        ...onboarding,
         user,
         userDisplayName: nickname,
         userNameFirst: nickname[0] || '用',

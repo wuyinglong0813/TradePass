@@ -1768,6 +1768,274 @@ test('contract submission sends the exact company ID and routes to the returned 
   });
 });
 
+function onboardingEnvironment() {
+  const previousApp = global.getApp;
+  const previousWx = global.wx;
+  const previousPages = global.getCurrentPages;
+  const storage = {};
+  const instance = { globalData: { baseUrl: 'https://api.example.test', isLocalDevelopment: true,
+    token: 'onboarding-token', userInfo: { id: '7' }, currentCompanyId: 'old-company' },
+    applyMePayload() {}, switchCompany: async () => {} };
+  global.getApp = () => instance;
+  global.getCurrentPages = () => [];
+  global.wx = {
+    getStorageSync: key => storage[key] || '',
+    setStorageSync: (key, value) => { storage[key] = value; },
+    removeStorageSync: key => { delete storage[key]; },
+    showToast() {}, showModal() {}, navigateTo() {}, navigateBack() {}, redirectTo() {}, switchTab() {}
+  };
+  return { instance, storage, restore() {
+    global.getApp = previousApp; global.wx = previousWx; global.getCurrentPages = previousPages;
+  } };
+}
+
+test('verified personal identity resumes company onboarding with or without the original page stack', async () => {
+  const env = onboardingEnvironment();
+  try {
+    let redirected;
+    wx.redirectTo = options => { redirected = options.url; };
+    wx.request = options => options.success({ statusCode: 200, data: { code: 0,
+      data: { status: 'VERIFIED', providerEnabled: true } } });
+    const personal = pageInstance(loadPage('../pages/personal-cert/personal-cert'));
+    personal._companyFlow = true; personal._returnOptions = {};
+    await personal.loadIdentity(false);
+    assert.strictEqual(redirected, '/pages/company-cert/company-cert?resume=1');
+    redirected = '';
+    const standalone = pageInstance(loadPage('../pages/personal-cert/personal-cert'));
+    await standalone.loadIdentity(false);
+    assert.strictEqual(redirected, '');
+    require('../utils/companyOnboarding').returnToCompany({ companyId: '9007199254740993' });
+    assert.strictEqual(redirected, '/pages/company-cert/company-cert?companyId=9007199254740993&autoSwitch=1');
+  } finally { env.restore(); }
+});
+
+test('home and profile expose pending onboarding and a failed status lookup is not an empty company list', async () => {
+  const env = onboardingEnvironment();
+  try {
+    wx.request = options => options.success({ statusCode: 200, data: { code: 0, data:
+      options.url.endsWith('/me/company-onboarding') ? [{ id: '9', name: '待认证公司' }]
+        : options.url.endsWith('/me') ? { user: { id: '7' }, companies: [] } : { status: 'VERIFIED' }
+    } });
+    const home = pageInstance(loadPage('../pages/index/index'));
+    await home.loadOnboardingSummary();
+    assert.strictEqual(home.data.onboardingName, '待认证公司');
+    assert.strictEqual(home.data.hasOnboarding, true);
+    const profile = pageInstance(loadPage('../pages/me/me'));
+    await profile.loadMe();
+    assert.strictEqual(profile.data.onboardingName, '待认证公司');
+    assert.strictEqual(profile.data.onboardingStatus, '企业认证待完成');
+    wx.request = options => options.fail(new Error('offline'));
+    await home.loadOnboardingSummary();
+    assert.strictEqual(home.data.hasOnboarding, true);
+    assert.strictEqual(home.data.onboardingStatus, '企业认证状态待确认');
+  } finally { env.restore(); }
+});
+
+test('return during an unfinished company read still triggers a provider sync after that read completes', async () => {
+  const env = onboardingEnvironment();
+  try {
+    const page = pageInstance(loadPage('../pages/company-cert/company-cert'));
+    page.data.companyId = '9'; page._awaitingCompanyAuth = true;
+    let firstRead;
+    let synced = false;
+    let complete;
+    const switched = new Promise(resolve => { complete = resolve; });
+    env.instance.switchCompany = async id => { assert.strictEqual(id, '9'); complete(); };
+    wx.request = options => {
+      if (!firstRead) { firstRead = options; return; }
+      if (options.url.endsWith('/identity/sync')) synced = true;
+      const data = options.url.endsWith('/companies/9') ? { id: '9', name: '新企业' }
+        : { status: synced ? 'VERIFIED' : 'IN_PROGRESS', enabled: true };
+      options.success({ statusCode: 200, data: { code: 0, data } });
+    };
+    const initial = page.loadCompany(false);
+    await page.loadCompany(true);
+    firstRead.success({ statusCode: 200, data: { code: 0, data: { id: '9', name: '新企业' } } });
+    await initial;
+    await switched;
+    assert.strictEqual(synced, true);
+  } finally { env.restore(); }
+});
+
+test('provider sync failure keeps the saved enterprise and authentication actions visible', async () => {
+  const env = onboardingEnvironment();
+  try {
+    const page = pageInstance(loadPage('../pages/company-cert/company-cert'));
+    page.data.companyId = '9'; page._awaitingCompanyAuth = true;
+    wx.switchTab = () => { throw new Error('pending authentication must not enter the enterprise'); };
+    wx.request = options => {
+      if (options.url.endsWith('/identity/sync')) return options.fail(new Error('provider offline'));
+      const data = options.url.endsWith('/companies/9') ? { id: '9', name: '已保存企业' }
+        : { status: 'IN_PROGRESS', enabled: true, statusText: '认证中' };
+      options.success({ statusCode: 200, data: { code: 0, data } });
+    };
+    await page.loadCompany(true);
+    assert.strictEqual(page.data.companyName, '已保存企业');
+    assert.strictEqual(page.data.identity.status, 'IN_PROGRESS');
+    assert.strictEqual(page.data.actions[0].key, 'company');
+    assert.strictEqual(page.data.actions[0].done, false);
+  } finally { env.restore(); }
+});
+
+test('a saved created-company ID resumes the claim instead of submitting another enterprise', async () => {
+  const env = onboardingEnvironment();
+  try {
+    require('../utils/companyOnboarding').saveDraft({ companyId: '9007199254740993', companyName: '已提交企业',
+      creditCode: 'CODE', legalPersonName: '张三', agreed: true });
+    const page = pageInstance(loadPage('../pages/company-cert/company-cert'));
+    let resumed = 0;
+    page.resumePendingCompany = () => { resumed++; };
+    page.createAndAuthenticate = () => { throw new Error('must reuse the saved company ID'); };
+    page.onLoad({ resume: '1' });
+    page.onShow();
+    assert.strictEqual(page.data.companyId, '9007199254740993');
+    assert.strictEqual(page.data.hasCompany, true);
+    assert.strictEqual(resumed, 1);
+  } finally { env.restore(); }
+});
+
+test('personal verification returns to the original company draft and continues creation exactly once', async () => {
+  const env = onboardingEnvironment();
+  try {
+    const draft = require('../utils/companyOnboarding');
+    const company = pageInstance(loadPage('../pages/company-cert/company-cert'));
+    company.setData({ companyName: '新企业', creditCode: '91330100TEST1234567', legalPersonName: '张三', agreed: true });
+    let verified = false;
+    const calls = [];
+    const navigations = [];
+    wx.navigateTo = options => navigations.push(options.url);
+    wx.showModal = options => options.success({ confirm: true });
+    wx.request = options => {
+      calls.push(options);
+      let data = [];
+      if (options.url.endsWith('/users/me/identity')) data = { status: verified ? 'VERIFIED' : 'NOT_STARTED' };
+      if (options.url.endsWith('/companies')) data = { id: '9007199254740993', name: '新企业', creditCode: company.data.creditCode, legalPersonName: '张三' };
+      options.success({ statusCode: 200, data: { code: 0, data } });
+    };
+    await company.createAndAuthenticate();
+    assert.strictEqual(calls.length, 1);
+    assert.strictEqual(draft.readDraft().companyName, '新企业');
+    assert.strictEqual(navigations[0], '/pages/personal-cert/personal-cert?flow=company-create');
+    const auth = pageInstance(loadPage('../pages/fadada-auth/fadada-auth'));
+    auth.data.scene = 'personal'; auth.data.options = { flow: 'company-create' };
+    let returnedUrl;
+    wx.redirectTo = options => { returnedUrl = options.url; };
+    auth.openReturnPage();
+    assert.strictEqual(returnedUrl, '/pages/service-return/service-return?scene=personal&flow=company-create');
+    global.getCurrentPages = () => [{ route: 'pages/index/index' },
+      { route: 'pages/company-cert/company-cert' }, { route: 'pages/personal-cert/personal-cert' },
+      { route: 'pages/service-return/service-return' }];
+    let delta;
+    wx.navigateBack = options => { delta = options.delta; };
+    const result = pageInstance(loadPage('../pages/service-return/service-return'));
+    result.data.options = { scene: 'personal', flow: 'company-create' };
+    result.setData({ loading: false, failed: false });
+    result.goBusinessPage();
+    assert.strictEqual(delta, 2);
+    verified = true;
+    company.loadCompany = async () => {};
+    await company.onShow();
+    await company.onShow();
+    assert.strictEqual(calls.filter(call => call.url.endsWith('/companies')).length, 1);
+    assert.strictEqual(calls.filter(call => call.url.endsWith('/me/company')).length, 1);
+    assert.ok(calls.every(call => call.header['X-Company-Id'] === undefined));
+    assert.strictEqual(company.data.companyId, '9007199254740993');
+    assert.strictEqual(draft.readDraft(), null);
+    assert.strictEqual(navigations.at(-1), '/pages/fadada-auth/fadada-auth?scene=company&companyId=9007199254740993');
+  } finally { env.restore(); }
+});
+
+test('cancelled personal auth keeps a recoverable draft and does not create a company or reopen auth', async () => {
+  const env = onboardingEnvironment();
+  try {
+    const page = pageInstance(loadPage('../pages/company-cert/company-cert'));
+    page.setData({ companyName: '待创建企业', creditCode: 'CREDIT', legalPersonName: '张三', agreed: true });
+    page._awaitingPersonal = true;
+    let requests = 0;
+    wx.showModal = () => { throw new Error('must not reopen authentication on cancellation'); };
+    wx.request = options => {
+      requests++;
+      assert.ok(options.url.endsWith('/users/me/identity'));
+      options.success({ statusCode: 200, data: { code: 0, data: { status: 'IN_PROGRESS' } } });
+    };
+    await page.onShow();
+    assert.strictEqual(requests, 1);
+    assert.strictEqual(page.data.hasCompany, false);
+    const drafts = require('../utils/companyOnboarding');
+    assert.strictEqual(drafts.readDraft().companyName, '待创建企业');
+    env.instance.globalData.userInfo = { id: '8' };
+    assert.strictEqual(drafts.readDraft(), null);
+    env.instance.globalData.userInfo = { id: '7' };
+    const resumed = pageInstance(loadPage('../pages/company-cert/company-cert'));
+    resumed.onLoad({ resume: '1' });
+    assert.strictEqual(resumed.data.creditCode, 'CREDIT');
+    assert.strictEqual(resumed.data.agreed, true);
+  } finally { env.restore(); }
+});
+
+test('claim failures preserve the draft and re-entry recovers the existing enterprise before syncing', async () => {
+  const env = onboardingEnvironment();
+  try {
+    const drafts = require('../utils/companyOnboarding');
+    const page = pageInstance(loadPage('../pages/company-cert/company-cert'));
+    const persisted = { id: '9007199254740993', name: '已提交企业', creditCode: 'CODE', legalPersonName: '张三' };
+    page.setData({ companyName: persisted.name, creditCode: 'CODE', legalPersonName: '张三', agreed: true });
+    wx.request = options => {
+      if (options.url.endsWith('/me/company')) return options.fail(new Error('offline'));
+      const data = options.url.endsWith('/companies') ? persisted : { status: 'VERIFIED' };
+      options.success({ statusCode: 200, data: { code: 0, data } });
+    };
+    await page.createAndAuthenticate();
+    assert.strictEqual(drafts.readDraft().companyName, persisted.name);
+    assert.strictEqual(page.data.hasCompany, false);
+    const calls = [];
+    wx.request = options => {
+      calls.push(options.url);
+      assert.strictEqual(options.header['X-Company-Id'], undefined);
+      const data = options.url.endsWith('/me/company-onboarding') ? [persisted]
+        : options.url.endsWith('/me/company') ? {} : options.url.endsWith('/companies/' + persisted.id) ? persisted
+          : { status: 'VERIFIED', enabled: true };
+      options.success({ statusCode: 200, data: { code: 0, data } });
+    };
+    let switched;
+    env.instance.switchCompany = async id => { switched = id; };
+    const resumed = pageInstance(loadPage('../pages/company-cert/company-cert'));
+    resumed.data.companyId = persisted.id;
+    resumed._awaitingCompanyAuth = true;
+    await resumed.resumePendingCompany();
+    assert.strictEqual(switched, persisted.id);
+    assert.ok(calls[0].endsWith('/me/company-onboarding'));
+    assert.ok(calls[1].endsWith('/me/company'));
+    assert.strictEqual(drafts.readDraft(), null);
+    assert.ok(!calls.some(url => url.endsWith('/companies')));
+  } finally { env.restore(); }
+});
+
+test('enterprise center lists unfinished companies separately from active memberships and reports load errors', async () => {
+  const env = onboardingEnvironment();
+  try {
+    const page = pageInstance(loadPage('../pages/company/company'));
+    page.loadTodos = async () => {}; page.loadEnterpriseMetrics = async () => {};
+    wx.request = options => {
+      const data = options.url.endsWith('/me') ? { user: { id: '7' }, companies: [] }
+        : options.url.endsWith('/me/company-onboarding') ? [{ id: '9', name: '待认证企业', certificationStatus: 'PENDING_REVIEW' }] : [];
+      options.success({ statusCode: 200, data: { code: 0, data } });
+    };
+    await page.loadData();
+    assert.strictEqual(page.data.hasCompany, false);
+    assert.strictEqual(page.data.onboardingCompanies[0].name, '待认证企业');
+    assert.match(page.data.onboardingCompanies[0].statusText, /结果待确认/);
+    let url;
+    wx.navigateTo = options => { url = options.url; };
+    page.resumeCompany({ currentTarget: { dataset: { companyId: '9' } } });
+    assert.strictEqual(url, '/pages/company-cert/company-cert?companyId=9&autoSwitch=1&resumePending=1');
+    wx.request = options => options.fail(new Error('offline'));
+    await page.loadOnboarding();
+    assert.strictEqual(page.data.onboardingError, true);
+    assert.strictEqual(page.data.onboardingCompanies.length, 1);
+  } finally { env.restore(); }
+});
+
 (async () => {
   let failed = 0;
   for (const { name, fn } of tests) {

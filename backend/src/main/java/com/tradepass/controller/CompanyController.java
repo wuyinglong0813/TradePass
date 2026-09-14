@@ -55,6 +55,11 @@ public class CompanyController {
         return ApiResponse.ok(companyService.searchCompanies(keyword));
     }
 
+    @GetMapping("/me/company-onboarding")
+    public ApiResponse<List<CompanyProfile>> myOnboardingCompanies() {
+        return ApiResponse.ok(companyService.myOnboardingCompanies());
+    }
+
     @GetMapping("/companies/{id}")
     public ApiResponse<CompanyProfile> getCompany(@PathVariable String id) {
         return ApiResponse.ok(companyService.getCompany(id));

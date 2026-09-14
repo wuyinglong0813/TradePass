@@ -125,6 +125,15 @@ public class CompanyService {
                 : toRestrictedCompanyProfile(company);
     }
 
+    /** Includes unfinished submissions even if the subsequent claim request was interrupted. */
+    public List<CompanyProfile> myOnboardingCompanies() {
+        return companyMapper.selectList(new LambdaQueryWrapper<Company>()
+                        .eq(Company::getCreatedBy, AuthContext.userId())
+                        .in(Company::getCertificationStatus, List.of("PENDING", "PENDING_REVIEW", "REJECTED"))
+                        .orderByDesc(Company::getId))
+                .stream().map(this::toCompanyProfile).toList();
+    }
+
     @Transactional
     public CompanyProfile submitCompany(CompanySubmitRequest request) {
         Company company = companyMapper.selectOne(new LambdaQueryWrapper<Company>().eq(Company::getCreditCode, request.creditCode()).last("LIMIT 1 FOR UPDATE"));

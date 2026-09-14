@@ -257,3 +257,5 @@ page { background: #f4f8fd; }
 .sheet-title { margin-top: 0; }
 .modal-body,.sheet-desc { color: #69798d; font-size: 24rpx; margin: 12rpx 0 26rpx; text-align: center; }
 .sheet-input { background: #f2f6fb; border: 1rpx solid #dfe8f3; border-radius: 18rpx; font-size: 26rpx; height: 80rpx; margin-bottom: 20rpx; padding: 0 20rpx; }
+.onboarding-panel { margin: 24rpx; }
+.onboarding-panel .section-title { margin-bottom: 16rpx; }

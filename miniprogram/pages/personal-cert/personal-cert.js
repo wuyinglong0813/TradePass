@@ -1,4 +1,5 @@
 const { request } = require('../../utils/request');
+const { returnToCompany } = require('../../utils/companyOnboarding');
 
 const STATUS_VIEW = {
   NOT_STARTED: { title: '待完成个人认证', desc: '完成实名认证后，可建立可信的个人身份。', tone: 'pending', button: '开始认证' },
@@ -34,9 +35,13 @@ Page({
     refreshAfterAuth: false
   },
 
-  onLoad() {
+  onLoad(options = {}) {
+    this._companyFlow = options.flow === 'company-create';
+    this._returnOptions = options;
     this.loadIdentity(false);
   },
+
+  onUnload() { this._unloaded = true; },
 
   onShow() {
     if (!this.data.refreshAfterAuth) return;
@@ -70,6 +75,11 @@ Page({
         providerEnabled: !!(identity && identity.providerEnabled),
         statusView: STATUS_VIEW[status]
       });
+      if (status === 'VERIFIED' && this._companyFlow && !this._unloaded && !this._returning) {
+        this._returning = true;
+        returnToCompany(this._returnOptions);
+        return;
+      }
       if (notify) {
         wx.showToast({
           title: status === 'VERIFIED' ? '认证结果已更新'
@@ -94,7 +104,8 @@ Page({
       return;
     }
     this.setData({ refreshAfterAuth: true });
-    wx.navigateTo({ url: '/pages/fadada-auth/fadada-auth?scene=personal' });
+    const query = this._companyFlow ? `&flow=company-create${this._returnOptions.companyId ? '&companyId=' + encodeURIComponent(this._returnOptions.companyId) : ''}` : '';
+    wx.navigateTo({ url: `/pages/fadada-auth/fadada-auth?scene=personal${query}` });
   },
 
   refreshStatus() {

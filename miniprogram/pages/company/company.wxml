@@ -56,11 +56,27 @@
   </view>
 
   <block wx:else>
+    <view class="onboarding-panel" wx:if="{{onboardingCompanies.length || companyDraft || onboardingError}}">
+      <view class="section-title">待完成企业认证</view>
+      <view class="brand-list">
+        <view class="list-row" wx:if="{{companyDraft}}" bindtap="resumeDraft">
+          <view class="row-copy"><view class="row-title">{{companyDraft.companyName}}</view><view class="row-desc">创建资料已保存，点击继续创建</view></view>
+          <view class="row-arrow">›</view>
+        </view>
+        <view class="list-row" wx:for="{{onboardingCompanies}}" wx:key="id" data-company-id="{{item.id}}" bindtap="resumeCompany">
+          <view class="row-copy"><view class="row-title">{{item.name}}</view><view class="row-desc">{{item.statusText}}</view></view>
+          <view class="row-arrow">›</view>
+        </view>
+        <view class="list-row" wx:if="{{onboardingError}}" bindtap="loadOnboarding">
+          <view class="row-copy"><view class="row-title">待认证企业加载失败</view><view class="row-desc">点击重试，已提交的资料会保留</view></view><view class="row-arrow">›</view>
+        </view>
+      </view>
+    </view>
     <view class="no-company" wx:if="{{!hasCompany}}">
       <view class="no-company-hero">
         <image src="/images/logo.png" mode="aspectFit"/>
-        <view class="nc-title">建立你的企业工作空间</view>
-        <view class="nc-desc">创建企业成为法人，或通过邀请码加入现有组织</view>
+        <view class="nc-title">{{onboardingCompanies.length || companyDraft ? '继续完成企业入驻' : '建立你的企业工作空间'}}</view>
+        <view class="nc-desc">{{onboardingCompanies.length || companyDraft ? '请从待完成企业认证中继续，认证通过后进入企业' : '创建企业成为法人，或通过邀请码加入现有组织'}}</view>
       </view>
       <view class="nc-actions">
         <button class="primary-button" bindtap="goCreateCompany">创建企业</button>

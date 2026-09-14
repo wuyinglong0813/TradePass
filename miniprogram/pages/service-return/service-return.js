@@ -1,4 +1,5 @@
 const { request } = require('../../utils/request');
+const { returnToCompany } = require('../../utils/companyOnboarding');
 
 Page({
   data: {
@@ -98,7 +99,13 @@ Page({
     if (this.returnTimer) clearTimeout(this.returnTimer);
     const options = this.data.options || {};
     if (options.scene === 'personal') {
-      wx.redirectTo({ url: '/pages/personal-cert/personal-cert' });
+      if (options.flow === 'company-create' && !this.data.failed) {
+        returnToCompany(options);
+        return;
+      }
+      const query = options.flow === 'company-create'
+        ? `?flow=company-create${options.companyId ? '&companyId=' + encodeURIComponent(options.companyId) : ''}` : '';
+      wx.redirectTo({ url: `/pages/personal-cert/personal-cert${query}` });
       return;
     }
     if (options.scene === 'company' || options.scene === 'seal') {

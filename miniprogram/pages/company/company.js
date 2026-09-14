@@ -1,4 +1,5 @@
 const { request } = require('../../utils/request');
+const { readDraft } = require('../../utils/companyOnboarding');
 const dict = require('../../utils/dict');
 const { setTabBarHidden, syncTabBar } = require('../../utils/tabBar');
 const app = getApp();
@@ -42,6 +43,9 @@ Page({
     templateCount: 0,
     companies: [],
     certificationApplications: [],
+    onboardingCompanies: [],
+    onboardingError: false,
+    companyDraft: null,
     currentCompanyId: '',
     todos: [],
     showJoinModal: false,
@@ -68,10 +72,12 @@ Page({
   },
 
   async loadData() {
+    this.setData({ companyDraft: readDraft() });
     try {
       const payload = await request({ url: '/me' });
       app.applyMePayload(payload);
       const certificationApplications = await request({ url: '/me/company-certification-applications' }).catch(() => []);
+      await this.loadOnboarding();
       const company = payload.company || {};
       const member = payload.member || {};
       const companies = payload.companies || [];
@@ -110,6 +116,30 @@ Page({
       ]);
     } catch (e) {}
   },
+
+  async loadOnboarding() {
+    try {
+      const companies = await request({ url: '/me/company-onboarding', withCompany: false });
+      const draft = readDraft();
+      this.setData({
+        onboardingError: false,
+        companyDraft: draft && !(companies || []).some(item => item.creditCode === draft.creditCode) ? draft : null,
+        onboardingCompanies: (companies || []).map(item => ({ ...item,
+          statusText: item.certificationStatus === 'REJECTED' ? '认证未通过，点击重新办理'
+            : item.certificationStatus === 'PENDING_REVIEW' ? '认证结果待确认，点击继续' : '企业资料已保存，点击继续认证'
+        }))
+      });
+    } catch (error) {
+      this.setData({ onboardingError: true });
+    }
+  },
+
+  resumeCompany(e) {
+    const id = e.currentTarget.dataset.companyId;
+    wx.navigateTo({ url: `/pages/company-cert/company-cert?companyId=${encodeURIComponent(id)}&autoSwitch=1&resumePending=1` });
+  },
+
+  resumeDraft() { wx.navigateTo({ url: '/pages/company-cert/company-cert?resume=1' }); },
 
   async loadEnterpriseMetrics(companyId, canManage, canContractTemplate) {
     if (!companyId) {

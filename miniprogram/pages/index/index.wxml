@@ -87,8 +87,8 @@
     <view class="onboarding-page" wx:elif="{{showJoinForm}}">
       <view class="onboarding-hero">
         <image class="onboarding-logo" src="/images/logo.png" mode="aspectFit"/>
-        <view class="onboarding-title">开始使用商签通</view>
-        <view class="onboarding-desc">先确认你代表的企业，再建立第一条可信交易关系</view>
+        <view class="onboarding-title">{{hasOnboarding ? onboardingStatus : '开始使用商签通'}}</view>
+        <view class="onboarding-desc">{{hasOnboarding ? (onboardingName || '前往企业中心查看认证进度') : '先确认你代表的企业，再建立第一条可信交易关系'}}</view>
       </view>
       <view class="onboarding-card">
         <view class="step-row active">
@@ -104,7 +104,8 @@
           <view class="step-main"><view class="step-title">添加第一家合作企业</view><view class="step-desc">进入企业详情后即可签合同、查合同和对账</view></view>
         </view>
       </view>
-      <button class="primary-btn onboarding-create" bindtap="goCreateCompany">创建企业</button>
+      <button wx:if="{{hasOnboarding}}" class="primary-btn onboarding-create" bindtap="goOnboardingCenter">查看并继续企业认证</button>
+      <button wx:else class="primary-btn onboarding-create" bindtap="goCreateCompany">创建企业</button>
       <view class="join-panel">
         <view class="join-label">已有企业邀请码</view>
         <view class="join-form">

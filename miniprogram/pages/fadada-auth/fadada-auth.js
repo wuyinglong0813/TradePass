@@ -125,6 +125,7 @@ Page({
     this.stopStatusPolling();
     const { scene, options } = this.data;
     const query = [`scene=${scene}`];
+    if (options.flow === 'company-create') query.push('flow=company-create');
     if (options.companyId) query.push(`companyId=${encodeURIComponent(options.companyId)}`);
     if (options.contractId) query.push(`contractId=${encodeURIComponent(options.contractId)}`);
     wx.redirectTo({ url: `/pages/service-return/service-return?${query.join('&')}` });

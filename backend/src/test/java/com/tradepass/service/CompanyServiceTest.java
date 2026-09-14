@@ -126,6 +126,24 @@ class CompanyServiceTest {
     }
 
     @Test
+    void unfinishedOnboardingIsScopedToTheCreatorAndDoesNotRequireActiveMembership() {
+        Company pending = company(9L, "待认证企业");
+        pending.setCertificationStatus("PENDING_REVIEW");
+        pending.setCreatedBy(7L);
+        when(companyMapper.selectList(any(Wrapper.class))).thenAnswer(invocation -> {
+            var query = (com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<Company>) invocation.getArgument(0);
+            assertThat(query.getSqlSegment()).contains("created_by", "certification_status");
+            assertThat(query.getParamNameValuePairs().values())
+                    .contains(7L, "PENDING", "PENDING_REVIEW", "REJECTED")
+                    .doesNotContain("VERIFIED");
+            return List.of(pending);
+        });
+
+        assertThat(service.myOnboardingCompanies()).extracting(CompanyProfile::id).containsExactly("9");
+        org.mockito.Mockito.verifyNoInteractions(memberMapper, accessControl);
+    }
+
+    @Test
     void returnsCompanyOrExplainsMissingCompany() {
         Company company = company(3L, "当前企业");
         when(companyMapper.selectById(3L)).thenReturn(company);

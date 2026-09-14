@@ -10,6 +10,7 @@
 
     <view class="cert-card">
       <view class="section-title">认证与签章</view>
+      <view class="cert-step-desc" wx:if="{{identity && identity.failureReason}}">{{identity.failureReason}}</view>
       <view class="cert-row" wx:for="{{actions}}" wx:key="key" data-key="{{item.key}}" bindtap="handleAction">
         <view class="cert-row-left">
           <view class="cert-step-num {{item.done ? 'done' : ''}}">{{item.done ? '✓' : index + 1}}</view>

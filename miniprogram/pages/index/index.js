@@ -1,4 +1,5 @@
 const { request } = require('../../utils/request');
+const { loadSummary } = require('../../utils/companyOnboarding');
 const { setTabBarHidden, syncTabBar } = require('../../utils/tabBar');
 const {
   USER_ID_KEY,
@@ -35,6 +36,9 @@ Page({
     counterpartiesLoaded: false,
     counterpartiesError: '',
     showJoinForm: false,
+    hasOnboarding: false,
+    onboardingName: '',
+    onboardingStatus: '',
     showHomeGuide: false,
     joinCompanyId: '',
     companies: [],
@@ -118,6 +122,7 @@ Page({
     if (!loggedIn) return;
     this.checkMemberStatus();
     this.initRoleFromMember();
+    if (this.data.showJoinForm) this.loadOnboardingSummary();
     this.restoreHomeSnapshot({ resetWhenMissing: true });
     this.setData({
       showHomeGuide: !this.data.showJoinForm && !wx.getStorageSync('tradepass_home_guide_done')
@@ -187,6 +192,14 @@ Page({
       || (['year', 'month', 'last12'].includes(storedPeriod) ? storedPeriod : this.data.period);
     return { userId, companyId, role, period };
   },
+
+  async loadOnboardingSummary() {
+    const token = app.globalData.token;
+    const summary = await loadSummary();
+    if (token === app.globalData.token) this.setData(summary);
+  },
+
+  goOnboardingCenter() { wx.switchTab({ url: '/pages/company/company' }); },
 
   periodLabel(period) {
     return { year: '今年', month: '本月', last12: '近12个月' }[period] || '今年';
