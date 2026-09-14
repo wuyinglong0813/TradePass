@@ -152,6 +152,11 @@
               <view class="row-copy"><view class="row-title">组织成员</view><view class="row-desc">成员审批、部门与邀请管理</view></view>
               <view class="state-pill muted">{{memberCount}}</view><view class="row-arrow">›</view>
             </view>
+            <view class="list-row" wx:if="{{canVerifyLegal}}" bindtap="goLegalVerification">
+              <view class="row-icon"><image src="/images/icons/role.svg" mode="aspectFit"/></view>
+              <view class="row-copy"><view class="row-title">法人身份核验</view><view class="row-desc">经办人创建企业后，由受邀加入的法人本人核验</view></view>
+              <view class="row-arrow">›</view>
+            </view>
             <view class="list-row" wx:if="{{canManage}}" bindtap="goRoleManage">
               <view class="row-icon"><image src="/images/icons/role.svg" mode="aspectFit"/></view>
               <view class="row-copy"><view class="row-title">角色权限</view><view class="row-desc">角色配置与数据访问范围</view></view>

@@ -369,13 +369,13 @@ public class TradeService {
 
     public ContractPayload getContract(Long id) {
         long companyId = AuthContext.requireCompanyId();
-        accessControlService.requireAnyPermission(companyId, "contract_view", "contract_sign");
+        requireContractReadPermission(companyId);
         TradeContract contract = tradeContractMapper.selectById(id);
         if (contract == null || !isContractParty(contract, companyId)
                 || !isContractVisibleTo(contract, companyId)) {
             throw new BusinessException("合同不存在");
         }
-        return toContractPayload(contract, companyId);
+        return toReadContractPayload(contract, companyId);
     }
 
     public ContractPayload contractForElectronicSignature(Long id, long viewerCompanyId) {
@@ -431,30 +431,41 @@ public class TradeService {
 
     public List<ContractPayload> listContracts(String counterpartyName) {
         long companyId = AuthContext.requireCompanyId();
-        accessControlService.requireAnyPermission(companyId, "contract_view", "contract_sign");
+        requireContractReadPermission(companyId);
         return tradeContractMapper.selectPartyContracts(companyId, trim(counterpartyName), null, 1000, 0)
-                .stream().map(contract -> toContractPayload(contract, companyId)).toList();
+                .stream().map(contract -> toReadContractPayload(contract, companyId)).toList();
     }
 
     public PagePayload<ContractPayload> pageContracts(String counterpartyName, String status, int page, int size) {
         int normalizedPage = normalizePage(page);
         int normalizedSize = normalizeSize(size);
         long companyId = AuthContext.requireCompanyId();
-        accessControlService.requireAnyPermission(companyId, "contract_view", "contract_sign");
+        requireContractReadPermission(companyId);
         String cleanName = trim(counterpartyName);
         String cleanStatus = trim(status);
         long total = tradeContractMapper.countPartyContracts(companyId, cleanName, cleanStatus);
         long offset = (long) (normalizedPage - 1) * normalizedSize;
         List<ContractPayload> items = tradeContractMapper.selectPartyContracts(
                         companyId, cleanName, cleanStatus, normalizedSize, offset)
-                .stream().map(contract -> toContractPayload(contract, companyId)).toList();
+                .stream().map(contract -> toReadContractPayload(contract, companyId)).toList();
         return PagePayload.of(items, total, normalizedPage, normalizedSize);
     }
 
     public Map<String, Object> contractSummary() {
         long companyId = AuthContext.requireCompanyId();
-        accessControlService.requireAnyPermission(companyId, "contract_view", "contract_sign");
+        requireContractReadPermission(companyId);
         return tradeContractMapper.selectContractSummary(companyId);
+    }
+
+    private void requireContractReadPermission(long companyId) {
+        accessControlService.requireAnyPermission(companyId, "contract_view", "contract_sign",
+                "reconciliation", "invoice_view", "contract_attachment_upload");
+    }
+
+    private ContractPayload toReadContractPayload(TradeContract contract, long companyId) {
+        boolean fullContent = accessControlService.hasPermission(companyId, "contract_view")
+                || accessControlService.hasPermission(companyId, "contract_sign");
+        return toContractPayload(contract, companyId, fullContent);
     }
 
     @Transactional
@@ -716,10 +727,7 @@ public class TradeService {
         if (!accessControlService.hasPermission(companyId, "contract_sign")) {
             return List.of();
         }
-        return tradeContractMapper.selectList(new LambdaQueryWrapper<TradeContract>()
-                        .eq(TradeContract::getCounterpartyCompanyId, companyId)
-                        .eq(TradeContract::getStatus, "PENDING")
-                        .orderByDesc(TradeContract::getCreatedAt))
+        return tradeContractMapper.selectContractsAwaitingSignature(companyId)
                 .stream().map(contract -> toContractPayload(contract, companyId)).toList();
     }
 
@@ -776,6 +784,10 @@ public class TradeService {
     }
 
     private ContractPayload toContractPayload(TradeContract contract, long viewerCompanyId) {
+        return toContractPayload(contract, viewerCompanyId, true);
+    }
+
+    private ContractPayload toContractPayload(TradeContract contract, long viewerCompanyId, boolean fullContent) {
         boolean outgoing = contract.getCompanyId() == viewerCompanyId;
         String initiatorCompanyName = companyName(contract.getCompanyId());
         String counterpartyCompanyName = companyName(contract.getCounterpartyCompanyId());
@@ -808,7 +820,7 @@ public class TradeService {
                 contract.getAmount(),
                 contract.getStartDate() == null ? null : contract.getStartDate().toString(),
                 contract.getEndDate() == null ? null : contract.getEndDate().toString(),
-                contract.getTerms(),
+                fullContent ? contract.getTerms() : "",
                 contract.getStatus(),
                 contract.getVersionNo(),
                 idString(contract.getInitiatedBy()),

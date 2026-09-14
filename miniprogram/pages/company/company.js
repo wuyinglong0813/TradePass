@@ -1,5 +1,6 @@
 const { request } = require('../../utils/request');
 const { readDraft } = require('../../utils/companyOnboarding');
+const { captureCompanyContext, isCompanyContextCurrent } = require('../../utils/companyContext');
 const dict = require('../../utils/dict');
 const { setTabBarHidden, syncTabBar } = require('../../utils/tabBar');
 const app = getApp();
@@ -36,6 +37,7 @@ Page({
     member: {},
     canManage: false,
     canCompanyManage: false,
+    canVerifyLegal: false,
     canContractTemplate: false,
     canInventory: false,
     memberCount: 0,
@@ -72,12 +74,20 @@ Page({
   },
 
   async loadData() {
+    const sequence = this._loadSequence = (this._loadSequence || 0) + 1;
+    let context = captureCompanyContext(app);
+    const current = () => sequence === this._loadSequence && isCompanyContextCurrent(app, context);
     this.setData({ companyDraft: readDraft() });
     try {
-      const payload = await request({ url: '/me' });
+      const payload = await request({ url: '/me', token: context.token, companyId: context.companyId });
+      if (!current()) return;
       app.applyMePayload(payload);
-      const certificationApplications = await request({ url: '/me/company-certification-applications' }).catch(() => []);
+      context = captureCompanyContext(app);
+      const certificationApplications = await request({ url: '/me/company-certification-applications',
+        token: context.token, withCompany: false }).catch(() => []);
+      if (!current()) return;
       await this.loadOnboarding();
+      if (!current()) return;
       const company = payload.company || {};
       const member = payload.member || {};
       const companies = payload.companies || [];
@@ -103,6 +113,7 @@ Page({
         member,
         canManage,
         canCompanyManage,
+        canVerifyLegal: member.memberStatus === 'ACTIVE' && member.roleCode !== 'LEGAL',
         companies: companyItems,
         certificationApplications: (certificationApplications || []).map(item => ({
           ...item,
@@ -118,8 +129,10 @@ Page({
   },
 
   async loadOnboarding() {
+    const context = captureCompanyContext(app);
     try {
-      const companies = await request({ url: '/me/company-onboarding', withCompany: false });
+      const companies = await request({ url: '/me/company-onboarding', token: context.token, withCompany: false });
+      if (!isCompanyContextCurrent(app, context)) return;
       const draft = readDraft();
       this.setData({
         onboardingError: false,
@@ -130,7 +143,7 @@ Page({
         }))
       });
     } catch (error) {
-      this.setData({ onboardingError: true });
+      if (isCompanyContextCurrent(app, context)) this.setData({ onboardingError: true });
     }
   },
 
@@ -142,16 +155,18 @@ Page({
   resumeDraft() { wx.navigateTo({ url: '/pages/company-cert/company-cert?resume=1' }); },
 
   async loadEnterpriseMetrics(companyId, canManage, canContractTemplate) {
+    const context = captureCompanyContext(app);
     if (!companyId) {
       this.setData({ memberCount: 0, roleCount: 0, templateCount: 0 });
       return;
     }
     const safe = (promise, fallback) => promise.catch(() => fallback);
     const [members, roles, templates] = await Promise.all([
-      canManage ? safe(request({ url: `/authorizations?companyId=${companyId}&status=ACTIVE&page=1&size=1` }), { total: 0 }) : Promise.resolve({ total: 0 }),
-      canManage ? safe(request({ url: `/roles?companyId=${companyId}` }), []) : Promise.resolve([]),
-      canContractTemplate ? safe(request({ url: '/contract-templates?page=1&size=1' }), { total: 0 }) : Promise.resolve({ total: 0 })
+      canManage ? safe(request({ url: `/authorizations?companyId=${companyId}&status=ACTIVE&page=1&size=1`, token: context.token, companyId }), { total: 0 }) : Promise.resolve({ total: 0 }),
+      canManage ? safe(request({ url: `/roles?companyId=${companyId}`, token: context.token, companyId }), []) : Promise.resolve([]),
+      canContractTemplate ? safe(request({ url: '/contract-templates?page=1&size=1', token: context.token, companyId }), { total: 0 }) : Promise.resolve({ total: 0 })
     ]);
+    if (!isCompanyContextCurrent(app, context)) return;
     this.setData({
       memberCount: Number(members.total || 0),
       roleCount: (roles || []).length,
@@ -160,8 +175,10 @@ Page({
   },
 
   async loadTodos() {
+    const context = captureCompanyContext(app);
     try {
-      const todos = await request({ url: '/me/todos' });
+      const todos = await request({ url: '/me/todos', token: context.token, companyId: context.companyId });
+      if (!isCompanyContextCurrent(app, context)) return;
       const iconMap = {
         APPROVAL: '/images/icons/team.svg',
         CERT: '/images/icons/company.svg',
@@ -170,7 +187,9 @@ Page({
       };
       const enhanced = (todos || []).map(t => ({ ...t, iconPath: iconMap[t.type] || '/images/icons/contracts.svg' }));
       this.setData({ todos: enhanced });
-    } catch (e) { this.setData({ todos: [] }); }
+    } catch (e) {
+      if (isCompanyContextCurrent(app, context)) this.setData({ todos: [] });
+    }
   },
 
   goTodo(e) {
@@ -234,6 +253,10 @@ Page({
   },
   goPhoneLogin() { wx.navigateTo({ url: '/pages/login/login' }); },
   goCert() { wx.navigateTo({ url: '/pages/company-cert/company-cert' }); },
+  goLegalVerification() {
+    if (!this.data.canVerifyLegal || !this.data.currentCompanyId) return;
+    wx.navigateTo({ url: `/pages/legal-representative/legal-representative?companyId=${encodeURIComponent(this.data.currentCompanyId)}` });
+  },
   goAuthManage() { wx.navigateTo({ url: '/pages/auth-manage/auth-manage' }); },
   goRoleManage() { wx.navigateTo({ url: '/pages/role-manage/role-manage' }); },
   goContractTemplate() { wx.navigateTo({ url: '/pages/contract-template/contract-template' }); },

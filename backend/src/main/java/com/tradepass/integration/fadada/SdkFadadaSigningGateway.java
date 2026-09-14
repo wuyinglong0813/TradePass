@@ -133,7 +133,8 @@ public class SdkFadadaSigningGateway implements FadadaSigningGateway {
         List<ListSignTaskActorRes> actors = invoke(() -> signTaskClient.listSignTaskActor(actorRequest),
                 "查询合同参与方状态");
         return new TaskStatus(signTaskId, detail.getSignTaskStatus(), actors == null ? List.of() : actors.stream()
-                .map(value -> new ActorStatus(value.getActorId(), value.getSignStatus())).toList());
+                .map(value -> new ActorStatus(value.getActorId(), value.getSignStatus())).toList(),
+                detail.getOriginalSignTaskId(), detail.getAbolishedSignTaskId());
     }
 
     @Override

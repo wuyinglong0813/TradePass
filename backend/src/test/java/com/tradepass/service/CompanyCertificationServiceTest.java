@@ -150,6 +150,92 @@ class CompanyCertificationServiceTest {
         verify(tenantBootstrapService).initialize(3L, 7L);
     }
 
+    @Test
+    void currentProviderSuccessRestoresRejectedCompanyWithoutRegrantingRevokedMembership() {
+        Company company = company();
+        company.setCertificationStatus("REJECTED");
+        when(companyMapper.selectByIdForUpdate(3L)).thenReturn(company);
+        CompanyCertificationApplication approved = application("APPROVED");
+        when(applicationMapper.selectOne(any(Wrapper.class))).thenReturn(approved);
+
+        service(false, "").completeProviderCertification(3L, 7L, "corp-3", "重新核验已通过", CertifiedApplicantRole.ADMIN);
+
+        verify(companyMapper).update(org.mockito.ArgumentMatchers.argThat((Wrapper<Company> wrapper) -> {
+            var update = (com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<Company>) wrapper;
+            return update.getSqlSet().contains("certification_status")
+                    && update.getParamNameValuePairs().containsValue("VERIFIED");
+        }));
+        org.mockito.Mockito.verifyNoInteractions(memberMapper, tenantBootstrapService);
+        assertThat(approved.getStatus()).isEqualTo("APPROVED");
+    }
+
+    @Test
+    void rejectedApplicationCanBeApprovedByNewProviderEvidence() {
+        when(companyMapper.selectByIdForUpdate(3L)).thenReturn(company());
+        CompanyCertificationApplication rejected = application("REJECTED");
+        when(applicationMapper.selectOne(any(Wrapper.class))).thenReturn(rejected);
+        service(false, "").completeProviderCertification(3L, 7L, "corp-3", "重新核验已通过", CertifiedApplicantRole.ADMIN);
+        assertThat(rejected.getStatus()).isEqualTo("APPROVED");
+        verify(tenantBootstrapService).initialize(3L, 7L);
+        verify(applicationMapper).update(org.mockito.ArgumentMatchers.argThat((Wrapper<CompanyCertificationApplication> wrapper) -> {
+            var update = (com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<CompanyCertificationApplication>) wrapper;
+            update.getSqlSegment();
+            return update.getParamNameValuePairs().containsValue("REJECTED")
+                    && update.getParamNameValuePairs().containsValue("APPROVED");
+        }));
+    }
+
+    @Test
+    void alreadyCertifiedCompanyStillValidatesTheApplicationApplicant() {
+        Company company = company(); company.setCertificationStatus("VERIFIED");
+        when(companyMapper.selectByIdForUpdate(3L)).thenReturn(company);
+        CompanyCertificationApplication approved = application("APPROVED"); approved.setApplicantUserId(99L);
+        when(applicationMapper.selectOne(any(Wrapper.class))).thenReturn(approved);
+        assertThatThrownBy(() -> service(false, "").completeProviderCertification(3L, 7L,
+                "corp-3", "", CertifiedApplicantRole.LEGAL)).hasMessageContaining("经办人不一致");
+        org.mockito.Mockito.verifyNoInteractions(memberMapper);
+    }
+
+    @Test
+    void onlyApprovedMembersCanClaimVacantLegalPosition() {
+        when(companyMapper.selectByIdForUpdate(3L)).thenReturn(company());
+        when(memberMapper.selectCount(any(Wrapper.class))).thenReturn(0L);
+        assertThatThrownBy(() -> service(false, "").requireLegalClaim(3L, 7L)).hasMessageContaining("成员邀请");
+    }
+
+    @Test
+    void legalClaimCannotReplaceAnExistingOtherLegalRepresentative() {
+        when(companyMapper.selectByIdForUpdate(3L)).thenReturn(company());
+        when(memberMapper.selectCount(any(Wrapper.class))).thenReturn(1L, 1L);
+        assertThatThrownBy(() -> service(false, "").completeLegalClaim(3L, 7L, "legal-3"))
+                .hasMessageContaining("本企业已有法人");
+        org.mockito.Mockito.verify(memberMapper, org.mockito.Mockito.never()).update(any(Wrapper.class));
+    }
+
+    @Test
+    void legalClaimPromotesOnlyTheProvenCurrentActiveMember() {
+        when(companyMapper.selectByIdForUpdate(3L)).thenReturn(company());
+        when(memberMapper.selectCount(any(Wrapper.class))).thenReturn(1L, 0L);
+        CompanyCertificationApplication approved = application("APPROVED");
+        when(applicationMapper.selectOne(any(Wrapper.class))).thenReturn(approved);
+        service(false, "").completeLegalClaim(3L, 7L, "corp-3");
+        verify(memberMapper).update(org.mockito.ArgumentMatchers.argThat((Wrapper<CompanyMember> wrapper) -> {
+            var update = (com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<CompanyMember>) wrapper;
+            update.getSqlSegment();
+            return update.getSqlSet().contains("is_legal_person")
+                    && update.getParamNameValuePairs().containsValue("LEGAL")
+                    && update.getParamNameValuePairs().containsValue("ACTIVE")
+                    && update.getParamNameValuePairs().containsValue(7L);
+        }));
+    }
+
+    private CompanyCertificationApplication application(String status) {
+        CompanyCertificationApplication application = new CompanyCertificationApplication();
+        application.setId(18L); application.setCompanyId(3L); application.setApplicantUserId(7L);
+        application.setProviderRequestId("corp-3"); application.setStatus(status);
+        return application;
+    }
+
     private CompanyCertificationService service(boolean autoApprove, String token) {
         return new CompanyCertificationService(companyMapper, memberMapper, applicationMapper,
                 accessControlService, tenantBootstrapService, auditLogService, autoApprove, token);

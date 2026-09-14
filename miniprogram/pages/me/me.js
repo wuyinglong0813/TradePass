@@ -1,5 +1,6 @@
 const { request } = require('../../utils/request');
 const { loadSummary } = require('../../utils/companyOnboarding');
+const { captureCompanyContext, isCompanyContextCurrent } = require('../../utils/companyContext');
 const dict = require('../../utils/dict');
 const { syncTabBar } = require('../../utils/tabBar');
 const app = getApp();
@@ -61,15 +62,22 @@ Page({
   },
 
   async loadMe() {
+    const sequence = this._loadSequence = (this._loadSequence || 0) + 1;
+    let context = captureCompanyContext(app);
+    const current = () => sequence === this._loadSequence && isCompanyContextCurrent(app, context);
     try {
-      const payload = await request({ url: '/me' });
+      const payload = await request({ url: '/me', token: context.token, companyId: context.companyId });
+      if (!current()) return;
       app.applyMePayload(payload);
-      const personalIdentity = await request({ url: '/fadada/users/me/identity', withCompany: false }).catch(() => null);
+      context = captureCompanyContext(app);
+      const personalIdentity = await request({ url: '/fadada/users/me/identity', token: context.token, withCompany: false }).catch(() => null);
+      if (!current()) return;
       const company = payload.company || {};
       const member = payload.member || {};
       const canManage = member.roleCode === 'LEGAL' || member.roleCode === 'ADMIN';
       const companies = payload.companies || [];
       const onboarding = companies.length ? { hasOnboarding: false } : await loadSummary();
+      if (!current()) return;
       const user = payload.user || {};
       const nickname = user.nickname || '用户';
       const phone = user.phone || '';

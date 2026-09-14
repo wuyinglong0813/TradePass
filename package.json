@@ -1,5 +1,5 @@
 {
   "scripts": {
-    "test": "node miniprogram/tests/run-tests.js"
+    "test": "node miniprogram/tests/run-tests.js && node --test miniprogram/tests/*.test.js && node miniprogram/tests/legal-representative-tests.js"
   }
 }

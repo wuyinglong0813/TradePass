@@ -32,25 +32,85 @@ Page({
     identity: EMPTY_IDENTITY,
     statusView: STATUS_VIEW.NOT_STARTED,
     providerEnabled: false,
-    refreshAfterAuth: false
+    refreshAfterAuth: false,
+    phoneLoading: true,
+    phoneBound: false,
+    maskedPhone: '',
+    bindingPhone: false,
+    desktopMode: false
   },
 
   onLoad(options = {}) {
     this._companyFlow = options.flow === 'company-create';
     this._returnOptions = options;
+    this.setData({ desktopMode: !!getApp().globalData.isDesktopWechat });
+    this.loadPhoneStatus();
     this.loadIdentity(false);
   },
 
   onUnload() { this._unloaded = true; },
 
   onShow() {
+    this.loadPhoneStatus();
     if (!this.data.refreshAfterAuth) return;
     this.setData({ refreshAfterAuth: false });
     this.loadIdentity(true);
   },
 
   onPullDownRefresh() {
-    this.loadIdentity(true).finally(() => wx.stopPullDownRefresh());
+    Promise.all([this.loadPhoneStatus(), this.loadIdentity(true)]).finally(() => wx.stopPullDownRefresh());
+  },
+
+  applyPhoneProfile(user, token) {
+    const app = getApp();
+    if (this._unloaded || app.globalData.token !== token || !user) return false;
+    const current = app.globalData.userInfo;
+    if (current && String(current.id) !== String(user.id)) return false;
+    // A phone refresh must not change the currently selected company or member roles.
+    if (current) app.globalData.userInfo = { ...current, phone: user.phone || '' };
+    const phone = String(user.phone || '');
+    this.setData({ phoneBound: !!phone, maskedPhone: phone.length >= 11
+      ? `${phone.slice(0, 3)}****${phone.slice(-4)}` : phone });
+    return true;
+  },
+
+  async loadPhoneStatus() {
+    const app = getApp();
+    const token = app.globalData.token;
+    if (!token || this._phoneLoading) return;
+    this._phoneLoading = true;
+    try {
+      const payload = await request({ url: '/me', withCompany: false });
+      this.applyPhoneProfile(payload && payload.user, token);
+    } catch (error) {
+      wx.showToast({ title: error.message || '手机号状态加载失败', icon: 'none' });
+    } finally {
+      this._phoneLoading = false;
+      if (!this._unloaded) this.setData({ phoneLoading: false });
+    }
+  },
+
+  async bindWechatPhone(e) {
+    if (this.data.bindingPhone || this.data.desktopMode) return;
+    const detail = e.detail || {};
+    if (detail.errMsg !== 'getPhoneNumber:ok' || !detail.code) {
+      wx.showToast({ title: '请允许微信提供手机号后重试', icon: 'none' });
+      return;
+    }
+    const app = getApp();
+    const token = app.globalData.token;
+    this.setData({ bindingPhone: true });
+    try {
+      const user = await request({ url: '/auth/bind-phone', method: 'POST',
+        withCompany: false, data: { phoneCode: detail.code } });
+      if (this.applyPhoneProfile(user, token)) {
+        wx.showToast({ title: '手机号已绑定，可继续认证', icon: 'success' });
+      }
+    } catch (error) {
+      wx.showToast({ title: error.message || '手机号绑定失败，请重试', icon: 'none' });
+    } finally {
+      if (!this._unloaded) this.setData({ bindingPhone: false });
+    }
   },
 
   async loadIdentity(sync, notify) {
@@ -95,6 +155,10 @@ Page({
   },
 
   startAuth() {
+    if (this.data.phoneLoading || !this.data.phoneBound) {
+      wx.showToast({ title: this.data.desktopMode ? '请在手机微信完成手机号绑定' : '请先授权绑定手机号', icon: 'none' });
+      return;
+    }
     if (!this.data.providerEnabled) {
       wx.showModal({
         title: '认证服务未启用',

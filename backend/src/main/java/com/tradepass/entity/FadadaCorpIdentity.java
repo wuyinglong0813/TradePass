@@ -25,6 +25,8 @@ public class FadadaCorpIdentity {
     private String verifiedCreditCode;
     private String verifiedLegalRepName;
     private String failureReason;
+    private String providerRequestId;
+    private String sealSyncWarning;
     private LocalDateTime submittedAt;
     private LocalDateTime verifiedAt;
     private LocalDateTime lastSyncAt;
@@ -63,6 +65,10 @@ public class FadadaCorpIdentity {
     public void setVerifiedLegalRepName(String verifiedLegalRepName) { this.verifiedLegalRepName = verifiedLegalRepName; }
     public String getFailureReason() { return failureReason; }
     public void setFailureReason(String failureReason) { this.failureReason = failureReason; }
+    public String getProviderRequestId() { return providerRequestId; }
+    public void setProviderRequestId(String providerRequestId) { this.providerRequestId = providerRequestId; }
+    public String getSealSyncWarning() { return sealSyncWarning; }
+    public void setSealSyncWarning(String sealSyncWarning) { this.sealSyncWarning = sealSyncWarning; }
     public LocalDateTime getSubmittedAt() { return submittedAt; }
     public void setSubmittedAt(LocalDateTime submittedAt) { this.submittedAt = submittedAt; }
     public LocalDateTime getVerifiedAt() { return verifiedAt; }

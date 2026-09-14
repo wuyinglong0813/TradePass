@@ -7,6 +7,7 @@ function currentApp() {
 
 function clearSession(app) {
   clearHomeSnapshots();
+  app._companyAccessGeneration = (app._companyAccessGeneration || 0) + 1;
   app.globalData.token = '';
   app.globalData.currentCompanyId = '';
   app.globalData.userInfo = null;
@@ -41,7 +42,7 @@ function request(options) {
       timeout: options.timeout || 15000,
       success: ({ statusCode, data }) => {
         if (statusCode === 401 || (data && data.code === 401)) {
-          if (options.handleUnauthorized !== false) handleUnauthorized(app);
+          if (options.handleUnauthorized !== false && token === app.globalData.token) handleUnauthorized(app);
           reject(new Error('登录已失效'));
           return;
         }

@@ -21,36 +21,46 @@ Page({
   },
 
   async syncResult() {
-    if (this._syncing) return;
+    if (this._syncing || this._unloaded) return;
     this._syncing = true;
+    const token = this._resultToken = getApp().globalData.token;
+    const current = () => !this._unloaded && token === getApp().globalData.token;
     this.setData({ loading: true });
     const options = this.data.options || {};
     try {
       let result;
       if (options.scene === 'personal') {
-        result = await this.readAuthenticationResult('/fadada/users/me/identity', options.scene);
+        result = await this.readAuthenticationResult('/fadada/users/me/identity', options.scene, token);
+      } else if (options.scene === 'legal') {
+        if (!options.companyId) throw new Error('缺少本次核验的企业信息，请返回重试');
+        result = await request({ url: `/fadada/companies/${options.companyId}/legal-representative/sync`,
+          method: 'POST', withCompany: false, token });
       } else if (options.scene === 'company' || options.scene === 'seal') {
         if (!options.companyId) throw new Error('缺少本次认证的企业信息，请返回企业认证页面重试');
         result = await this.readAuthenticationResult(
-          `/fadada/companies/${options.companyId}/identity`, options.scene);
+          `/fadada/companies/${options.companyId}/identity`, options.scene, token);
       } else if (options.scene === 'contract' || options.scene === 'abolish') {
-        result = await request({ url: `/contracts/${options.contractId}/signing/sync`, method: 'POST' });
+        result = await request({ url: `/contracts/${options.contractId}/signing/sync`, method: 'POST', token });
       }
-      if (['personal', 'company', 'seal'].includes(options.scene)
+      if (!current()) return;
+      if (['personal', 'company', 'seal', 'legal'].includes(options.scene)
           && !this.authenticationCompleted(result, options.scene)) {
         this.setData({ loading: false, failed: true,
           title: result && result.status === 'FAILED' ? '认证未通过' : '处理结果待确认',
-          message: (result && (result.failureReason || result.statusText)) || '结果尚未更新，请稍后刷新' });
+          message: (result && (result.failureReason || result.message || result.statusText)) || '结果尚未更新，请稍后刷新' });
         return;
       }
       if (options.scene === 'company') {
-        if (this._unloaded) return;
         await getApp().switchCompany(options.companyId);
-        if (this._unloaded) return;
+        if (!current()) return;
         this._companyCompleted = true;
         this.setData({ loading: false, failed: false, title: '企业认证成功', message: '已切换到本次认证企业，正在进入首页' });
         this.goBusinessPage();
         return;
+      }
+      if (options.scene === 'legal') {
+        await getApp().loadMe();
+        if (!current()) return;
       }
       this.setData({
         loading: false,
@@ -58,8 +68,9 @@ Page({
         title: '处理结果已同步',
         message: (result && (result.statusText || result.status)) || '你可以返回业务页面继续操作'
       });
-      if (!this._unloaded) this.returnTimer = setTimeout(() => this.goBusinessPage(), 700);
+      if (current()) this.returnTimer = setTimeout(() => { if (current()) this.goBusinessPage(); }, 700);
     } catch (error) {
+      if (!current()) return;
       this.setData({
         loading: false,
         failed: true,
@@ -77,14 +88,16 @@ Page({
       : !!result && result.status === 'VERIFIED';
   },
 
-  async readAuthenticationResult(url, scene) {
+  async readAuthenticationResult(url, scene, token = getApp().globalData.token) {
     // These endpoints authorize the user against the company in the URL, including pending claims.
-    const options = { url, withCompany: false };
+    const options = { url, withCompany: false, token };
     const current = await request(options);
+    if (this._unloaded || token !== getApp().globalData.token) return null;
     if (this.authenticationCompleted(current, scene)) return current;
     try {
       return await request({ ...options, url: `${url}/sync`, method: 'POST' });
     } catch (error) {
+      if (this._unloaded || token !== getApp().globalData.token) return null;
       // A callback or another request may have committed success while this sync failed.
       try {
         const latest = await request(options);
@@ -96,8 +109,13 @@ Page({
 
   goBusinessPage() {
     if (this.data.loading || this._unloaded) return;
+    if (this._resultToken !== undefined && this._resultToken !== getApp().globalData.token) return;
     if (this.returnTimer) clearTimeout(this.returnTimer);
     const options = this.data.options || {};
+    if (options.scene === 'legal') {
+      wx.redirectTo({ url: `/pages/legal-representative/legal-representative?companyId=${encodeURIComponent(options.companyId || '')}` });
+      return;
+    }
     if (options.scene === 'personal') {
       if (options.flow === 'company-create' && !this.data.failed) {
         returnToCompany(options);

@@ -9,6 +9,7 @@ import com.tradepass.mapper.TradeContractMapper;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
@@ -24,6 +25,7 @@ public class BilateralActionService {
     public static final String BUSINESS_DOCUMENT = "BUSINESS_DOCUMENT";
     public static final String END = "END";
     public static final String VOID = "VOID";
+    public static final String RESUME = "RESUME";
 
     private final JdbcTemplate jdbc;
     private final TradeContractMapper contractMapper;
@@ -32,6 +34,12 @@ public class BilateralActionService {
     private final ReconciliationAccountService reconciliationAccountService;
     private final SalesOrderInventoryService inventoryService;
     private final ApprovalService approvalService;
+    private ContractAbolishRecoveryService abolishRecoveryService;
+
+    @Autowired
+    void setAbolishRecoveryService(ContractAbolishRecoveryService service) {
+        this.abolishRecoveryService = service;
+    }
 
     public BilateralActionService(JdbcTemplate jdbc,
                                   TradeContractMapper contractMapper,
@@ -56,7 +64,7 @@ public class BilateralActionService {
         String normalizedBizType = normalizeBizType(bizType);
         String normalizedAction = normalizeAction(actionType);
         String safeReason = requireReason(reason);
-        Target target = requireTarget(normalizedBizType, bizId, companyId);
+        Target target = requireTarget(normalizedBizType, bizId, companyId, true);
         requirePermission(companyId, normalizedBizType);
         validateRequest(target, normalizedAction, riskConfirmed);
         Long approverCompanyIdValue = target.contract().getCompanyId() == companyId
@@ -212,6 +220,13 @@ public class BilateralActionService {
                 """, target.contract().getId()) > 0) {
             throw new BusinessException("该合同已有待处理的双方申请，请处理完成后再操作");
         }
+        if (RESUME.equals(actionType)) {
+            if (!CONTRACT.equals(target.bizType()) || !"ACTIVE".equals(target.status())
+                    || !hasElectronicAbolishApproval(target.contract().getId())) {
+                throw new BusinessException("仅已同意作废、尚未完成作废签署的合同可以申请恢复履约");
+            }
+            return;
+        }
         if (hasElectronicAbolishApproval(target.contract().getId())) {
             throw new BusinessException("合同已进入作废协议签署，不能再发起其他处理");
         }
@@ -219,18 +234,7 @@ public class BilateralActionService {
             if (!CONTRACT.equals(target.bizType())) throw new BusinessException("仅合同可以申请结束");
             if (!"ACTIVE".equals(target.status())) throw new BusinessException("仅履约中的合同可以申请结束");
             if (!riskConfirmed) throw new BusinessException("请先确认合同结束风险提示");
-            long mutableChildren = count("""
-                    SELECT COUNT(1) FROM business_document
-                    WHERE contract_id = ? AND deleted_at IS NULL
-                      AND status IN ('DRAFT', 'ISSUED', 'REJECTED')
-                    """, target.contract().getId()) + count("""
-                    SELECT COUNT(1) FROM contract_attachment
-                    WHERE contract_id = ? AND deleted_at IS NULL
-                      AND status IN ('PENDING_CONFIRMATION', 'REJECTED')
-                    """, target.contract().getId());
-            if (mutableChildren > 0) {
-                throw new BusinessException("合同仍有草稿、待确认或已拒绝资料，请先处理后再申请结束");
-            }
+            requireNoUnfinishedChildren(target.contract().getId());
             return;
         }
         if (!VOID.equals(actionType)) throw new BusinessException("申请类型不正确");
@@ -257,10 +261,33 @@ public class BilateralActionService {
         }
     }
 
+    private void requireNoUnfinishedChildren(Long contractId) {
+        long unfinished = count("""
+                    SELECT COUNT(1) FROM business_document
+                    WHERE contract_id = ? AND deleted_at IS NULL
+                      AND status IN ('DRAFT', 'ISSUED', 'REJECTED', 'ACKNOWLEDGED')
+                    FOR UPDATE
+                    """, contractId) + count("""
+                    SELECT COUNT(1) FROM contract_attachment
+                    WHERE contract_id = ? AND deleted_at IS NULL
+                      AND status IN ('PENDING_CONFIRMATION', 'REJECTED')
+                    FOR UPDATE
+                    """, contractId);
+        if (unfinished > 0) {
+            throw new BusinessException("合同仍有草稿、待确认、已拒绝或待入库资料，请先处理后再结束");
+        }
+    }
+
     private void applyApprovedAction(ActionRecord action, long approvedCompanyId) {
         Target target = requireTarget(action.bizType(), action.bizId(), approvedCompanyId, true);
         LocalDateTime approvedAt = LocalDateTime.now();
         if (CONTRACT.equals(action.bizType())) {
+            if (RESUME.equals(action.actionType())) {
+                if (abolishRecoveryService == null) throw new BusinessException("恢复履约服务暂不可用");
+                abolishRecoveryService.resumeAfterBilateralApproval(action.contractId());
+                return;
+            }
+            if (END.equals(action.actionType())) requireNoUnfinishedChildren(action.contractId());
             if (VOID.equals(action.actionType())) {
                 Long electronicTaskCount = jdbc.queryForObject("""
                         SELECT COUNT(1) FROM fadada_contract_sign_task
@@ -309,7 +336,12 @@ public class BilateralActionService {
     private Target requireTarget(String bizType, Long bizId, long companyId, boolean forUpdate) {
         if (bizId == null) throw new BusinessException("业务 ID 不能为空");
         if (CONTRACT.equals(bizType)) {
-            TradeContract contract = requireContractParty(bizId, companyId);
+            TradeContract contract = forUpdate ? contractMapper.selectByIdForUpdate(bizId)
+                    : contractMapper.selectById(bizId);
+            if (contract == null || (!Long.valueOf(companyId).equals(contract.getCompanyId())
+                    && !Long.valueOf(companyId).equals(contract.getCounterpartyCompanyId()))) {
+                throw new BusinessException("合同不存在");
+            }
             return new Target(bizType, bizId, contract, contract.getStatus(), "合同", "CONTRACT");
         }
         if (ATTACHMENT.equals(bizType)) {
@@ -442,7 +474,7 @@ public class BilateralActionService {
 
     private String normalizeAction(String value) {
         String normalized = value == null ? "" : value.trim().toUpperCase(Locale.ROOT);
-        if (!List.of(END, VOID).contains(normalized)) throw new BusinessException("申请类型不正确");
+        if (!List.of(END, VOID, RESUME).contains(normalized)) throw new BusinessException("申请类型不正确");
         return normalized;
     }
 
@@ -455,7 +487,7 @@ public class BilateralActionService {
     }
 
     private String actionLabel(String actionType) {
-        return END.equals(actionType) ? "结束" : "作废";
+        return END.equals(actionType) ? "结束" : (RESUME.equals(actionType) ? "恢复履约" : "作废");
     }
 
     private String attachmentLabel(String category) {

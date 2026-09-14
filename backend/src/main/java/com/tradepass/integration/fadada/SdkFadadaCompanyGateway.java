@@ -9,6 +9,7 @@ import com.fasc.open.api.v5_1.client.SealClient;
 import com.fasc.open.api.v5_1.req.corp.GetCorpAuthResourceUrlReq;
 import com.fasc.open.api.v5_1.req.corp.GetCorpIdentityInfoReq;
 import com.fasc.open.api.v5_1.req.corp.GetCorpReq;
+import com.fasc.open.api.v5_1.req.corp.GetChangeCorpIdentityInfoUrlReq;
 import com.fasc.open.api.v5_1.req.seal.GetSealInfoListReq;
 import com.fasc.open.api.v5_1.req.seal.GetSealManageUrlReq;
 import com.fasc.open.api.v5_1.res.common.ECorpAuthUrlRes;
@@ -98,6 +99,18 @@ public class SdkFadadaCompanyGateway implements FadadaCompanyGateway {
         return response.getSealInfos().stream().map(value -> new SealInfo(
                 value.getSealId() == null ? null : String.valueOf(value.getSealId()),
                 value.getSealName(), value.getCategoryType(), value.getSealStatus())).toList();
+    }
+
+    @Override
+    public String createIdentityChangeUrl(String clientCorpId, String openCorpId, String clientUserId) {
+        GetChangeCorpIdentityInfoUrlReq request = new GetChangeCorpIdentityInfoUrlReq();
+        request.setAccessToken(tokenProvider.get());
+        if (hasText(openCorpId)) request.setOpenCorpId(openCorpId);
+        else request.setClientCorpId(clientCorpId);
+        request.setClientUserId(clientUserId);
+        var response = invoke(() -> corpClient.getChangeCorpIdentityInfoUrl(request), "获取企业法人核验地址");
+        if (!hasText(response.getChangeIdentityInfoUrl())) throw new BusinessException("未获取到企业法人核验地址，请稍后重试");
+        return response.getChangeIdentityInfoUrl();
     }
 
     @Override

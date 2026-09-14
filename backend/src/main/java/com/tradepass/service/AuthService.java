@@ -30,6 +30,7 @@ import com.tradepass.mapper.SysUserMapper;
 import com.tradepass.mapper.TradeContractMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.beans.factory.annotation.Value;
 
 import java.util.ArrayList;
@@ -132,19 +133,40 @@ public class AuthService {
                 user.getPhone(), user.getNickname(), currentCompanyId, roleCode));
     }
 
+    @Transactional(isolation = Isolation.REPEATABLE_READ)
     public UserProfile bindPhone(BindPhoneRequest request) {
-        if (!devEnabled) {
+        if (!devEnabled && request.phone() != null && !request.phone().isBlank()) {
+            throw new BusinessException("生产环境不接受未经验证的手机号");
+        }
+        String phone = request.phoneCode() != null && !request.phoneCode().isBlank()
+                ? wechatService.resolvePhoneByCode(request.phoneCode())
+                : (devEnabled ? request.phone() : null);
+        if (phone == null || phone.isBlank()) {
             throw new BusinessException("请使用微信手机号验证完成绑定");
         }
         long userId = AuthContext.userId();
         Long companyId = AuthContext.companyId();
-        sysUserMapper.update(new LambdaUpdateWrapper<SysUser>().eq(SysUser::getId, userId).set(SysUser::getPhone, request.phone()));
-        MemberInfo member = loadMember(userId, companyId == null ? 0L : companyId);
-        if (member == null) {
-            return null;
+        SysUser user = sysUserMapper.selectById(userId);
+        if (user == null || !"ACTIVE".equals(user.getStatus())) {
+            throw new BusinessException("当前账号不可用，请重新登录");
         }
-        return new UserProfile(member.userId(), "demo-openid", request.phone(), member.userName(),
-                companyId == null ? null : String.valueOf(companyId), member.roleCode());
+        SysUser other = sysUserMapper.selectOne(new LambdaQueryWrapper<SysUser>()
+                .eq(SysUser::getPhone, phone).ne(SysUser::getId, userId).last("LIMIT 1 FOR UPDATE"));
+        if (other != null) {
+            throw new BusinessException("该手机号已绑定其他账号，请使用原账号登录或联系管理员处理");
+        }
+        if (user.getPhone() != null && !user.getPhone().isBlank() && !phone.equals(user.getPhone())) {
+            throw new BusinessException("当前账号已绑定手机号，变更手机号请联系管理员处理");
+        }
+        int updated = sysUserMapper.update(new LambdaUpdateWrapper<SysUser>().eq(SysUser::getId, userId)
+                .and(wrapper -> wrapper.isNull(SysUser::getPhone).or().eq(SysUser::getPhone, "")
+                        .or().eq(SysUser::getPhone, phone))
+                .set(SysUser::getPhone, phone));
+        if (updated != 1) throw new BusinessException("账号手机号状态已变化，请刷新后重试");
+        MemberInfo member = loadMember(userId, companyId == null ? 0L : companyId);
+        return new UserProfile(String.valueOf(userId), user.getOpenid(), phone, user.getNickname(),
+                member == null || companyId == null ? null : String.valueOf(companyId),
+                member == null ? "GUEST" : member.roleCode());
     }
 
     public MePayload me() {
@@ -179,13 +201,13 @@ public class AuthService {
             if (company != null && company.getCertificationStatus() != null && !"VERIFIED".equals(company.getCertificationStatus())) {
                 todos.add(new TodoItem("CERT", "企业认证待完成", "完成认证后可使用全部签约能力", 1, "company-cert"));
             }
-            if (company != null) {
-                Long pendingContracts = tradeContractMapper.selectCount(new LambdaQueryWrapper<TradeContract>()
-                        .eq(TradeContract::getCounterpartyCompanyId, companyId)
-                        .eq(TradeContract::getStatus, "PENDING"));
-                if (pendingContracts > 0) {
-                    todos.add(new TodoItem("CONTRACT", "合同待审批", pendingContracts + " 份合同等待你方签署", pendingContracts.intValue(), "contract-approval"));
-                }
+        }
+
+        if (accessControlService.hasPermission(companyId, "contract_sign")) {
+            long pendingContracts = tradeContractMapper.countContractsAwaitingSignature(companyId);
+            if (pendingContracts > 0) {
+                todos.add(new TodoItem("CONTRACT", "合同待签署", pendingContracts + " 份合同等待你方签署",
+                        (int) Math.min(Integer.MAX_VALUE, pendingContracts), "contract-approval"));
             }
         }
 

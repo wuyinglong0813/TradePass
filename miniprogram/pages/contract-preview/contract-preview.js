@@ -18,6 +18,12 @@ Page({
     counterpartyName: '',
     // 合同详情
     contract: null,
+    canViewContractContent: false,
+    canViewPayments: false,
+    canViewInvoices: false,
+    canViewOtherAttachments: false,
+    canUploadAttachments: false,
+    fulfillmentErrors: {},
     // Tab
     tabs: [
       { key: 'detail', label: '合同' },
@@ -74,6 +80,7 @@ Page({
     canDeleteContract: false,
     canRequestEnd: false,
     canRequestVoid: false,
+    canResumeContract: false,
     contractReadOnly: false,
     activeContractAction: null,
     contractActionLoading: false,
@@ -168,17 +175,41 @@ Page({
   },
 
   /* 加载合同详情 */
+  hasAnyPermission(...required) {
+    const app = getApp();
+    const member = app.globalData.memberInfo || {};
+    let permissions = member.permissions || [];
+    if (!Array.isArray(permissions)) {
+      try { permissions = JSON.parse(permissions); } catch (error) { permissions = []; }
+    }
+    return permissions.includes('all') || required.some(value => permissions.includes(value));
+  },
+
   async loadContractDetail() {
     const { request } = require('../../utils/request');
     try {
+      const canViewContractContent = this.hasAnyPermission('contract_view', 'contract_sign');
+      const canViewPayments = this.hasAnyPermission('contract_view', 'contract_sign', 'reconciliation', 'contract_attachment_upload');
+      const canViewInvoices = canViewPayments || this.hasAnyPermission('invoice_view');
+      const canManageContract = this.hasAnyPermission('contract_sign');
+      const canCreateDocument = this.hasAnyPermission('contract_sign', 'order_create');
+      this.setData({
+        canViewContractContent, canViewPayments, canViewInvoices,
+        canViewOtherAttachments: canViewPayments,
+        canUploadAttachments: this.hasAnyPermission('contract_attachment_upload', 'contract_sign', 'order_create', 'reconciliation'),
+        tabs: canViewContractContent
+          ? [{ key: 'detail', label: '合同' }, { key: 'fulfillment', label: '履约资料' }]
+          : [{ key: 'fulfillment', label: '履约资料' }],
+        activeTab: canViewContractContent ? this.data.activeTab : 'fulfillment'
+      });
       const [contract, activeContractAction, signing] = await Promise.all([
         request({ url: `/contracts/${this.data.contractId}` }),
         request({
           url: `/bilateral-actions/active?bizType=CONTRACT&bizId=${this.data.contractId}`
         }).catch(() => ({})),
-        request({
+        canViewContractContent ? request({
           url: `/contracts/${this.data.contractId}/signing`
-        }).catch(() => null)
+        }).catch(() => null) : Promise.resolve(null)
       ]);
       const statusMap = {
         PENDING: '待签署',
@@ -240,9 +271,9 @@ Page({
         || signingStatus === 'abolishing' || signingStatus.startsWith('ABOLISH_');
       const contractReadOnly = actionPending || electronicAbolishing
         || ['COMPLETED', 'VOIDED'].includes(contract.status);
-      const canCreateSalesOrder = isSupplier
+      const canCreateSalesOrder = canCreateDocument && isSupplier
         && !contractReadOnly && (contract.status === 'PENDING' || contract.status === 'ACTIVE');
-      const canCreateReturnOrder = !contractReadOnly
+      const canCreateReturnOrder = canCreateDocument && !contractReadOnly
         && (contract.status === 'PENDING' || contract.status === 'ACTIVE');
       const outgoing = contract.perspective === 'OUTGOING';
       const createAsDraft = true;
@@ -252,7 +283,8 @@ Page({
           ...contract,
           statusText: actionPending
             ? (activeContractAction.bizType === 'CONTRACT'
-              ? (activeContractAction.actionType === 'END' ? '结束待确认' : '作废待确认')
+              ? (activeContractAction.actionType === 'END' ? '结束待确认'
+                : (activeContractAction.actionType === 'RESUME' ? '恢复履约待确认' : '作废待确认'))
               : `${activeContractAction.targetText || '履约资料'}作废待确认`)
             : (statusMap[contract.status] || contract.status),
           amount: contract.amount || 0
@@ -271,17 +303,21 @@ Page({
           ? String(contractTable.summary.totalAmount) : String(contract.amount || ''),
         contractTotalAmountCn: contractTable.summary && contractTable.summary.totalAmountCn
           ? String(contractTable.summary.totalAmountCn) : '',
-        canCancelContract: !contractReadOnly && outgoing && contract.status === 'PENDING',
-        canEditContract: !contractReadOnly && outgoing && ['PENDING', 'REJECTED', 'CANCELLED'].includes(contract.status),
-        canDeleteContract: !contractReadOnly && outgoing && ['REJECTED', 'CANCELLED'].includes(contract.status),
-        canRequestEnd: !contractReadOnly && contract.status === 'ACTIVE',
-        canRequestVoid: !contractReadOnly && contract.status === 'ACTIVE'
+        canCancelContract: canManageContract && !contractReadOnly && outgoing && contract.status === 'PENDING',
+        canEditContract: canManageContract && !contractReadOnly && outgoing && ['PENDING', 'REJECTED', 'CANCELLED'].includes(contract.status),
+        canDeleteContract: canManageContract && !contractReadOnly && outgoing && ['REJECTED', 'CANCELLED'].includes(contract.status),
+        canRequestEnd: canManageContract && !contractReadOnly && contract.status === 'ACTIVE',
+        canRequestVoid: canManageContract && !contractReadOnly && contract.status === 'ACTIVE'
           && !!(signing && signing.canAbolish && !signing.abolishApproved),
         contractReadOnly,
         activeContractAction: actionPending ? activeContractAction : null,
+        canResumeContract: canManageContract && !actionPending && contract.status === 'ACTIVE'
+          && !!(signing && signing.abolishApproved) && signingStatus !== 'ABOLISH_CREATION_UNCERTAIN',
         signing,
         signedContractArchived: !!(signing && signing.signedFileArchived),
-        canSignContract: !!(signing && signing.canSign),
+        canSignContract: canManageContract && !!(signing && signing.canSign)
+          && !(actionPending && activeContractAction.actionType === 'RESUME')
+          && signingStatus !== 'ABOLISH_CREATION_UNCERTAIN',
         signButtonText: signing && (signing.abolishApproved
           || String(signing.status || '').startsWith('ABOLISH_') || signing.status === 'abolishing')
           ? '签署作废协议' : '签署合同',
@@ -309,7 +345,7 @@ Page({
             signedPreviewError: ''
           });
         }
-        this.loadContractMemo();
+        if (canViewContractContent) this.loadContractMemo();
         if (this.data.activeTab === 'fulfillment') {
           this.loadBusinessDocuments('SALES_ORDER');
           this.loadBusinessDocuments('RETURN_ORDER');
@@ -447,6 +483,26 @@ Page({
     });
   },
 
+  requestContractResume() {
+    if (!this.data.canResumeContract || this.data.contractActionLoading) return;
+    wx.showModal({
+      title: '取消作废并恢复履约',
+      editable: true,
+      placeholderText: '请输入恢复履约原因',
+      content: '对方同意后，将先终止未完成的作废签署，确认原合同仍有效后恢复履约。',
+      confirmText: '提交申请',
+      success: result => {
+        if (!result.confirm) return;
+        const reason = String(result.content || '').trim();
+        if (!reason) {
+          wx.showToast({ title: '请输入恢复履约原因', icon: 'none' });
+          return;
+        }
+        this.submitBilateralAction('CONTRACT', this.data.contractId, 'RESUME', reason, false);
+      }
+    });
+  },
+
   async submitBilateralAction(bizType, bizId, actionType, reason, riskConfirmed) {
     if (this.data.contractActionLoading) return;
     const { request } = require('../../utils/request');
@@ -488,7 +544,9 @@ Page({
       title: `同意${action.actionText || '合同操作'}`,
       content: action.actionType === 'END'
         ? '确认后合同永久只读，不能恢复或继续履约。'
-        : '确认后将进入作废协议签署，双方签署完成后合同才会作废。',
+        : (action.actionType === 'RESUME'
+          ? '同意取消作废。系统将先确认作废签署已经安全终止、原合同仍有效，再恢复履约；核验失败时继续保持只读。'
+          : '确认后将进入作废协议签署，双方签署完成后合同才会作废。'),
       confirmText: '确认同意',
       confirmColor: '#d94848',
       success: result => {
@@ -933,11 +991,20 @@ Page({
     const { request } = require('../../utils/request');
     this.setData({ fulfillmentLoading: true });
     try {
+      const fulfillmentErrors = {};
+      const loadSection = async (key, allowed, path) => {
+        if (!allowed) return [];
+        try { return await request({ url: `/contracts/${this.data.contractId}/${path}` }); }
+        catch (error) {
+          fulfillmentErrors[key] = error.message || '加载失败，请下拉刷新重试';
+          return [];
+        }
+      };
       const [logistics, payments, invoices, others] = await Promise.all([
-        request({ url: `/contracts/${this.data.contractId}/logistics-documents` }),
-        request({ url: `/contracts/${this.data.contractId}/attachments?category=PAYMENT_VOUCHER` }),
-        request({ url: `/contracts/${this.data.contractId}/attachments?category=INVOICE` }),
-        request({ url: `/contracts/${this.data.contractId}/attachments?category=OTHER` })
+        loadSection('logistics', this.data.canViewContractContent, 'logistics-documents'),
+        loadSection('payments', this.data.canViewPayments, 'attachments?category=PAYMENT_VOUCHER'),
+        loadSection('invoices', this.data.canViewInvoices, 'attachments?category=INVOICE'),
+        loadSection('others', this.data.canViewOtherAttachments, 'attachments?category=OTHER')
       ]);
       const logisticsList = (logistics || []).map(item => ({
         ...item,
@@ -960,6 +1027,7 @@ Page({
       const invoiceList = (invoices || []).map(mapAttachment);
       const otherAttachments = (others || []).map(mapAttachment);
       this.setData({
+        fulfillmentErrors,
         logisticsList,
         paymentAttachments,
         invoiceList,
@@ -1670,6 +1738,7 @@ Page({
   },
 
   async loadBusinessDocuments(documentType) {
+    if (!this.data.canViewContractContent) return;
     const { request } = require('../../utils/request');
     this.documentRequestSeq = this.documentRequestSeq || {};
     const requestSeq = (this.documentRequestSeq[documentType] || 0) + 1;

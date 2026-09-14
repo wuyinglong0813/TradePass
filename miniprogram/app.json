@@ -30,6 +30,7 @@
     "pages/contract-approval/contract-approval",
     "pages/auth-manage/auth-manage",
     "pages/company-cert/company-cert",
+    "pages/legal-representative/legal-representative",
     "pages/role-manage/role-manage"
   ],
   "window": {

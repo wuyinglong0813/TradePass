@@ -10,7 +10,7 @@
   </view>
 
   <!-- 当前账号的合同进展入口始终显示，避免埋在长合同底部。 -->
-  <view class="memo-summary {{contractReadOnly ? 'readonly' : ''}}" bindtap="openMemoEditor">
+  <view wx:if="{{canViewContractContent}}" class="memo-summary {{contractReadOnly ? 'readonly' : ''}}" bindtap="openMemoEditor">
     <view class="memo-summary-icon">记</view>
     <view class="memo-summary-body">
       <view class="memo-summary-head"><text>我的进展</text><text wx:if="{{memoUpdatedAt}}">{{memoUpdatedAt}}</text></view>
@@ -20,13 +20,14 @@
     <view class="memo-summary-arrow">›</view>
   </view>
 
-  <view class="contract-manage-actions" wx:if="{{canSignContract || canCancelContract || canEditContract || canDeleteContract || canRequestEnd || canRequestVoid || (activeContractAction && activeContractAction.bizType === 'CONTRACT')}}">
+  <view class="contract-manage-actions" wx:if="{{canSignContract || canCancelContract || canEditContract || canDeleteContract || canRequestEnd || canRequestVoid || canResumeContract || (activeContractAction && activeContractAction.bizType === 'CONTRACT')}}">
     <button class="contract-manage-button primary" wx:if="{{canSignContract}}" disabled="{{contractActionLoading}}" bindtap="signContract">{{signButtonText}}</button>
     <button class="contract-manage-button ghost" wx:if="{{canCancelContract}}" loading="{{contractActionLoading}}" disabled="{{contractActionLoading}}" bindtap="cancelContract">撤回审批</button>
     <button class="contract-manage-button primary" wx:if="{{canEditContract}}" disabled="{{contractActionLoading}}" bindtap="editContract">修改并重新发起</button>
     <button class="contract-manage-button danger" wx:if="{{canDeleteContract}}" loading="{{contractActionLoading}}" disabled="{{contractActionLoading}}" bindtap="deleteContract">删除合同</button>
     <button class="contract-manage-button ghost" wx:if="{{canRequestEnd}}" loading="{{contractActionLoading}}" disabled="{{contractActionLoading}}" bindtap="requestContractEnd">申请结束</button>
     <button class="contract-manage-button danger" wx:if="{{canRequestVoid}}" loading="{{contractActionLoading}}" disabled="{{contractActionLoading}}" bindtap="requestContractVoid">申请作废</button>
+    <button class="contract-manage-button ghost" wx:if="{{canResumeContract}}" loading="{{contractActionLoading}}" disabled="{{contractActionLoading}}" bindtap="requestContractResume">取消作废并恢复履约</button>
     <button class="contract-manage-button ghost" wx:if="{{activeContractAction && activeContractAction.bizType === 'CONTRACT' && activeContractAction.canCancel}}" bindtap="cancelContractBilateralAction">撤回申请</button>
     <button class="contract-manage-button ghost" wx:if="{{activeContractAction && activeContractAction.bizType === 'CONTRACT' && activeContractAction.canReview}}" data-decision="REJECT" bindtap="reviewContractAction">拒绝申请</button>
     <button class="contract-manage-button danger" wx:if="{{activeContractAction && activeContractAction.bizType === 'CONTRACT' && activeContractAction.canReview}}" data-decision="APPROVE" bindtap="reviewContractAction">确认{{activeContractAction.actionText}}</button>
@@ -37,7 +38,7 @@
     <view>合同将在双方依次完成签署并归档后生效。</view>
   </view>
   <view class="contract-lock-notice" wx:elif="{{signing && contract && contract.status === 'ACTIVE' && electronicAbolishing}}">
-    <view class="contract-lock-title">合同作废签署中</view>
+    <view class="contract-lock-title">{{signing.statusText || '合同作废签署中'}}</view>
     <view>双方完成作废签署前，合同履约资料暂时只读。</view>
   </view>
 
@@ -173,7 +174,7 @@
       <view class="document-sub">销售单、物流、付款、发票和其它资料集中展示</view>
     </view>
 
-    <view class="fulfillment-section">
+    <view class="fulfillment-section" wx:if="{{canViewContractContent}}">
       <view class="fulfillment-head">
         <view><view class="fulfillment-title"><text class="section-mark sales">销</text>销售单<text class="section-count">{{salesDocuments.length}}</text></view><view class="document-sub">待签可准备草稿，生效后发布给需方</view></view>
         <button class="section-upload" wx:if="{{canCreateSalesOrder}}" data-type="SALES_ORDER" bindtap="createBusinessDocument">＋ {{salesOrderCreateText}}</button>
@@ -186,7 +187,7 @@
       <view class="section-empty" wx:if="{{salesDocuments.length === 0}}">{{salesOrderEmptyHint}}</view>
     </view>
 
-    <view class="fulfillment-section">
+    <view class="fulfillment-section" wx:if="{{canViewContractContent}}">
       <view class="fulfillment-head">
         <view><view class="fulfillment-title"><text class="section-mark return">退</text>退货单<text class="section-count">{{returnDocuments.length}}</text></view><view class="document-sub">双方均可创建，对方确认后以负数冲减对账</view></view>
         <button class="section-upload" wx:if="{{canCreateReturnOrder}}" data-type="RETURN_ORDER" bindtap="createBusinessDocument">＋ 创建草稿</button>
@@ -199,7 +200,7 @@
       <view class="section-empty" wx:if="{{returnDocuments.length === 0}}">{{canCreateReturnOrder ? '暂无退货单，合同双方均可创建草稿' : '暂无退货单'}}</view>
     </view>
 
-    <view class="fulfillment-section">
+    <view class="fulfillment-section" wx:if="{{canViewContractContent}}">
       <view class="fulfillment-head">
         <view><view class="fulfillment-title"><text class="section-mark logistics">物</text>物流单<text class="section-count">{{logisticsList.length}}</text></view><view class="document-sub">拍照或从相册上传</view></view>
         <button class="section-upload" wx:if="{{!contractReadOnly}}" loading="{{logisticsUploading}}" disabled="{{logisticsUploading}}" bindtap="chooseLogisticsImage">上传</button>
@@ -209,47 +210,47 @@
         <view class="document-info"><view class="document-no">{{item.originalName}}</view><view class="document-meta">{{item.fileSizeText}} · {{item.dateText}}</view></view>
         <view class="document-actions"><view>查看</view><view class="danger-text" wx:if="{{item.canDelete}}" data-document="{{item}}" catchtap="deleteLogisticsDocument">删除</view></view>
       </view>
-      <view class="section-empty" wx:if="{{!fulfillmentLoading && logisticsList.length === 0}}">暂无物流单，点击上传添加</view>
+      <view class="section-empty" wx:if="{{!fulfillmentLoading && logisticsList.length === 0}}">{{fulfillmentErrors.logistics || '暂无物流单，点击上传添加'}}</view>
     </view>
 
-    <view class="fulfillment-section">
+    <view class="fulfillment-section" wx:if="{{canViewPayments}}">
       <view class="fulfillment-head">
         <view><view class="fulfillment-title"><text class="section-mark payment">款</text>转款凭证<text class="section-count">{{paymentAttachments.length}}</text></view><view class="document-sub">上传后需对方确认，通过后自动计入对账</view></view>
-        <button class="section-upload" wx:if="{{!contractReadOnly}}" loading="{{attachmentUploading}}" disabled="{{attachmentUploading}}" data-category="PAYMENT_VOUCHER" bindtap="chooseAttachment">上传</button>
+        <button class="section-upload" wx:if="{{canUploadAttachments && !contractReadOnly}}" loading="{{attachmentUploading}}" disabled="{{attachmentUploading}}" data-category="PAYMENT_VOUCHER" bindtap="chooseAttachment">上传</button>
       </view>
       <view class="document-card inner" wx:for="{{paymentAttachments}}" wx:key="id">
         <view class="document-badge payment">款</view>
         <view class="document-info"><view class="document-no">{{item.originalName}}</view><view class="document-meta payment-amount">{{item.voucherAmountText}} · {{item.voucherDate || '日期未填写'}}</view><view class="document-meta status-{{item.status}}">状态：{{item.statusText}}</view><view class="document-meta">{{item.uploaderCompanyName}} · {{item.fileSizeText}} · {{item.dateText}}</view><view class="document-meta reject" wx:if="{{item.rejectedReason}}">原因：{{item.rejectedReason}}</view></view>
         <view class="document-actions"><view data-attachment="{{item}}" bindtap="viewAttachment">查看</view><view data-attachment="{{item}}" bindtap="downloadAttachment">下载</view><view wx:if="{{item.canConfirm}}" data-attachment="{{item}}" bindtap="approveAttachment">通过</view><view wx:if="{{item.canConfirm}}" data-attachment="{{item}}" bindtap="rejectAttachment">驳回</view><view wx:if="{{item.canWithdraw}}" data-attachment="{{item}}" bindtap="withdrawAttachment">撤回</view><view class="danger-text" wx:if="{{item.canDelete}}" data-attachment="{{item}}" bindtap="deleteAttachment">删除</view><view class="danger-text" wx:if="{{item.canRequestVoid}}" data-attachment="{{item}}" bindtap="requestAttachmentVoid">申请作废</view><view wx:if="{{item.canReviewAction}}" data-attachment="{{item}}" data-decision="REJECT" bindtap="reviewAttachmentVoid">拒绝作废</view><view class="danger-text" wx:if="{{item.canReviewAction}}" data-attachment="{{item}}" data-decision="APPROVE" bindtap="reviewAttachmentVoid">确认作废</view></view>
       </view>
-      <view class="section-empty" wx:if="{{!fulfillmentLoading && paymentAttachments.length === 0}}">暂无转款凭证，点击上传添加</view>
+      <view class="section-empty" wx:if="{{!fulfillmentLoading && paymentAttachments.length === 0}}">{{fulfillmentErrors.payments || '暂无转款凭证'}}</view>
     </view>
 
-    <view class="fulfillment-section">
+    <view class="fulfillment-section" wx:if="{{canViewInvoices}}">
       <view class="fulfillment-head">
         <view><view class="fulfillment-title"><text class="section-mark invoice">票</text>发票<text class="section-count">{{invoiceList.length}}</text></view><view class="document-sub">填写日期和金额，对方通过后计入对账</view></view>
-        <button class="section-upload" wx:if="{{!contractReadOnly}}" loading="{{attachmentUploading}}" disabled="{{attachmentUploading}}" data-category="INVOICE" bindtap="chooseAttachment">上传</button>
+        <button class="section-upload" wx:if="{{canUploadAttachments && !contractReadOnly}}" loading="{{attachmentUploading}}" disabled="{{attachmentUploading}}" data-category="INVOICE" bindtap="chooseAttachment">上传</button>
       </view>
       <view class="document-card inner" wx:for="{{invoiceList}}" wx:key="id">
         <view class="document-badge invoice">票</view>
         <view class="document-info"><view class="document-no">{{item.invoiceNo || item.originalName}}</view><view class="document-meta payment-amount">{{item.invoiceAmountText}} · {{item.invoiceDate || '日期未填写'}}</view><view class="document-meta status-{{item.status}}">状态：{{item.statusText}}</view><view class="document-meta">{{item.uploaderCompanyName}} · {{item.fileSizeText}} · {{item.dateText}}</view><view class="document-meta reject" wx:if="{{item.rejectedReason}}">原因：{{item.rejectedReason}}</view></view>
         <view class="document-actions"><view data-attachment="{{item}}" bindtap="viewAttachment">查看</view><view data-attachment="{{item}}" bindtap="downloadAttachment">下载</view><view wx:if="{{item.canConfirm}}" data-attachment="{{item}}" bindtap="approveAttachment">通过</view><view wx:if="{{item.canConfirm}}" data-attachment="{{item}}" bindtap="rejectAttachment">驳回</view><view wx:if="{{item.canWithdraw}}" data-attachment="{{item}}" bindtap="withdrawAttachment">撤回</view><view class="danger-text" wx:if="{{item.canDelete}}" data-attachment="{{item}}" bindtap="deleteAttachment">删除</view><view class="danger-text" wx:if="{{item.canRequestVoid}}" data-attachment="{{item}}" bindtap="requestAttachmentVoid">申请作废</view><view wx:if="{{item.canReviewAction}}" data-attachment="{{item}}" data-decision="REJECT" bindtap="reviewAttachmentVoid">拒绝作废</view><view class="danger-text" wx:if="{{item.canReviewAction}}" data-attachment="{{item}}" data-decision="APPROVE" bindtap="reviewAttachmentVoid">确认作废</view></view>
       </view>
-      <view class="section-empty" wx:if="{{!fulfillmentLoading && invoiceList.length === 0}}">暂无发票，点击上传添加</view>
+      <view class="section-empty" wx:if="{{!fulfillmentLoading && invoiceList.length === 0}}">{{fulfillmentErrors.invoices || '暂无发票'}}</view>
     </view>
 
     <!-- 其它始终放在履约资料最后。 -->
-    <view class="fulfillment-section">
+    <view class="fulfillment-section" wx:if="{{canViewOtherAttachments}}">
       <view class="fulfillment-head">
         <view><view class="fulfillment-title"><text class="section-mark other">资</text>其它<text class="section-count">{{otherAttachments.length}}</text></view><view class="document-sub">支持图片、PDF、Word，合同双方可查看下载</view></view>
-        <button class="section-upload" wx:if="{{!contractReadOnly}}" loading="{{attachmentUploading}}" disabled="{{attachmentUploading}}" data-category="OTHER" bindtap="chooseAttachment">上传</button>
+        <button class="section-upload" wx:if="{{canUploadAttachments && !contractReadOnly}}" loading="{{attachmentUploading}}" disabled="{{attachmentUploading}}" data-category="OTHER" bindtap="chooseAttachment">上传</button>
       </view>
       <view class="document-card inner" wx:for="{{otherAttachments}}" wx:key="id">
         <view class="document-badge other">资</view>
         <view class="document-info"><view class="document-no">{{item.originalName}}</view><view class="document-meta">{{item.uploaderCompanyName}} · {{item.fileSizeText}} · {{item.dateText}}</view></view>
         <view class="document-actions"><view data-attachment="{{item}}" bindtap="viewAttachment">查看</view><view data-attachment="{{item}}" bindtap="downloadAttachment">下载</view><view class="danger-text" wx:if="{{item.canDelete}}" data-attachment="{{item}}" bindtap="deleteAttachment">删除</view></view>
       </view>
-      <view class="section-empty" wx:if="{{!fulfillmentLoading && otherAttachments.length === 0}}">暂无其它资料，点击上传添加</view>
+      <view class="section-empty" wx:if="{{!fulfillmentLoading && otherAttachments.length === 0}}">{{fulfillmentErrors.others || '暂无其它资料'}}</view>
     </view>
   </block>
 

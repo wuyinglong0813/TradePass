@@ -9,6 +9,7 @@ import com.tradepass.common.AuthContext;
 import com.tradepass.common.BusinessException;
 import com.tradepass.config.FadadaProperties;
 import com.tradepass.dto.response.FadadaCompanyIdentityPayload;
+import com.tradepass.dto.response.LegalRepresentativePayload;
 import com.tradepass.dto.response.ServiceUrlPayload;
 import com.tradepass.entity.Company;
 import com.tradepass.entity.FadadaCorpIdentity;
@@ -99,10 +100,58 @@ public class FadadaCompanyService {
     }
 
     @Transactional
-    public FadadaCompanyIdentityPayload sync(long companyId) {
-        FadadaCorpIdentity identity = find(companyId);
-        if (identity == null) return payload(companyId, null);
+    public ServiceUrlPayload createLegalRepresentativeUrl(long companyId) {
+        requireReady();
+        long userId = AuthContext.userId();
+        certificationService.requireLegalClaim(companyId, userId);
+        personalIdentityService.requireCurrentVerified();
+        FadadaCorpIdentity identity = requireVerified(companyId);
+        String url = gateway.createIdentityChangeUrl(identity.getClientCorpId(), identity.getOpenCorpId(),
+                "tradepass-user-" + userId);
+        validateUrl(url);
+        return new ServiceUrlPayload(url, "legal", "IN_PROGRESS");
+    }
+
+    @Transactional
+    public LegalRepresentativePayload syncLegalRepresentative(long companyId) {
+        requireReady();
+        long userId = AuthContext.userId();
+        certificationService.requireLegalClaim(companyId, userId);
+        personalIdentityService.requireCurrentVerified();
         Company company = requireCompany(companyId);
+        FadadaCorpIdentity identity = findForUpdate(companyId);
+        if (identity == null || !hasText(identity.getOpenCorpId())) {
+            throw new BusinessException("请先完成企业认证");
+        }
+        FadadaCompanyGateway.CompanyAccount account = gateway.getCompany(identity.getClientCorpId(), identity.getOpenCorpId());
+        FadadaCompanyGateway.CompanyIdentity detail = gateway.getIdentity(identity.getOpenCorpId());
+        verifyMatches(company, detail);
+        try {
+            if (resolveApplicantRole(identity, account, detail, userId) != CertifiedApplicantRole.LEGAL) {
+                return new LegalRepresentativePayload(String.valueOf(companyId), "IN_PROGRESS",
+                        "当前认证记录为授权经办人，请由法人本人进入核验并选择法人本人认证");
+            }
+        } catch (BusinessException exception) {
+            return new LegalRepresentativePayload(String.valueOf(companyId), "IN_PROGRESS", exception.getMessage());
+        }
+        String requestId = "FDD-LEGAL-" + identity.getClientCorpId() + "-" + userId;
+        certificationService.completeLegalClaim(companyId, userId, requestId);
+        // Adopt the proven current operator only after legal membership was granted in this transaction.
+        // The original application remains in the audit history; future callbacks follow this operator.
+        identity.setApplicantUserId(userId);
+        identity.setProviderRequestId(requestId);
+        storeVerifiedIdentity(company, identity, account, detail);
+        syncSealsBestEffort(identity);
+        identity.setLastSyncAt(LocalDateTime.now());
+        identityMapper.updateById(identity);
+        return new LegalRepresentativePayload(String.valueOf(companyId), "VERIFIED", "法人身份已核验，已开通法人权限");
+    }
+
+    @Transactional
+    public FadadaCompanyIdentityPayload sync(long companyId) {
+        Company company = requireCompany(companyId);
+        FadadaCorpIdentity identity = findForUpdate(companyId);
+        if (identity == null) return payload(companyId, null);
         FadadaCompanyGateway.CompanyAccount account = gateway.getCompany(
                 identity.getClientCorpId(), identity.getOpenCorpId());
         if (hasText(account.openCorpId())) identity.setOpenCorpId(account.openCorpId());
@@ -122,20 +171,11 @@ public class FadadaCompanyService {
                 identityMapper.updateById(identity);
                 return payload(companyId, identity);
             }
-            identity.setIdentStatus(detail.identStatus());
-            identity.setVerifiedName(detail.companyName());
-            identity.setVerifiedCreditCode(detail.creditCode());
-            identity.setVerifiedLegalRepName(detail.legalRepName());
-            identity.setIdentMethod(detail.identMethod());
-            identity.setOperatorType(detail.operatorType());
-            identity.setOperatorId(detail.operatorId());
-            identity.setVerifiedAt(parseTime(detail.verifiedAt(), LocalDateTime.now()));
-            identity.setLocalStatus("VERIFIED");
-            identity.setFailureReason("");
+            storeVerifiedIdentity(company, identity, account, detail);
             certificationService.completeProviderCertification(companyId, identity.getApplicantUserId(),
-                    "FDD-CORP-" + identity.getClientCorpId(),
+                    hasText(identity.getProviderRequestId()) ? identity.getProviderRequestId() : "FDD-CORP-" + identity.getClientCorpId(),
                     role == CertifiedApplicantRole.LEGAL ? "企业认证已完成，经办人为法人本人" : "企业认证已完成，经办人为授权代理人，开通管理员身份", role);
-            syncSeals(identity);
+            syncSealsBestEffort(identity);
         } else {
             identity.setLocalStatus("IN_PROGRESS");
         }
@@ -166,12 +206,26 @@ public class FadadaCompanyService {
                 : identityMapper.selectOne(new LambdaQueryWrapper<FadadaCorpIdentity>()
                     .eq(FadadaCorpIdentity::getOpenCorpId, openCorpId).last("LIMIT 1"));
         if (identity == null) return null;
+        // Resolve the callback target first, then reload under the same company lock used by
+        // legal claims. An earlier callback snapshot must not restore the former operator.
+        long companyId = identity.getCompanyId();
+        Company company = requireCompany(companyId);
+        identity = findForUpdate(companyId);
+        if (identity == null) return null;
         if (hasText(openCorpId)) identity.setOpenCorpId(openCorpId);
         String authResult = callbackText(data, "authResult");
         String process = callbackText(data, "corpIdentProcessStatus", "verifyStatus");
         String reason = callbackText(data, "corpIdentFailedReason", "authFailedReason");
         if ("fail".equalsIgnoreCase(authResult) || "failed".equalsIgnoreCase(authResult)
                 || "failed".equalsIgnoreCase(process)) {
+            // Callback delivery can be out of order. A fresh successful provider query takes
+            // precedence over an old failure, and a transient query error is retried by the callback worker.
+            if (identity.getVerifiedAt() != null || "VERIFIED".equals(identity.getLocalStatus())
+                    || "VERIFIED".equals(company.getCertificationStatus())) {
+                FadadaCompanyIdentityPayload latest = sync(identity.getCompanyId());
+                if ("VERIFIED".equals(latest.status())) return latest;
+                identity = findForUpdate(identity.getCompanyId());
+            }
             identity.setLocalStatus("FAILED");
             identity.setFailureReason(hasText(reason) ? reason : "企业认证未通过");
             identity.setLastSyncAt(LocalDateTime.now());
@@ -223,8 +277,21 @@ public class FadadaCompanyService {
         return seal.getSealId();
     }
 
-    private void syncSeals(FadadaCorpIdentity identity) {
-        List<FadadaCompanyGateway.SealInfo> remote = gateway.listSeals(identity.getOpenCorpId());
+    private void syncSealsBestEffort(FadadaCorpIdentity identity) {
+        List<FadadaCompanyGateway.SealInfo> remote;
+        try {
+            remote = gateway.listSeals(identity.getOpenCorpId());
+        } catch (RuntimeException exception) {
+            // Do not treat a provider read failure as failed identity verification. No local
+            // seal changes have occurred yet; the next refresh retries this separate step.
+            identity.setSealSyncWarning("企业认证已通过，电子印章暂未同步，请稍后刷新或进入印章管理");
+            return;
+        }
+        identity.setSealSyncWarning("");
+        syncSeals(identity, remote);
+    }
+
+    private void syncSeals(FadadaCorpIdentity identity, List<FadadaCompanyGateway.SealInfo> remote) {
         LocalDateTime now = LocalDateTime.now();
         sealMapper.update(null, new LambdaUpdateWrapper<FadadaCorpSeal>()
                 .eq(FadadaCorpSeal::getCompanyId, identity.getCompanyId())
@@ -258,7 +325,7 @@ public class FadadaCompanyService {
     }
 
     private FadadaCorpIdentity ensure(long companyId, long userId) {
-        FadadaCorpIdentity identity = find(companyId);
+        FadadaCorpIdentity identity = findForUpdate(companyId);
         if (identity != null) return identity;
         identity = new FadadaCorpIdentity();
         identity.setCompanyId(companyId);
@@ -277,6 +344,13 @@ public class FadadaCompanyService {
                 .eq(FadadaCorpIdentity::getCompanyId, companyId).last("LIMIT 1"));
     }
 
+    private FadadaCorpIdentity findForUpdate(long companyId) {
+        // Current read: callbacks can establish a REPEATABLE_READ snapshot during their
+        // initial identifier lookup, before waiting on the company lock.
+        return identityMapper.selectOne(new LambdaQueryWrapper<FadadaCorpIdentity>()
+                .eq(FadadaCorpIdentity::getCompanyId, companyId).last("LIMIT 1 FOR UPDATE"));
+    }
+
     private FadadaCompanyIdentityPayload payload(long companyId, FadadaCorpIdentity identity) {
         List<FadadaCompanyIdentityPayload.SealPayload> seals = sealMapper.selectList(
                         new LambdaQueryWrapper<FadadaCorpSeal>().eq(FadadaCorpSeal::getCompanyId, companyId)
@@ -290,7 +364,29 @@ public class FadadaCompanyService {
                 identity == null ? null : identity.getVerifiedCreditCode(),
                 identity == null || !hasText(identity.getFailureReason()) ? null : identity.getFailureReason(),
                 enabled, seals, identity == null || identity.getLastSyncAt() == null
-                ? null : identity.getLastSyncAt().toString());
+                ? null : identity.getLastSyncAt().toString(), identity == null ? null : identity.getSealSyncWarning());
+    }
+
+    private void storeVerifiedIdentity(Company company, FadadaCorpIdentity identity,
+                                       FadadaCompanyGateway.CompanyAccount account,
+                                       FadadaCompanyGateway.CompanyIdentity detail) {
+        identity.setOpenCorpId(account.openCorpId());
+        identity.setBindingStatus(account.bindingStatus());
+        identity.setAuthScopes(json(account.authScopes()));
+        identity.setIdentStatus(detail.identStatus());
+        identity.setVerifiedName(detail.companyName());
+        identity.setVerifiedCreditCode(detail.creditCode());
+        identity.setVerifiedLegalRepName(detail.legalRepName());
+        identity.setIdentMethod(detail.identMethod());
+        identity.setOperatorType(detail.operatorType());
+        identity.setOperatorId(detail.operatorId());
+        identity.setVerifiedAt(parseTime(detail.verifiedAt(), LocalDateTime.now()));
+        identity.setLocalStatus("VERIFIED");
+        identity.setFailureReason("");
+        // The verified company record is authoritative, even if the original form contained a typo.
+        companyMapper.update(new LambdaUpdateWrapper<Company>().eq(Company::getId, company.getId())
+                .set(Company::getLegalPersonName, detail.legalRepName().trim()));
+        company.setLegalPersonName(detail.legalRepName().trim());
     }
 
     private void verifyMatches(Company company, FadadaCompanyGateway.CompanyIdentity detail) {
@@ -298,13 +394,20 @@ public class FadadaCompanyService {
                 || !normalize(company.getCreditCode()).equals(normalize(detail.creditCode()))) {
             throw new BusinessException("认证信息与当前企业名称或统一社会信用代码不一致");
         }
+        if (!hasText(detail.legalRepName())) throw new BusinessException("认证服务尚未返回法定代表人信息，请稍后刷新");
     }
 
     private CertifiedApplicantRole resolveApplicantRole(FadadaCorpIdentity identity,
                                                         FadadaCompanyGateway.CompanyAccount account,
                                                         FadadaCompanyGateway.CompanyIdentity detail) {
+        return resolveApplicantRole(identity, account, detail, identity.getApplicantUserId());
+    }
+
+    private CertifiedApplicantRole resolveApplicantRole(FadadaCorpIdentity identity,
+                                                        FadadaCompanyGateway.CompanyAccount account,
+                                                        FadadaCompanyGateway.CompanyIdentity detail, long applicantUserId) {
         if (!"identified".equalsIgnoreCase(detail.identStatus())
-                || !account.openCorpId().equals(detail.openCorpId())
+                || !hasText(account.openCorpId()) || !account.openCorpId().equals(detail.openCorpId())
                 || (hasText(account.clientCorpId()) && !identity.getClientCorpId().equals(account.clientCorpId()))) {
             throw new BusinessException("企业认证结果尚未确认，请刷新认证状态");
         }
@@ -312,7 +415,7 @@ public class FadadaCompanyService {
                 || account.authScopes() == null || !account.authScopes().containsAll(AUTH_SCOPES)) {
             throw new BusinessException("企业授权尚未完成，请继续办理企业认证与授权");
         }
-        String applicantOpenUserId = personalIdentityService.verifiedOpenUserId(identity.getApplicantUserId());
+        String applicantOpenUserId = personalIdentityService.verifiedOpenUserId(applicantUserId);
         if (!hasText(detail.operatorId()) || !applicantOpenUserId.equals(detail.operatorId())) {
             throw new BusinessException("认证经办人与当前申请账号尚未匹配，请使用申请人本人账号完成认证或联系管理员核验");
         }

@@ -1069,6 +1069,7 @@ test('personal auth polling preserves provider page until verified and only read
     options.success({ statusCode: 200, data: { code: 0, data: { status } } });
   };
   const context = {
+    ...page,
     data: { scene: 'personal', options: {}, serviceUrl: 'https://example.test/auth' },
     scheduleStatusPoll() {},
     openReturnPage() { returned += 1; }
@@ -1569,7 +1570,7 @@ test('contract collaboration groups sales orders and uploadable invoices in fulf
   assert.ok(template.indexOf('>销售单<') < template.indexOf('>物流单<'));
   assert.ok(template.indexOf('>发票<') < template.indexOf('>其它<'));
   assert.ok(template.includes('data-category="INVOICE"'));
-  assert.ok(script.includes('/attachments?category=INVOICE'));
+  assert.ok(script.includes('attachments?category=INVOICE'));
   assert.ok(script.includes('showPaymentAmountEditor: true'));
   assert.ok(script.includes('voucherAmount: normalizedAmount'));
   assert.ok(!script.includes('DELIVERY_NOTE'));

@@ -84,8 +84,8 @@
           </view>
           <view class="card-actions">
             <button class="action ghost" data-contract="{{contract}}" catchtap="viewContract">查看合同</button>
-            <button class="action reject" data-contract="{{contract}}" catchtap="reject">拒绝</button>
-            <button class="action primary" data-contract="{{contract}}" catchtap="approve">同意签署</button>
+            <button class="action reject" wx:if="{{contract.perspective !== 'OUTGOING'}}" data-contract="{{contract}}" catchtap="reject">拒绝</button>
+            <button class="action primary" data-contract="{{contract}}" catchtap="approve">签署合同</button>
           </view>
         </view>
       </block>

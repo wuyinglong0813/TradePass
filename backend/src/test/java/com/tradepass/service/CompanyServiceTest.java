@@ -245,6 +245,19 @@ class CompanyServiceTest {
     }
 
     @Test
+    void verifiedLegalSuccessorCanMaintainCompanyOriginallyCreatedByAgent() {
+        Company company = company(3L, "认证名称");
+        company.setCreatedBy(99L); company.setLegalPersonName("已核验法人");
+        when(companyMapper.selectOne(any(Wrapper.class))).thenReturn(company);
+        when(companyMapper.selectById(3L)).thenReturn(company);
+        service.submitCompany(new CompanySubmitRequest("3", "认证名称", company.getCreditCode(), "已核验法人",
+                "法人更新地址", "13800138000", "银行", "123456"));
+        verify(accessControl).requireLegal(3L);
+        assertThat(company.getCreatedBy()).isEqualTo(99L);
+        assertThat(company.getRegisteredAddress()).isEqualTo("法人更新地址");
+    }
+
+    @Test
     void formerCreatorCannotEditVerifiedCompanyAfterLosingLegalRole() {
         Company company = company(3L, "认证名称"); company.setCreatedBy(7L);
         when(companyMapper.selectOne(any(Wrapper.class))).thenReturn(company);
@@ -303,11 +316,13 @@ class CompanyServiceTest {
         existing.setCreatedBy(99L);
         existing.setBankAccount("6222021234567890123");
         when(companyMapper.selectOne(any(Wrapper.class))).thenReturn(existing);
+        org.mockito.Mockito.doThrow(new BusinessException("无权操作：仅法人可执行"))
+                .when(accessControl).requireLegal(11L);
 
         assertThatThrownBy(() -> service.submitCompany(
                 new CompanySubmitRequest("11", "已入驻企业", existing.getCreditCode(), "法人")))
                 .isInstanceOf(BusinessException.class)
-                .hasMessage("企业已入驻，请通过企业邀请或认领流程加入");
+                .hasMessage("无权操作：仅法人可执行");
     }
 
     @Test

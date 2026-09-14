@@ -3,6 +3,7 @@ package com.tradepass.service;
 import com.tradepass.common.ApplicationIds;
 
 import com.tradepass.common.AuthContext;
+import com.tradepass.mapper.ContractSigningTodoSql;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -81,10 +82,7 @@ public class ApprovalService {
         long companyId = AuthContext.requireCompanyId();
         long pendingContracts = 0;
         if (accessControlService.hasPermission(companyId, "contract_sign")) {
-            pendingContracts = count("""
-                    SELECT COUNT(1) FROM trade_contract
-                    WHERE counterparty_company_id = ? AND status = 'PENDING'
-                    """, companyId);
+            pendingContracts = count(ContractSigningTodoSql.jdbcCount(), companyId);
         }
         long pendingFulfillment = 0;
         if (canReviewTradeDocuments(companyId)) {
@@ -252,7 +250,7 @@ public class ApprovalService {
                             ? (ContractAttachmentService.INVOICE.equals(category) ? "发票" : "转款凭证")
                             : "业务单据");
                     Map<String, Object> view = item(rs.getLong("id"), "BILATERAL_ACTION",
-                            targetText + ("END".equals(actionType) ? "结束" : "作废"),
+                            targetText + ("END".equals(actionType) ? "结束" : ("RESUME".equals(actionType) ? "恢复履约" : "作废")),
                             rs.getLong("source_company_id"), rs.getString("source_company_name"),
                             rs.getLong("contract_id"), rs.getString("contract_no"),
                             rs.getString("contract_name"), rs.getString("document_no"),

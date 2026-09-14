@@ -7,6 +7,35 @@ import static org.assertj.core.api.Assertions.*;
 
 class SdkFadadaCompanyGatewayTest {
     @Test
+    @SuppressWarnings("unchecked")
+    void legalVerificationUrlBindsTheCurrentPersonalAccountToTheVerifiedEnterprise() throws Exception {
+        var properties = new com.tradepass.config.FadadaProperties();
+        properties.setAppId("test-app"); properties.setAppSecret("test-secret");
+        properties.setServerUrl("https://example.test");
+        var tokens = org.mockito.Mockito.mock(FadadaAccessTokenProvider.class);
+        org.mockito.Mockito.when(tokens.get()).thenReturn("test-token");
+        var gateway = new SdkFadadaCompanyGateway(properties, tokens);
+        var corpClient = org.mockito.Mockito.mock(com.fasc.open.api.v5_1.client.CorpClient.class);
+        org.springframework.test.util.ReflectionTestUtils.setField(gateway, "corpClient", corpClient);
+        var detail = new com.fasc.open.api.v5_1.res.corp.GetChangeCorpIdentityInfoUrlRes();
+        detail.setChangeIdentityInfoUrl("https://example.test/legal");
+        com.fasc.open.api.bean.base.BaseRes<com.fasc.open.api.v5_1.res.corp.GetChangeCorpIdentityInfoUrlRes> response =
+                org.mockito.Mockito.mock(com.fasc.open.api.bean.base.BaseRes.class);
+        org.mockito.Mockito.when(response.isSuccess()).thenReturn(true);
+        org.mockito.Mockito.when(response.getData()).thenReturn(detail);
+        org.mockito.Mockito.when(corpClient.getChangeCorpIdentityInfoUrl(org.mockito.ArgumentMatchers.any())).thenAnswer(call -> {
+            var request = (com.fasc.open.api.v5_1.req.corp.GetChangeCorpIdentityInfoUrlReq) call.getArgument(0);
+            assertThat(request.getOpenCorpId()).isEqualTo("open-3");
+            assertThat(request.getClientCorpId()).isNull();
+            assertThat(request.getClientUserId()).isEqualTo("tradepass-user-9");
+            assertThat(request.getAccessToken()).isEqualTo("test-token");
+            return response;
+        });
+        assertThat(gateway.createIdentityChangeUrl("local-3", "open-3", "tradepass-user-9"))
+                .isEqualTo("https://example.test/legal");
+    }
+
+    @Test
     void preservesProviderOperatorIdentityInsteadOfInferringItFromCompanyCertification() {
         var response = new com.fasc.open.api.v5_1.res.corp.CorpIdentityInfoRes();
         response.setOpenCorpId("corp-3");

@@ -1,6 +1,7 @@
 package com.tradepass.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tradepass.common.AuthContext;
 import com.tradepass.common.BusinessException;
@@ -20,6 +21,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.time.LocalDateTime;
 import java.time.Duration;
@@ -38,6 +40,10 @@ public class FadadaContractSigningService {
     private final TradeService tradeService;
     private final FadadaProperties properties;
     private final JdbcTemplate jdbc;
+    private ContractAbolishIntentService abolishIntents;
+
+    @Autowired
+    void setAbolishIntentService(ContractAbolishIntentService service) { this.abolishIntents = service; }
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final BoundedBinaryCache signedPreviewCache =
             new BoundedBinaryCache(Duration.ofMinutes(30), 64L * 1024 * 1024);
@@ -76,10 +82,17 @@ public class FadadaContractSigningService {
         accessControl.requirePermission(companyId, "contract_sign");
         TradeContract contract = requireParty(contractId, companyId, true);
         if (!"PENDING".equals(contract.getStatus())) throw new BusinessException("当前合同不在待签署状态");
-        FadadaContractSignTask task = prepare(contract);
+        FadadaContractSignTask task = contract.getCompanyId().equals(companyId) ? prepare(contract) : find(contract, true);
+        if (task == null || !hasText(task.getSignTaskId())) {
+            throw new BusinessException("请等待合同发起方先完成签署");
+        }
         task = sync(task, contract);
         String actorId = actorId(task, companyId);
         if (isSigned(actorStatus(task, companyId))) throw new BusinessException("当前企业已完成签署，请等待对方签署");
+        if (terminal(task.getProviderStatus())) throw new BusinessException("签署任务已结束，请刷新合同状态");
+        if (!contract.getCompanyId().equals(companyId) && !isSigned(task.getInitiatorSignStatus())) {
+            throw new BusinessException("请等待合同发起方先完成签署");
+        }
         String url = gateway.actorUrl(task.getSignTaskId(), actorId,
                 "tradepass-user-" + AuthContext.userId(),
                 "/pages/service-return/service-return?scene=contract&contractId=" + contractId);
@@ -93,7 +106,7 @@ public class FadadaContractSigningService {
         long companyId = AuthContext.requireCompanyId();
         accessControl.requireAnyPermission(companyId, "contract_view", "contract_sign");
         TradeContract contract = requireParty(contractId, companyId, true);
-        FadadaContractSignTask task = find(contract);
+        FadadaContractSignTask task = find(contract, true);
         if (task == null || !hasText(task.getSignTaskId())) return payload(contract, task);
         task = sync(task, contract);
         return payload(contractMapper.selectByIdForUpdate(contractId), task);
@@ -121,49 +134,98 @@ public class FadadaContractSigningService {
                 .and(query -> query.eq(FadadaContractSignTask::getSignTaskId, signTaskId)
                         .or().eq(FadadaContractSignTask::getAbolishedSignTaskId, signTaskId))
                 .last("LIMIT 1"));
-        if (task == null) throw new BusinessException("签署任务尚未就绪，请稍后重试");
+        if (task == null) {
+            if (syncCancelledAbolishTask(signTaskId, false)) return;
+            if (recoverUnknownAbolishCallback(signTaskId)) return;
+            throw new BusinessException("签署任务尚未就绪，请稍后重试");
+        }
         TradeContract contract = contractMapper.selectByIdForUpdate(task.getContractId());
         if (contract == null || version(contract) != taskVersion(task)) return;
         // Locking read refreshes task state after another callback committed.
         task = taskMapper.selectOne(new LambdaQueryWrapper<FadadaContractSignTask>()
                 .eq(FadadaContractSignTask::getId, task.getId()).last("LIMIT 1 FOR UPDATE"));
-        if (task != null) sync(task, contract);
+        if (task != null && !signTaskId.equals(task.getSignTaskId())
+                && !signTaskId.equals(task.getAbolishedSignTaskId())) {
+            if (!syncCancelledAbolishTask(signTaskId, true)) throw new BusinessException("签署任务关联状态已变化，请稍后重试");
+        } else if (task != null) {
+            sync(task, contract);
+        }
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = BusinessException.class)
     public ServiceUrlPayload abolishUrl(Long contractId, String reason) {
         requireReady();
         long companyId = AuthContext.requireCompanyId();
         accessControl.requirePermission(companyId, "contract_sign");
         TradeContract contract = requireParty(contractId, companyId, true);
         if (!"ACTIVE".equals(contract.getStatus())) throw new BusinessException("仅履约中的合同可以发起作废签署");
-        Long approved = jdbc.queryForObject("""
-                SELECT COUNT(1) FROM bilateral_action_request
+        var approved = jdbc.queryForList("""
+                SELECT id FROM bilateral_action_request
                 WHERE contract_id = ? AND biz_type = 'CONTRACT' AND action_type = 'VOID'
-                  AND status = 'APPROVED'
+                  AND status = 'APPROVED' FOR UPDATE
                 """, Long.class, contractId);
-        if (approved == null || approved == 0) {
+        if (approved.isEmpty()) {
             throw new BusinessException("请先由双方确认合同作废申请");
         }
-        FadadaContractSignTask task = find(contract);
+        var recovering = jdbc.queryForList("""
+                SELECT id FROM bilateral_action_request
+                WHERE contract_id = ? AND action_type = 'RESUME' AND status = 'PENDING'
+                FOR UPDATE
+                """, Long.class, contractId);
+        if (!recovering.isEmpty()) throw new BusinessException("双方正在确认恢复履约，请先处理恢复申请");
+        FadadaContractSignTask task = find(contract, true);
         if (task == null || !hasText(task.getSignTaskId())) throw new BusinessException("该合同没有电子签署记录");
+        reconcileAbolishIntent(task);
         if (!hasText(task.getAbolishedSignTaskId()) || abolishRetryable(task.getProviderStatus())) {
-            task.setAbolishedSignTaskId(gateway.abolish(task.getSignTaskId(), safeReason(reason), properties.getCallbackUrl()));
+            if (hasText(task.getAbolishedSignTaskId())) {
+                var oldStatus = gateway.status(task.getAbolishedSignTaskId());
+                if (oldStatus == null || !ContractAbolishRecoveryService.stopped(oldStatus.status())) {
+                    throw new BusinessException("上一作废任务尚未确认终止，请先同步状态");
+                }
+                jdbc.update("""
+                        INSERT IGNORE INTO fadada_cancelled_abolish_task
+                        (sign_task_id, contract_id, version_no, original_sign_task_id)
+                        VALUES (?, ?, ?, ?)
+                        """, task.getAbolishedSignTaskId(), contractId, version(contract), task.getSignTaskId());
+            }
+            if (abolishIntents == null) throw new BusinessException("作废任务安全记录服务不可用，请稍后重试");
+            String intentId = abolishIntents.begin(task);
+            String previousChildId = task.getAbolishedSignTaskId();
+            try {
+                String abolishId = gateway.abolish(task.getSignTaskId(), safeReason(reason), properties.getCallbackUrl());
+                if (!hasText(abolishId) || abolishId.equals(previousChildId)) throw new BusinessException("未返回新的作废任务编号");
+                task.setAbolishedSignTaskId(abolishId);
+            } catch (RuntimeException exception) {
+                task.setProviderStatus("ABOLISH_CREATION_UNCERTAIN");
+                task.setLastError(shortMessage(exception));
+                taskMapper.updateById(task);
+                throw new BusinessException("作废任务创建结果尚未确认，合同保持只读，请核实电子签记录后处理");
+            }
             task.setProviderStatus("abolishing");
             task.setInitiatorSignStatus(null);
             task.setCounterpartySignStatus(null);
-            taskMapper.updateById(task);
+            taskMapper.update(task, new LambdaUpdateWrapper<FadadaContractSignTask>()
+                    .eq(FadadaContractSignTask::getId, task.getId())
+                    .set(FadadaContractSignTask::getInitiatorSignStatus, null)
+                    .set(FadadaContractSignTask::getCounterpartySignStatus, null));
+            abolishIntents.confirm(intentId, task.getAbolishedSignTaskId());
         }
         String actorId = actorId(task, companyId);
-        String url = gateway.actorUrl(task.getAbolishedSignTaskId(), actorId,
-                "tradepass-user-" + AuthContext.userId(),
-                "/pages/service-return/service-return?scene=abolish&contractId=" + contractId);
+        String url;
+        try {
+            url = gateway.actorUrl(task.getAbolishedSignTaskId(), actorId,
+                    "tradepass-user-" + AuthContext.userId(),
+                    "/pages/service-return/service-return?scene=abolish&contractId=" + contractId);
+        } catch (RuntimeException exception) {
+            // Keep the successfully created provider id even when loading its page fails.
+            throw new BusinessException("作废任务已保留，签署页面暂时无法打开，请稍后重试");
+        }
         validateUrl(url);
         return new ServiceUrlPayload(url, "abolish", task.getProviderStatus());
     }
 
     private FadadaContractSignTask prepare(TradeContract contract) {
-        FadadaContractSignTask existing = find(contract);
+        FadadaContractSignTask existing = find(contract, true);
         if (existing != null && hasText(existing.getSignTaskId())) return existing;
         Company initiator = requireCompany(contract.getCompanyId());
         Company counterparty = requireCompany(contract.getCounterpartyCompanyId());
@@ -189,7 +251,7 @@ public class FadadaContractSigningService {
             try {
                 taskMapper.insert(task);
             } catch (DuplicateKeyException concurrent) {
-                FadadaContractSignTask winner = find(contract);
+                FadadaContractSignTask winner = find(contract, true);
                 if (winner != null && hasText(winner.getSignTaskId())) return winner;
                 throw new BusinessException("签署文件正在准备，请稍后重试");
             }
@@ -219,8 +281,13 @@ public class FadadaContractSigningService {
     }
 
     private FadadaContractSignTask sync(FadadaContractSignTask task, TradeContract contract) {
+        return sync(task, contract, true);
+    }
+
+    private FadadaContractSignTask sync(FadadaContractSignTask task, TradeContract contract, boolean reconcileIntent) {
         if (!contract.getId().equals(task.getContractId()) || version(contract) != taskVersion(task)) return task;
         if (!"PENDING".equals(contract.getStatus()) && !"ACTIVE".equals(contract.getStatus())) return task;
+        if (reconcileIntent) reconcileAbolishIntent(task);
         String remoteTaskId = hasText(task.getAbolishedSignTaskId())
                 ? task.getAbolishedSignTaskId() : task.getSignTaskId();
         FadadaSigningGateway.TaskStatus status = gateway.status(remoteTaskId);
@@ -266,14 +333,24 @@ public class FadadaContractSigningService {
                   AND status = 'APPROVED'
                 """, Long.class, contract.getId()) : 0L;
         boolean abolishApproved = approvedCount != null && approvedCount > 0;
+        Long recoveryCount = active ? jdbc.queryForObject("""
+                SELECT COUNT(1) FROM bilateral_action_request
+                WHERE contract_id = ? AND biz_type = 'CONTRACT' AND action_type = 'RESUME'
+                  AND status = 'PENDING'
+                """, Long.class, contract.getId()) : 0L;
+        boolean recoveryPending = recoveryCount != null && recoveryCount > 0;
         boolean abolishing = active && task != null && hasText(task.getAbolishedSignTaskId())
                 && !"revoked".equalsIgnoreCase(status);
-        boolean canSign = (pending && !isSigned(actorStatus)
+        boolean firstSignerReady = contract.getCompanyId().equals(companyId)
+                || task != null && isSigned(task.getInitiatorSignStatus());
+        boolean canSign = (pending && firstSignerReady && !isSigned(actorStatus)
                 && (task == null || (!terminal(status) && !hasText(task.getAbolishedSignTaskId()))))
                 || (abolishing && !isSigned(actorStatus))
                 || (active && abolishApproved && task != null && hasText(task.getSignTaskId())
                     && !hasText(task.getAbolishedSignTaskId()));
-        return new ContractSigningPayload(String.valueOf(contract.getId()), status, statusText(status),
+        canSign = canSign && !recoveryPending && !"ABOLISH_CREATION_UNCERTAIN".equals(status);
+        String displayStatus = pending && !firstSignerReady ? "等待发起方签署" : statusText(status);
+        return new ContractSigningPayload(String.valueOf(contract.getId()), status, displayStatus,
                 task == null ? null : task.getInitiatorSignStatus(),
                 task == null ? null : task.getCounterpartySignStatus(), canSign,
                 pending && contract.getCompanyId().equals(companyId),
@@ -285,6 +362,30 @@ public class FadadaContractSigningService {
 
     private int version(TradeContract contract) {
         return contract.getVersionNo() == null ? 1 : contract.getVersionNo();
+    }
+
+    private boolean syncCancelledAbolishTask(String signTaskId, boolean contractLocked) {
+        var rows = jdbc.query("""
+                SELECT contract_id, version_no FROM fadada_cancelled_abolish_task WHERE sign_task_id = ?
+                """ + (contractLocked ? " FOR UPDATE" : ""),
+                (rs, row) -> new long[]{rs.getLong("contract_id"), rs.getLong("version_no")}, signTaskId);
+        if (rows.isEmpty()) return false;
+        TradeContract contract = contractMapper.selectByIdForUpdate(rows.get(0)[0]);
+        if (contract == null || version(contract) != rows.get(0)[1]) return true;
+        FadadaSigningGateway.TaskStatus remote = gateway.status(signTaskId);
+        if (remote == null || !hasText(remote.status())) throw new BusinessException("无法核实已取消作废任务的状态");
+        if ("task_finished".equalsIgnoreCase(remote.status()) || "revoked".equalsIgnoreCase(remote.status())) {
+            // A real completion arriving after recovery wins over local recovery state.
+            tradeService.voidAfterElectronicAbolish(contract.getId(), version(contract), safeUserId(contract));
+            taskMapper.update(new LambdaUpdateWrapper<FadadaContractSignTask>()
+                    .eq(FadadaContractSignTask::getContractId, contract.getId())
+                    .eq(FadadaContractSignTask::getVersionNo, version(contract))
+                    .set(FadadaContractSignTask::getProviderStatus, "revoked")
+                    .set(FadadaContractSignTask::getFinishedAt, LocalDateTime.now()));
+        } else if (!ContractAbolishRecoveryService.stopped(remote.status())) {
+            throw new BusinessException("已取消作废任务的远程状态发生变化，需要核实处理");
+        }
+        return true;
     }
 
     private int taskVersion(FadadaContractSignTask task) {
@@ -314,10 +415,57 @@ public class FadadaContractSigningService {
     }
 
     private FadadaContractSignTask find(TradeContract contract) {
+        return find(contract, false);
+    }
+
+    private FadadaContractSignTask find(TradeContract contract, boolean lock) {
         return taskMapper.selectOne(new LambdaQueryWrapper<FadadaContractSignTask>()
                 .eq(FadadaContractSignTask::getContractId, contract.getId())
                 .eq(FadadaContractSignTask::getVersionNo, contract.getVersionNo() == null ? 1 : contract.getVersionNo())
-                .last("LIMIT 1"));
+                .last(lock ? "LIMIT 1 FOR UPDATE" : "LIMIT 1"));
+    }
+
+    private void reconcileAbolishIntent(FadadaContractSignTask task) {
+        var pending = abolishIntents == null ? List.<ContractAbolishIntentService.PendingIntent>of()
+                : abolishIntents.pending(task);
+        if (pending.isEmpty() && !"ABOLISH_CREATION_UNCERTAIN".equals(task.getProviderStatus())) return;
+        var parent = gateway.status(task.getSignTaskId());
+        String childId = parent == null ? null : parent.abolishedSignTaskId();
+        if (!hasText(childId) || pending.stream().anyMatch(item -> childId.equals(item.previousTaskId()))) {
+            throw new BusinessException("作废任务创建结果尚未确认，请稍后刷新签署状态或核实电子签记录");
+        }
+        var child = gateway.status(childId);
+        if (child == null || !task.getSignTaskId().equals(child.originalSignTaskId())
+                || !childId.equals(child.signTaskId())) {
+            throw new BusinessException("无法确认作废协议与原合同的对应关系，合同保持只读");
+        }
+        task.setAbolishedSignTaskId(childId);
+        task.setProviderStatus("abolishing");
+        task.setInitiatorSignStatus(null);
+        task.setCounterpartySignStatus(null);
+        task.setLastError("");
+        taskMapper.update(task, new LambdaUpdateWrapper<FadadaContractSignTask>()
+                .eq(FadadaContractSignTask::getId, task.getId())
+                .set(FadadaContractSignTask::getInitiatorSignStatus, null)
+                .set(FadadaContractSignTask::getCounterpartySignStatus, null));
+        for (var intent : pending) abolishIntents.confirm(intent.id(), childId);
+    }
+
+    private boolean recoverUnknownAbolishCallback(String childId) {
+        if (abolishIntents == null) return false;
+        var child = gateway.status(childId);
+        if (child == null || !hasText(child.originalSignTaskId()) || !childId.equals(child.signTaskId())) return false;
+        var task = taskMapper.selectOne(new LambdaQueryWrapper<FadadaContractSignTask>()
+                .eq(FadadaContractSignTask::getSignTaskId, child.originalSignTaskId()).last("LIMIT 1"));
+        if (task == null) return false;
+        var contract = contractMapper.selectByIdForUpdate(task.getContractId());
+        if (contract == null || version(contract) != taskVersion(task)) return false;
+        task = find(contract, true);
+        if (task == null || abolishIntents.pending(task).isEmpty()) return false;
+        reconcileAbolishIntent(task);
+        if (!childId.equals(task.getAbolishedSignTaskId())) return false;
+        sync(task, contract, false);
+        return true;
     }
 
     private TradeContract requireParty(Long contractId, long companyId) {
@@ -357,7 +505,8 @@ public class FadadaContractSigningService {
     }
 
     private boolean terminal(String status) {
-        return status != null && (status.contains("terminated") || status.contains("expired")
+        return status != null && (status.toLowerCase(java.util.Locale.ROOT).contains("terminated")
+                || status.toLowerCase(java.util.Locale.ROOT).contains("expired")
                 || status.equalsIgnoreCase("task_finished") || status.equalsIgnoreCase("revoked"));
     }
 
@@ -368,6 +517,8 @@ public class FadadaContractSigningService {
 
     private String statusText(String status) {
         if (status == null) return "待准备";
+        if ("ABOLISH_CREATION_UNCERTAIN".equals(status)) return "作废任务结果待核实";
+        if (status.startsWith("ABOLISH_") && abolishRetryable(status)) return "作废签署已中止，可重试或申请恢复履约";
         if (status.startsWith("ABOLISH_") || "abolishing".equals(status)) return "作废签署中";
         return switch (status) {
             case "CREATING" -> "正在准备签署文件";

@@ -57,6 +57,7 @@ class AuthServiceTest {
     void setUp() {
         MybatisTestSupport.initialize(SysUser.class, CompanyMember.class, PermDef.class, BusinessDocument.class);
         userMapper = mock(SysUserMapper.class);
+        when(userMapper.update(any(Wrapper.class))).thenReturn(1);
         companyMapper = mock(CompanyMapper.class);
         memberMapper = mock(CompanyMemberMapper.class);
         permissionMapper = mock(PermDefMapper.class);
@@ -140,15 +141,91 @@ class AuthServiceTest {
     void bindsPhoneOnlyInDevelopmentAndReturnsMemberProfile() {
         AuthContext.set(7L, 3L);
         assertThatThrownBy(() -> service(false).bindPhone(new BindPhoneRequest("13800000000")))
-                .hasMessage("请使用微信手机号验证完成绑定");
+                .hasMessage("生产环境不接受未经验证的手机号");
 
         AuthService devService = service(true);
+        when(userMapper.selectById(7L)).thenReturn(phoneBindingUser());
         when(memberMapper.selectMemberInfo(7L, 3L)).thenReturn(memberRow(7L, "FINANCE", "ACTIVE"));
         UserProfile profile = devService.bindPhone(new BindPhoneRequest("13800000000"));
 
         assertThat(profile.currentCompanyId()).isEqualTo("3");
         assertThat(profile.currentRole()).isEqualTo("FINANCE");
         verify(userMapper).update(any(Wrapper.class));
+    }
+
+    @Test
+    void guestBindsVerifiedWechatPhoneInProductionWithoutJoiningCompany() {
+        AuthContext.set(7L, null);
+        when(userMapper.selectById(7L)).thenReturn(phoneBindingUser());
+        when(wechatService.resolvePhoneByCode("trusted-code")).thenReturn("13800000000");
+
+        UserProfile result = service(false).bindPhone(new BindPhoneRequest(null, "trusted-code"));
+
+        assertThat(result.id()).isEqualTo("7");
+        assertThat(result.openid()).isEqualTo("real-openid");
+        assertThat(result.nickname()).isEqualTo("电脑用户");
+        assertThat(result.phone()).isEqualTo("13800000000");
+        assertThat(result.currentCompanyId()).isNull();
+        assertThat(result.currentRole()).isEqualTo("GUEST");
+        verify(wechatService).resolvePhoneByCode("trusted-code");
+        verify(userMapper).update(any(Wrapper.class));
+    }
+
+    @Test
+    void rejectedWechatPhoneCodeCannotWritePhone() {
+        AuthContext.set(7L, null);
+        when(wechatService.resolvePhoneByCode("expired-code"))
+                .thenThrow(new BusinessException("微信凭证已失效"));
+        assertThatThrownBy(() -> service(false).bindPhone(new BindPhoneRequest(null, "expired-code")))
+                .hasMessage("微信凭证已失效");
+        verify(userMapper, never()).update(any(Wrapper.class));
+    }
+
+    @Test
+    void productionBindingRequiresVerifiedCodeAndRejectsConcurrentPhoneReplacement() {
+        AuthContext.set(7L, null);
+        assertThatThrownBy(() -> service(false).bindPhone(new BindPhoneRequest(null, null)))
+                .hasMessage("请使用微信手机号验证完成绑定");
+        when(userMapper.selectById(7L)).thenReturn(phoneBindingUser());
+        when(wechatService.resolvePhoneByCode("trusted-code")).thenReturn("13800000000");
+        when(userMapper.update(any(Wrapper.class))).thenReturn(0);
+        assertThatThrownBy(() -> service(false).bindPhone(new BindPhoneRequest(null, "trusted-code")))
+                .hasMessage("账号手机号状态已变化，请刷新后重试");
+    }
+
+    @Test
+    void bindingDoesNotMergePhoneOwnedByAnotherAccount() {
+        AuthContext.set(7L, null);
+        when(userMapper.selectById(7L)).thenReturn(phoneBindingUser());
+        when(wechatService.resolvePhoneByCode("trusted-code")).thenReturn("13800000000");
+        SysUser other = phoneBindingUser();
+        other.setId(8L);
+        when(userMapper.selectOne(any(Wrapper.class))).thenReturn(other);
+        assertThatThrownBy(() -> service(false).bindPhone(new BindPhoneRequest(null, "trusted-code")))
+                .hasMessageContaining("已绑定其他账号");
+        verify(userMapper, never()).update(any(Wrapper.class));
+        verify(sessionService, never()).issue(anyLong());
+    }
+
+    @Test
+    void bindingCannotReplaceAnExistingVerifiedPhone() {
+        AuthContext.set(7L, null);
+        SysUser user = phoneBindingUser();
+        user.setPhone("13900000000");
+        when(userMapper.selectById(7L)).thenReturn(user);
+        when(wechatService.resolvePhoneByCode("trusted-code")).thenReturn("13800000000");
+        assertThatThrownBy(() -> service(false).bindPhone(new BindPhoneRequest(null, "trusted-code")))
+                .hasMessageContaining("变更手机号请联系管理员");
+        verify(userMapper, never()).update(any(Wrapper.class));
+    }
+
+    private SysUser phoneBindingUser() {
+        SysUser user = new SysUser();
+        user.setId(7L);
+        user.setOpenid("real-openid");
+        user.setNickname("电脑用户");
+        user.setStatus("ACTIVE");
+        return user;
     }
 
     @Test
@@ -167,7 +244,8 @@ class AuthServiceTest {
         Company company = company(3L, "当前企业", 7L);
         company.setCertificationStatus("PENDING_REVIEW");
         when(companyMapper.selectById(3L)).thenReturn(company);
-        when(contractMapper.selectCount(any(Wrapper.class))).thenReturn(3L);
+        when(accessControlService.hasPermission(3L, "contract_sign")).thenReturn(true);
+        when(contractMapper.countContractsAwaitingSignature(3L)).thenReturn(3L);
 
         List<TodoItem> todos = service.myTodos();
         assertThat(todos).extracting(TodoItem::type)
@@ -193,6 +271,16 @@ class AuthServiceTest {
         assertThat(todos.get(0).type()).isEqualTo("SALES_ORDER");
         assertThat(todos.get(0).count()).isEqualTo(2);
         assertThat(todos.get(0).target()).isEqualTo("sales-order-detail:44");
+    }
+
+    @Test
+    void contractSignerGetsOwnSigningTodoWithoutMemberManagementPermission() {
+        AuthContext.set(7L, 3L);
+        when(accessControlService.hasPermission(3L, "contract_sign")).thenReturn(true);
+        when(contractMapper.countContractsAwaitingSignature(3L)).thenReturn(1L);
+        List<TodoItem> todos = service(false).myTodos();
+        assertThat(todos).extracting(TodoItem::type).containsExactly("CONTRACT");
+        assertThat(todos.get(0).target()).isEqualTo("contract-approval");
     }
 
     @Test

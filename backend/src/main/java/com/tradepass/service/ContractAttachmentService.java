@@ -86,13 +86,18 @@ public class ContractAttachmentService {
 
     public List<Map<String, Object>> list(Long contractId, String category) {
         long companyId = AuthContext.requireCompanyId();
-        accessControlService.requireAnyPermission(companyId,
-                "contract_view", "contract_sign", "reconciliation");
+        String normalized = normalizeCategory(category);
+        if (INVOICE.equals(normalized)) {
+            accessControlService.requireAnyPermission(companyId, "contract_view", "contract_sign",
+                    "reconciliation", "contract_attachment_upload", "invoice_view");
+        } else {
+            accessControlService.requireAnyPermission(companyId, "contract_view", "contract_sign",
+                    "reconciliation", "contract_attachment_upload");
+        }
         TradeContract contract = requireContractParty(contractId, companyId);
         boolean contractReadOnly = bilateralActionService != null
                 ? bilateralActionService.isContractReadOnly(contract)
                 : "COMPLETED".equals(contract.getStatus()) || "VOIDED".equals(contract.getStatus());
-        String normalized = normalizeCategory(category);
         return jdbc.query("""
                         SELECT attachment.id, attachment.contract_id, attachment.uploader_company_id,
                                attachment.recipient_company_id, attachment.category, attachment.status,
@@ -447,17 +452,23 @@ public class ContractAttachmentService {
     public FilePayload getFile(Long id) {
         long companyId = AuthContext.requireCompanyId();
         accessControlService.requireAnyPermission(companyId,
-                "contract_view", "contract_sign", "reconciliation");
+                "contract_view", "contract_sign", "reconciliation", "contract_attachment_upload", "invoice_view");
+        boolean invoiceOnly = accessControlService.hasPermission(companyId, "invoice_view")
+                && !accessControlService.hasPermission(companyId, "contract_view")
+                && !accessControlService.hasPermission(companyId, "contract_sign")
+                && !accessControlService.hasPermission(companyId, "reconciliation")
+                && !accessControlService.hasPermission(companyId, "contract_attachment_upload");
         List<FilePayload> files = jdbc.query("""
                         SELECT id, contract_id, original_name, content_type, file_size, file_data, sha256,
                                storage_bucket, object_key, object_version_id
                         FROM contract_attachment WHERE id = ? AND deleted_at IS NULL
+                          AND (? = 0 OR category = 'INVOICE')
                         """, (rs, rowNum) -> new FilePayload(
                         rs.getLong("id"), rs.getLong("contract_id"),
                         rs.getString("original_name"), rs.getString("content_type"),
                         rs.getBytes("file_data"), rs.getString("storage_bucket"),
                         rs.getString("object_key"), rs.getString("object_version_id"),
-                        rs.getLong("file_size"), rs.getString("sha256")), id);
+                        rs.getLong("file_size"), rs.getString("sha256")), id, invoiceOnly ? 1 : 0);
         if (files.isEmpty()) throw new BusinessException("附件不存在");
         FilePayload payload = files.get(0);
         requireContractParty(payload.contractId(), companyId);

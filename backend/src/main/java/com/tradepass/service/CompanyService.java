@@ -151,7 +151,8 @@ public class CompanyService {
             company.setRealNameStatus("NOT_STARTED");
             company.setFaceStatus("NOT_STARTED");
             company.setSealStatus("NOT_UPLOADED");
-        } else if (company.getCreatedBy() == null || company.getCreatedBy() != AuthContext.userId()) {
+        } else if (!"VERIFIED".equals(company.getCertificationStatus())
+                && (company.getCreatedBy() == null || company.getCreatedBy() != AuthContext.userId())) {
             throw new BusinessException("企业已入驻，请通过企业邀请或认领流程加入");
         }
         if (company.getId() != null && "VERIFIED".equals(company.getCertificationStatus())) {

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.tradepass.common.ApiResponse;
 import com.tradepass.dto.response.FadadaAuthUrlPayload;
 import com.tradepass.dto.response.FadadaCompanyIdentityPayload;
+import com.tradepass.dto.response.LegalRepresentativePayload;
 import com.tradepass.dto.response.PersonalIdentityPayload;
 import com.tradepass.dto.response.ServiceUrlPayload;
 import com.tradepass.service.FadadaCallbackService;
@@ -68,6 +69,16 @@ public class FadadaIdentityController {
     @PostMapping("/companies/{companyId}/seal-manage-url")
     public ApiResponse<ServiceUrlPayload> sealManageUrl(@PathVariable long companyId) {
         return ApiResponse.ok(companyService.createSealManageUrl(companyId));
+    }
+
+    @PostMapping("/companies/{companyId}/legal-representative/auth-url")
+    public ApiResponse<ServiceUrlPayload> legalRepresentativeUrl(@PathVariable long companyId) {
+        return ApiResponse.ok(companyService.createLegalRepresentativeUrl(companyId));
+    }
+
+    @PostMapping("/companies/{companyId}/legal-representative/sync")
+    public ApiResponse<LegalRepresentativePayload> syncLegalRepresentative(@PathVariable long companyId) {
+        return ApiResponse.ok(companyService.syncLegalRepresentative(companyId));
     }
 
     @PostMapping(value = "/callback", consumes = MediaType.APPLICATION_FORM_URLENCODED_VALUE,

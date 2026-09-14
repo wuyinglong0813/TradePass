@@ -11,6 +11,13 @@ import java.util.List;
 
 @Mapper
 public interface TradeContractMapper extends BaseMapper<TradeContract> {
+    @Select("SELECT contract.* " + ContractSigningTodoSql.FROM_AND_WHERE
+            + " ORDER BY contract.created_at DESC, contract.id DESC")
+    List<TradeContract> selectContractsAwaitingSignature(@Param("companyId") long companyId);
+
+    @Select("SELECT COUNT(1) " + ContractSigningTodoSql.FROM_AND_WHERE)
+    long countContractsAwaitingSignature(@Param("companyId") long companyId);
+
     @Select("SELECT * FROM trade_contract WHERE id = #{id} FOR UPDATE")
     TradeContract selectByIdForUpdate(@Param("id") Long id);
 

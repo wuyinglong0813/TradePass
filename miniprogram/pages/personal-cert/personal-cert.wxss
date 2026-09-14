@@ -26,6 +26,7 @@ page { background: #f4f8fd; }
 .status-pill.failed { background: #fff0f0; color: #c74f55; }
 .failure-box { background: #fff2f1; border-radius: 16rpx; color: #b34b50; font-size: 22rpx; line-height: 1.55; margin-top: 16rpx; padding: 17rpx 19rpx; }
 .actions { margin-top: 28rpx; }
+.phone-bind-button { margin-top: 22rpx; }
 .primary-button,.secondary-button { border-radius: 24rpx; font-size: 27rpx; font-weight: 650; height: 88rpx; line-height: 88rpx; }
 .primary-button { background: linear-gradient(90deg,#45a8ff,#2788ec); color: #fff; }
 .primary-button::after,.secondary-button::after { border: none; }

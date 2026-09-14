@@ -1,6 +1,7 @@
 package com.tradepass.dto.request;
 
-import jakarta.validation.constraints.NotBlank;
-
-public record BindPhoneRequest(@NotBlank(message = "手机号不能为空") String phone) {
+public record BindPhoneRequest(String phone, String phoneCode) {
+    public BindPhoneRequest(String phone) {
+        this(phone, null);
+    }
 }

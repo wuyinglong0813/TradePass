@@ -91,6 +91,118 @@ class FadadaCompanyVerificationTest {
         verifyNoInteractions(f.certifications);
     }
 
+    @Test
+    void successfulVerificationReplacesTheUnverifiedLegalNameWithProviderEvidence() {
+        var f = new Fixture();
+        f.company.setLegalPersonName("填写错误");
+        f.detail("legal_rep", "open-user-7", "identified");
+        assertThat(f.service.sync(3L).status()).isEqualTo("VERIFIED");
+        assertThat(f.company.getLegalPersonName()).isEqualTo("张三");
+        assertThat(f.identity.getVerifiedLegalRepName()).isEqualTo("张三");
+        verify(f.companies, atLeastOnce()).update(argThat((Wrapper<Company> wrapper) ->
+                wrapper instanceof com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<?> update
+                        && update.getSqlSet().contains("legal_person_name")));
+    }
+
+    @Test
+    void sealProviderFailureDoesNotUndoCertificationAndNextRefreshClearsTheWarning() {
+        var f = new Fixture();
+        f.detail("deputy_auth", "open-user-7", "identified");
+        when(f.gateway.listSeals("corp-3")).thenThrow(new com.tradepass.common.BusinessException("查询电子印章失败"))
+                .thenReturn(List.of());
+        var result = f.service.sync(3L);
+        assertThat(result.status()).isEqualTo("VERIFIED");
+        assertThat(result.sealSyncWarning()).contains("电子印章暂未同步");
+        verify(f.certifications).completeProviderCertification(eq(3L), eq(7L), anyString(), anyString(), eq(CertifiedApplicantRole.ADMIN));
+        verify(f.seals, never()).update(any(), any(Wrapper.class));
+        assertThat(f.service.sync(3L).sealSyncWarning()).isEmpty();
+    }
+
+    @Test
+    void lateFailureCallbackCannotRevokeCurrentlyVerifiedProviderState() {
+        var f = new Fixture();
+        f.company.setCertificationStatus("VERIFIED");
+        f.detail("legal_rep", "open-user-7", "identified");
+        assertThat(f.service.syncCallback("local-3", "corp-3", new ObjectMapper().createObjectNode()
+                .put("authResult", "fail")).status()).isEqualTo("VERIFIED");
+        verify(f.companies, never()).update(argThat((Wrapper<Company> wrapper) ->
+                wrapper instanceof com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<?> update
+                        && update.getSqlSet().contains("certification_status")));
+    }
+
+    @Test
+    void firstFailedCertificationCanBeRecordedBeforeAProviderCompanyAccountExists() {
+        var f = new Fixture();
+        assertThat(f.service.syncCallback("local-3", null, new ObjectMapper().createObjectNode()
+                .put("authResult", "fail").put("authFailedReason", "认证未通过")).status()).isEqualTo("FAILED");
+        verify(f.gateway, never()).getCompany(any(), any());
+        assertThat(f.identity.getFailureReason()).isEqualTo("认证未通过");
+    }
+
+    @Test
+    void callbackReloadsTheCurrentOperatorInsteadOfItsEarlierRepeatableReadSnapshot() {
+        var f = new Fixture();
+        var current = new FadadaCorpIdentity();
+        current.setId(5L); current.setCompanyId(3L); current.setClientCorpId("local-3");
+        current.setApplicantUserId(9L); current.setOpenCorpId("corp-3");
+        current.setProviderRequestId("FDD-LEGAL-local-3-9");
+        when(f.identities.selectOne(any(Wrapper.class))).thenAnswer(call -> {
+            Wrapper<?> query = call.getArgument(0);
+            return query.getSqlSegment().contains("FOR UPDATE") ? current : f.identity;
+        });
+        when(f.personal.verifiedOpenUserId(9L)).thenReturn("open-user-9");
+        f.detail("legal_rep", "open-user-9", "identified");
+        assertThat(f.service.syncCallback("local-3", "corp-3", new ObjectMapper().createObjectNode()
+                .put("authResult", "success")).status()).isEqualTo("VERIFIED");
+        verify(f.certifications).completeProviderCertification(eq(3L), eq(9L), eq("FDD-LEGAL-local-3-9"), anyString(), eq(CertifiedApplicantRole.LEGAL));
+        verify(f.identities, atLeastOnce()).updateById(current);
+        verify(f.identities, never()).updateById(f.identity);
+    }
+
+    @ParameterizedTest
+    @CsvSource({"legal_rep,open-user-7", "deputy_auth,open-user-9", "unknown,open-user-9"})
+    void legalClaimRejectsAnotherPersonsIdentityAndAuthorizedAgentEvidence(String type, String operator) {
+        var f = new Fixture();
+        f.identity.setOpenCorpId("corp-3");
+        f.detail(type, operator, "identified");
+        when(f.personal.verifiedOpenUserId(9L)).thenReturn("open-user-9");
+        com.tradepass.common.AuthContext.set(9L, 3L);
+        try {
+            assertThat(f.service.syncLegalRepresentative(3L).status()).isEqualTo("IN_PROGRESS");
+            verify(f.certifications, never()).completeLegalClaim(anyLong(), anyLong(), anyString());
+            assertThat(f.identity.getApplicantUserId()).isEqualTo(7L);
+        } finally { com.tradepass.common.AuthContext.clear(); }
+    }
+
+    @Test
+    void verifiedLegalMemberTakesOverFutureCertificationSyncWithoutChangingTheFormerAdministrator() {
+        var f = new Fixture();
+        f.identity.setOpenCorpId("corp-3");
+        f.detail("legal_rep", "open-user-9", "identified");
+        when(f.personal.verifiedOpenUserId(9L)).thenReturn("open-user-9");
+        com.tradepass.common.AuthContext.set(9L, 3L);
+        try {
+            assertThat(f.service.syncLegalRepresentative(3L).status()).isEqualTo("VERIFIED");
+            verify(f.certifications).completeLegalClaim(3L, 9L, "FDD-LEGAL-local-3-9");
+            assertThat(f.identity.getApplicantUserId()).isEqualTo(9L);
+            assertThat(f.service.sync(3L).status()).isEqualTo("VERIFIED");
+            verify(f.certifications).completeProviderCertification(eq(3L), eq(9L), eq("FDD-LEGAL-local-3-9"), anyString(), eq(CertifiedApplicantRole.LEGAL));
+        } finally { com.tradepass.common.AuthContext.clear(); }
+    }
+
+    @Test
+    void legalClaimDoesNotCallProviderForAnUnapprovedMemberOrOccupiedLegalRole() {
+        var f = new Fixture();
+        doThrow(new com.tradepass.common.BusinessException("请先通过企业成员邀请加入本企业"))
+                .when(f.certifications).requireLegalClaim(3L, 9L);
+        com.tradepass.common.AuthContext.set(9L, 3L);
+        try {
+            assertThatThrownBy(() -> f.service.createLegalRepresentativeUrl(3L)).hasMessageContaining("成员邀请");
+            assertThatThrownBy(() -> f.service.syncLegalRepresentative(3L)).hasMessageContaining("成员邀请");
+            verifyNoInteractions(f.gateway);
+        } finally { com.tradepass.common.AuthContext.clear(); }
+    }
+
     private static class Fixture {
         final FadadaCorpIdentityMapper identities = mock(FadadaCorpIdentityMapper.class);
         final FadadaCorpSealMapper seals = mock(FadadaCorpSealMapper.class);
@@ -112,8 +224,11 @@ class FadadaCompanyVerificationTest {
             when(personal.verifiedOpenUserId(7L)).thenReturn("open-user-7");
             when(gateway.getCompany(anyString(), any())).thenReturn(new FadadaCompanyGateway.CompanyAccount(
                     "local-3", "corp-3", "authorized", "identified", "enable", SCOPES));
+            var properties = new FadadaProperties();
+            properties.setEnabled(true); properties.setAppId("test-app"); properties.setAppSecret("test-secret");
+            properties.setServerUrl("https://example.test"); properties.setCallbackUrl("https://example.test/callback");
             service = new FadadaCompanyService(identities, seals, companies, mock(AccessControlService.class),
-                    certifications, personal, gateway, new FadadaProperties(), new ObjectMapper());
+                    certifications, personal, gateway, properties, new ObjectMapper());
         }
         void detail(String type, String operatorId, String status) {
             when(gateway.getIdentity("corp-3")).thenReturn(new FadadaCompanyGateway.CompanyIdentity(

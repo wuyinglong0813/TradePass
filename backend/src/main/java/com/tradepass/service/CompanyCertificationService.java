@@ -121,7 +121,6 @@ public class CompanyCertificationService {
                                               String providerRequestId, String reason, CertifiedApplicantRole role) {
         if (role == null) throw new BusinessException("企业认证经办人身份尚未确认");
         Company company = requireCompany(companyId);
-        if ("VERIFIED".equals(company.getCertificationStatus())) return;
         CompanyCertificationApplication application = applicationMapper.selectOne(
                 new LambdaQueryWrapper<CompanyCertificationApplication>()
                         .eq(CompanyCertificationApplication::getProviderRequestId, providerRequestId)
@@ -138,7 +137,48 @@ public class CompanyCertificationService {
         if (application.getCompanyId() != companyId || application.getApplicantUserId() != applicantUserId) {
             throw new BusinessException("企业认证申请与本次经办人不一致");
         }
-        if ("SUBMITTED".equals(application.getStatus())) approve(application, company, reason, role);
+        if ("APPROVED".equals(application.getStatus())) {
+            // A current provider result can restore certification after a failed renewal.
+            // Do not re-create removed memberships or overwrite subsequently assigned roles.
+            markCompanyVerified(companyId);
+        } else if ("SUBMITTED".equals(application.getStatus()) || "REJECTED".equals(application.getStatus())) {
+            approve(application, company, reason, role);
+        } else {
+            throw new BusinessException("企业认证申请状态无效，请联系管理员核验");
+        }
+    }
+
+    /** The caller must hold the company lock for the check and the subsequent provider-backed promotion. */
+    public void requireLegalClaim(long companyId, long userId) {
+        requireCompany(companyId);
+        if (companyMemberMapper.selectCount(new LambdaQueryWrapper<CompanyMember>()
+                .eq(CompanyMember::getCompanyId, companyId).eq(CompanyMember::getUserId, userId)
+                .eq(CompanyMember::getStatus, "ACTIVE")) != 1) {
+            throw new BusinessException("请先通过企业成员邀请加入本企业，并等待管理员审批");
+        }
+        if (companyMemberMapper.selectCount(new LambdaQueryWrapper<CompanyMember>()
+                .eq(CompanyMember::getCompanyId, companyId).ne(CompanyMember::getUserId, userId)
+                .eq(CompanyMember::getStatus, "ACTIVE")
+                .and(q -> q.eq(CompanyMember::getRoleCode, "LEGAL").or().eq(CompanyMember::getIsLegalPerson, true))) > 0) {
+            throw new BusinessException("本企业已有法人，请联系现法人办理变更，不能通过补充核验替换");
+        }
+    }
+
+    /** Called only after provider legal_rep + openUserId evidence has been checked. */
+    @Transactional
+    public void completeLegalClaim(long companyId, long userId, String providerRequestId) {
+        requireLegalClaim(companyId, userId);
+        int changed = companyMemberMapper.update(new LambdaUpdateWrapper<CompanyMember>()
+                .eq(CompanyMember::getCompanyId, companyId).eq(CompanyMember::getUserId, userId)
+                .eq(CompanyMember::getStatus, "ACTIVE")
+                .set(CompanyMember::getRoleCode, "LEGAL").set(CompanyMember::getRoleCodes, "[\"LEGAL\"]")
+                .set(CompanyMember::getIsLegalPerson, true).set(CompanyMember::getIsAdministrator, false)
+                .set(CompanyMember::getCustomPermissions, null));
+        if (changed != 1) throw new BusinessException("成员状态已变化，请刷新后重新核验");
+        completeProviderCertification(companyId, userId, providerRequestId,
+                "企业法人本人已通过认证服务核验并接手企业", CertifiedApplicantRole.LEGAL);
+        auditLogService.logAs(companyId, userId, "COMPANY_CERTIFICATION", companyId,
+                "LEGAL_CLAIM", "认证服务已核实法人身份及本人账号");
     }
 
     @Transactional
@@ -196,11 +236,7 @@ public class CompanyCertificationService {
         if (memberUpdated != 1 && !alreadyAssigned) {
             throw new BusinessException("企业认证申请人状态已变化，请人工复核");
         }
-        companyMapper.update(new LambdaUpdateWrapper<Company>()
-                .eq(Company::getId, companyId)
-                .set(Company::getCertificationStatus, "VERIFIED")
-                .set(Company::getRealNameStatus, "VERIFIED")
-                .set(Company::getFaceStatus, "VERIFIED"));
+        markCompanyVerified(companyId);
         tenantBootstrapService.initialize(companyId, application.getApplicantUserId());
         finish(application, "APPROVED", reason);
         auditLogService.logAs(companyId, application.getApplicantUserId(), "COMPANY_CERTIFICATION",
@@ -217,18 +253,27 @@ public class CompanyCertificationService {
     }
 
     private void finish(CompanyCertificationApplication application, String status, String reason) {
+        String previousStatus = application.getStatus();
         application.setStatus(status);
         application.setReviewReason(safeReason(reason));
         application.setReviewedAt(LocalDateTime.now());
         int updated = applicationMapper.update(new LambdaUpdateWrapper<CompanyCertificationApplication>()
                 .eq(CompanyCertificationApplication::getId, application.getId())
-                .eq(CompanyCertificationApplication::getStatus, "SUBMITTED")
+                .eq(CompanyCertificationApplication::getStatus, previousStatus)
                 .set(CompanyCertificationApplication::getStatus, status)
                 .set(CompanyCertificationApplication::getReviewReason, application.getReviewReason())
                 .set(CompanyCertificationApplication::getReviewedAt, application.getReviewedAt()));
         if (updated != 1) {
             throw new BusinessException("认证申请状态已变化，请勿重复处理");
         }
+    }
+
+    private void markCompanyVerified(long companyId) {
+        companyMapper.update(new LambdaUpdateWrapper<Company>()
+                .eq(Company::getId, companyId)
+                .set(Company::getCertificationStatus, "VERIFIED")
+                .set(Company::getRealNameStatus, "VERIFIED")
+                .set(Company::getFaceStatus, "VERIFIED"));
     }
 
     private Company requireCompany(long companyId) {

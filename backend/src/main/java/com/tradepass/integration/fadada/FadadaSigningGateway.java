@@ -19,5 +19,10 @@ public interface FadadaSigningGateway {
                              String supplierActorId, String buyerActorId, String callbackUrl) {}
     record CreatedTask(String signTaskId, String fileId, String docId) {}
     record ActorStatus(String actorId, String signStatus) {}
-    record TaskStatus(String signTaskId, String status, List<ActorStatus> actors) {}
+    record TaskStatus(String signTaskId, String status, List<ActorStatus> actors,
+                      String originalSignTaskId, String abolishedSignTaskId) {
+        public TaskStatus(String signTaskId, String status, List<ActorStatus> actors) {
+            this(signTaskId, status, actors, null, null);
+        }
+    }
 }

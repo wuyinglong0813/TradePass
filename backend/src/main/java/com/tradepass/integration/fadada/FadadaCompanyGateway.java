@@ -8,6 +8,7 @@ public interface FadadaCompanyGateway {
     CompanyIdentity getIdentity(String openCorpId);
     List<SealInfo> listSeals(String openCorpId);
     String createSealManageUrl(String openCorpId, String clientUserId, String redirectUrl);
+    String createIdentityChangeUrl(String clientCorpId, String openCorpId, String clientUserId);
 
     record AuthCommand(String clientCorpId, String clientUserId, String companyName,
                        String creditCode, List<String> authScopes, String callbackUrl,

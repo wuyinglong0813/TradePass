@@ -87,6 +87,32 @@ class TradeServiceTest {
     }
 
     @Test
+    void financeReadsContractBasicsWithoutReceivingContractTerms() {
+        TradeContract contract = new TradeContract();
+        contract.setId(51L);
+        contract.setCompanyId(3L);
+        contract.setCounterpartyCompanyId(4L);
+        contract.setDirection("SALE");
+        contract.setStatus("ACTIVE");
+        contract.setInitiatorHidden(false);
+        contract.setName("项目购销合同");
+        contract.setTerms("仅合同阅读者可见的条款");
+        when(contractMapper.selectById(51L)).thenReturn(contract);
+        when(accessControl.hasPermission(3L, "reconciliation")).thenReturn(true);
+
+        ContractPayload result = service.getContract(51L);
+
+        assertThat(result.name()).isEqualTo("项目购销合同");
+        assertThat(result.terms()).isEmpty();
+        verify(accessControl).requireAnyPermission(3L, "contract_view", "contract_sign",
+                "reconciliation", "invoice_view", "contract_attachment_upload");
+        when(accessControl.hasPermission(3L, "contract_view")).thenReturn(true);
+        assertThat(service.getContract(51L).terms()).isEqualTo("仅合同阅读者可见的条款");
+        contract.setCompanyId(9L);
+        assertThatThrownBy(() -> service.getContract(51L)).hasMessage("合同不存在");
+    }
+
+    @Test
     void createsAndListsTenantScopedOrders() {
         doAnswer(invocation -> {
             TradeOrder order = invocation.getArgument(0);
@@ -465,7 +491,7 @@ class TradeServiceTest {
         pending.setStatus("PENDING");
         pending.setInitiatedBy(8L);
         when(accessControl.hasPermission(3L, "contract_sign")).thenReturn(true);
-        when(contractMapper.selectList(any(Wrapper.class))).thenReturn(List.of(pending));
+        when(contractMapper.selectContractsAwaitingSignature(3L)).thenReturn(List.of(pending));
 
         assertThat(service.pendingContracts()).extracting(ContractPayload::id).containsExactly("1");
     }

@@ -39,6 +39,7 @@ class MysqlWorkflowConcurrencyTest {
     private static TransactionTemplate tx;
     private static BusinessDocumentMapper documents;
     private static TradeContractMapper contracts;
+    private static FadadaContractSignTaskMapper signingTasks;
     private static FadadaCallbackEventMapper events;
     private static SysUserMapper users;
     private SalesOrderInventoryService inventory;
@@ -70,6 +71,7 @@ class MysqlWorkflowConcurrencyTest {
         config.setMapUnderscoreToCamelCase(true);
         config.addMapper(BusinessDocumentMapper.class);
         config.addMapper(TradeContractMapper.class);
+        config.addMapper(FadadaContractSignTaskMapper.class);
         config.addMapper(FadadaCallbackEventMapper.class);
         config.addMapper(SysUserMapper.class);
         var factory = new MybatisSqlSessionFactoryBean();
@@ -78,6 +80,7 @@ class MysqlWorkflowConcurrencyTest {
         var session = new SqlSessionTemplate(factory.getObject());
         documents = session.getMapper(BusinessDocumentMapper.class);
         contracts = session.getMapper(TradeContractMapper.class);
+        signingTasks = session.getMapper(FadadaContractSignTaskMapper.class);
         events = session.getMapper(FadadaCallbackEventMapper.class);
         users = session.getMapper(SysUserMapper.class);
         tx = new TransactionTemplate(new DataSourceTransactionManager(dataSource));
@@ -217,7 +220,7 @@ class MysqlWorkflowConcurrencyTest {
         var initializer = new SystemPermissionInitializer(jdbc);
         initializer.run(null);
         initializer.run(null);
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM perm_def", Integer.class)).isEqualTo(18);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM perm_def", Integer.class)).isEqualTo(19);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM sys_user", Integer.class)).isEqualTo(usersBefore);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM company", Integer.class)).isEqualTo(companiesBefore);
     }
@@ -315,6 +318,153 @@ class MysqlWorkflowConcurrencyTest {
                 Long.class, requestId)).isEqualTo(requestId);
         assertThat(jdbc.queryForObject("SELECT id FROM approval_result_notification WHERE source_id = ? AND result_type = 'BILATERAL_ACTION'",
                 Long.class, requestId)).isGreaterThan(9007199254740991L);
+    }
+
+    @Test void signingTodoSqlTracksTheActualSignerAndCurrentVersion() {
+        long contractId = documents.selectById(documentId).getContractId();
+        jdbc.update("UPDATE trade_contract SET status='PENDING',version_no=1 WHERE id=?", contractId);
+        assertThat(contracts.selectContractsAwaitingSignature(3L)).extracting(com.tradepass.entity.TradeContract::getId).contains(contractId);
+        assertThat(contracts.selectContractsAwaitingSignature(4L)).extracting(com.tradepass.entity.TradeContract::getId).doesNotContain(contractId);
+        long taskId = IDS.incrementAndGet();
+        jdbc.update("""
+                INSERT INTO fadada_contract_sign_task(id,contract_id,version_no,sign_task_id,
+                    provider_status,initiator_company_id,counterparty_company_id,initiator_sign_status)
+                VALUES (?,?,1,?,'sign_progress',3,4,'signed')
+                """, taskId, contractId, "todo-" + taskId);
+        assertThat(contracts.selectContractsAwaitingSignature(3L)).extracting(com.tradepass.entity.TradeContract::getId).doesNotContain(contractId);
+        assertThat(contracts.selectContractsAwaitingSignature(4L)).extracting(com.tradepass.entity.TradeContract::getId).contains(contractId);
+        for (long companyId : List.of(3L, 4L)) {
+            assertThat(contracts.countContractsAwaitingSignature(companyId)).isEqualTo(contracts.selectContractsAwaitingSignature(companyId).size());
+            assertThat(jdbc.queryForObject(ContractSigningTodoSql.jdbcCount(), Long.class, companyId))
+                    .isEqualTo(contracts.countContractsAwaitingSignature(companyId));
+        }
+        jdbc.update("UPDATE fadada_contract_sign_task SET counterparty_sign_status='signed' WHERE id=?", taskId);
+        assertThat(contracts.selectContractsAwaitingSignature(4L)).extracting(com.tradepass.entity.TradeContract::getId).doesNotContain(contractId);
+        jdbc.update("UPDATE trade_contract SET version_no=2 WHERE id=?", contractId);
+        assertThat(contracts.selectContractsAwaitingSignature(3L)).extracting(com.tradepass.entity.TradeContract::getId).contains(contractId);
+        assertThat(contracts.selectContractsAwaitingSignature(4L)).extracting(com.tradepass.entity.TradeContract::getId).doesNotContain(contractId);
+    }
+
+    @Test void endContractCannotStrandAnAcknowledgedDocumentBeforeInbound() {
+        long contractId = documents.selectById(documentId).getContractId();
+        jdbc.update("UPDATE business_document SET status='ACKNOWLEDGED' WHERE id=?", documentId);
+        var service = new BilateralActionService(jdbc, contracts, mock(AccessControlService.class),
+                mock(AuditLogService.class), mock(ReconciliationAccountService.class), inventory, mock(ApprovalService.class));
+        assertThatThrownBy(() -> asCompany(3, () -> service.request("CONTRACT", contractId, "END", "结束", true)))
+                .hasMessageContaining("待入库");
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM bilateral_action_request WHERE contract_id=?",
+                Integer.class, contractId)).isZero();
+        jdbc.update("UPDATE business_document SET status='INBOUNDED' WHERE id=?", documentId);
+        @SuppressWarnings("unchecked")
+        var request = (Map<String, Object>) asCompany(3, () -> service.request("CONTRACT", contractId, "END", "结束", true));
+        asCompany(4, () -> service.decide((Long) request.get("id"), "APPROVE", ""));
+        assertThat(contracts.selectById(contractId).getStatus()).isEqualTo("COMPLETED");
+    }
+
+    @Test void recoveryNeedsBothCompaniesAndRetainsCancelledProviderTaskForCallbacks() {
+        long contractId = documents.selectById(documentId).getContractId();
+        jdbc.update("UPDATE business_document SET status='VOIDED' WHERE id=?", documentId);
+        long taskId = IDS.incrementAndGet();
+        String original = "original-" + taskId, abolish = "abolish-" + taskId;
+        jdbc.update("""
+                INSERT INTO fadada_contract_sign_task(id,contract_id,version_no,sign_task_id,abolished_sign_task_id,
+                    provider_status,initiator_company_id,counterparty_company_id)
+                VALUES (?,?,1,?,?,'abolishing',3,4)
+                """, taskId, contractId, original, abolish);
+        var access = mock(AccessControlService.class);
+        var gateway = mock(com.tradepass.integration.fadada.FadadaSigningGateway.class);
+        var service = new BilateralActionService(jdbc, contracts, access, mock(AuditLogService.class),
+                mock(ReconciliationAccountService.class), inventory, mock(ApprovalService.class));
+        service.setAbolishRecoveryService(new ContractAbolishRecoveryService(contracts, signingTasks, gateway, access, jdbc));
+        @SuppressWarnings("unchecked")
+        var voidRequest = (Map<String, Object>) asCompany(3, () -> service.request("CONTRACT", contractId, "VOID", "作废", false));
+        asCompany(4, () -> service.decide((Long) voidRequest.get("id"), "APPROVE", ""));
+        @SuppressWarnings("unchecked")
+        var recovery = (Map<String, Object>) asCompany(3, () -> service.request("CONTRACT", contractId, "RESUME", "继续履约", false));
+        long recoveryId = (Long) recovery.get("id");
+        assertThatThrownBy(() -> asCompany(3, () -> service.decide(recoveryId, "APPROVE", ""))).hasMessageContaining("仅对方");
+        when(gateway.status(abolish)).thenReturn(
+                new com.tradepass.integration.fadada.FadadaSigningGateway.TaskStatus(abolish, "sign_progress", List.of()),
+                new com.tradepass.integration.fadada.FadadaSigningGateway.TaskStatus(abolish, "task_terminated", List.of()));
+        when(gateway.status(original)).thenReturn(
+                new com.tradepass.integration.fadada.FadadaSigningGateway.TaskStatus(original, "task_finished", List.of()));
+        asCompany(4, () -> service.decide(recoveryId, "APPROVE", ""));
+        assertThat(contracts.selectById(contractId).getStatus()).isEqualTo("ACTIVE");
+        assertThat(service.isContractReadOnly(contracts.selectById(contractId))).isFalse();
+        assertThat(signingTasks.selectById(taskId).getAbolishedSignTaskId()).isNull();
+        assertThat(jdbc.queryForObject("SELECT contract_id FROM fadada_cancelled_abolish_task WHERE sign_task_id=?",
+                Long.class, abolish)).isEqualTo(contractId);
+        assertThat(jdbc.queryForObject("SELECT status FROM bilateral_action_request WHERE id=?",
+                String.class, (Long) voidRequest.get("id"))).isEqualTo("CANCELLED");
+    }
+
+    @Test void durableAbolishIntentSurvivesParentRollbackAndPreventsUnsafeRecovery() {
+        long contractId = documents.selectById(documentId).getContractId();
+        long taskId = IDS.incrementAndGet();
+        jdbc.update("""
+                INSERT INTO fadada_contract_sign_task(id,contract_id,version_no,sign_task_id,
+                    provider_status,initiator_company_id,counterparty_company_id)
+                VALUES (?,?,1,?,'task_finished',3,4)
+                """, taskId, contractId, "intent-original-" + taskId);
+        var proxy = new org.springframework.aop.framework.ProxyFactory(new ContractAbolishIntentService(jdbc));
+        proxy.addAdvice(new org.springframework.transaction.interceptor.TransactionInterceptor(
+                tx.getTransactionManager(), new org.springframework.transaction.annotation.AnnotationTransactionAttributeSource()));
+        var intents = (ContractAbolishIntentService) proxy.getProxy();
+        assertThatThrownBy(() -> asCompany(3, () -> {
+            contracts.selectByIdForUpdate(contractId);
+            var task = signingTasks.selectById(taskId);
+            String intentId = intents.begin(task);
+            jdbc.update("UPDATE fadada_contract_sign_task SET abolished_sign_task_id='remote-created' WHERE id=?", taskId);
+            intents.confirm(intentId, "remote-created");
+            throw new IllegalStateException("simulate crash before parent commit");
+        })).isInstanceOf(IllegalStateException.class);
+        assertThat(signingTasks.selectById(taskId).getAbolishedSignTaskId()).isNull();
+        assertThat(jdbc.queryForObject("SELECT status FROM fadada_abolish_creation_intent WHERE contract_id=?",
+                String.class, contractId)).isEqualTo("UNCONFIRMED");
+        var gateway = mock(com.tradepass.integration.fadada.FadadaSigningGateway.class);
+        var recovery = new ContractAbolishRecoveryService(contracts, signingTasks, gateway, mock(AccessControlService.class), jdbc);
+        assertThatThrownBy(() -> asCompany(4, () -> { recovery.resumeAfterBilateralApproval(contractId); return null; }))
+                .hasMessageContaining("创建结果尚未确认");
+        verifyNoInteractions(gateway);
+    }
+
+    @Test void stalePermissionSnapshotCannotRestartAbolishAfterRecoveryCommits() throws Exception {
+        long contractId = documents.selectById(documentId).getContractId();
+        long actionId = IDS.incrementAndGet();
+        jdbc.update("""
+                INSERT INTO bilateral_action_request(id,contract_id,biz_type,biz_id,action_type,
+                    requester_company_id,requester_user_id,approver_company_id,reason,status)
+                VALUES (?,?,'CONTRACT',?,'VOID',3,7,4,'测试','APPROVED')
+                """, actionId, contractId, contractId);
+        var access = mock(AccessControlService.class);
+        var gateway = mock(com.tradepass.integration.fadada.FadadaSigningGateway.class);
+        var properties = new com.tradepass.config.FadadaProperties();
+        properties.setEnabled(true); properties.setAppId("test"); properties.setAppSecret("test");
+        properties.setServerUrl("https://example.test"); properties.setCallbackUrl("https://example.test/callback");
+        var signing = new FadadaContractSigningService(signingTasks, contracts, mock(CompanyMapper.class), access,
+                mock(FadadaCompanyService.class), gateway, mock(ContractPdfService.class), mock(ContractArchiveService.class),
+                mock(TradeService.class), properties, jdbc);
+        CountDownLatch snapshot = new CountDownLatch(1), committed = new CountDownLatch(1);
+        doAnswer(invocation -> {
+            jdbc.queryForObject("SELECT COUNT(*) FROM bilateral_action_request WHERE contract_id=?", Long.class, contractId);
+            snapshot.countDown(); await(committed); return null;
+        }).when(access).requirePermission(3L, "contract_sign");
+        ExecutorService pool = Executors.newSingleThreadExecutor();
+        java.util.concurrent.atomic.AtomicReference<Future<?>> oldRequest = new java.util.concurrent.atomic.AtomicReference<>();
+        try {
+            asCompany(4, () -> {
+                contracts.selectByIdForUpdate(contractId);
+                oldRequest.set(pool.submit(() -> asCompany(3, () -> signing.abolishUrl(contractId, "作废"))));
+                await(snapshot);
+                jdbc.update("UPDATE bilateral_action_request SET status='CANCELLED' WHERE id=?", actionId);
+                return null;
+            });
+            committed.countDown();
+            assertThatThrownBy(() -> oldRequest.get().get(10, TimeUnit.SECONDS))
+                    .isInstanceOf(ExecutionException.class).hasCauseInstanceOf(BusinessException.class)
+                    .hasStackTraceContaining("请先由双方确认");
+            verifyNoInteractions(gateway);
+        } finally { committed.countDown(); pool.shutdownNow(); pool.awaitTermination(10, TimeUnit.SECONDS); }
     }
 
     private void race(long firstCompany, Supplier<?> firstAction, long secondCompany, Supplier<?> secondAction) throws Exception {

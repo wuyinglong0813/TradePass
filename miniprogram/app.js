@@ -1,5 +1,6 @@
 const { request, clearSession } = require('./utils/request');
 const { USER_ID_KEY, clearCompanyHomeSnapshots } = require('./utils/homeSnapshot');
+const { captureCompanyContext, isCompanyContextCurrent } = require('./utils/companyContext');
 
 // 本地后端地址（开发者工具模拟器用）
 const LOCAL_API = 'http://127.0.0.1:9999/api';
@@ -184,7 +185,7 @@ App({
     try {
       payload = await request({ url: '/me', token, handleCompanyForbidden: false });
     } catch (error) {
-      if (token !== this.globalData.token) return null;
+      if (token !== this.globalData.token || generation !== (this._companyAccessGeneration || 0)) return null;
       if (!companyId || (error.statusCode !== 403 && error.code !== 403)) throw error;
       this.invalidateCompanyAccess(companyId);
       generation = this._companyAccessGeneration || 0;
@@ -247,9 +248,10 @@ App({
     const lostCurrentCompany = notices.some(notice => String(notice.companyId) === String(this.getCurrentCompanyId()));
     notices.forEach(notice => this.invalidateCompanyAccess(notice.companyId));
     if (lostCurrentCompany) {
+      const context = captureCompanyContext(this);
       try {
         const payload = await request({ url: '/me', token, withCompany: false });
-        if (token !== this.globalData.token) return;
+        if (!isCompanyContextCurrent(this, context)) return;
         this.applyMePayload(payload);
       } catch (error) {
         // The revoked company stays cleared even if restoring another company fails.
@@ -274,12 +276,19 @@ App({
   },
 
   async switchCompany(companyId) {
+    const token = this.globalData.token;
+    const sequence = this._companySwitchSequence = (this._companySwitchSequence || 0) + 1;
+    this._companyAccessGeneration = (this._companyAccessGeneration || 0) + 1;
     const payload = await request({
       url: '/me/switch-company',
       method: 'POST',
       data: { companyId },
-      companyId
+      companyId,
+      token
     });
+    if (token !== this.globalData.token || sequence !== this._companySwitchSequence) {
+      throw new Error('企业切换状态已变化，请重试');
+    }
     // Ignore older /me responses that were requested before this company switch completed.
     this._companyAccessGeneration = (this._companyAccessGeneration || 0) + 1;
     return this.applyMePayload(payload);
